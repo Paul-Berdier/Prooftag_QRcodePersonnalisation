@@ -1,7 +1,9 @@
 import tomllib
 from pathlib import Path
 
+from prooftag_qr.backends import ControlNetBackend
 from prooftag_qr.config import Settings
+from prooftag_qr.qr import generate_qr
 from prooftag_qr.schemas import GenerationRequest
 
 
@@ -30,3 +32,14 @@ def test_gpu_dependencies_are_pinned_to_the_torch_base_image():
     assert settings.controlnet_pipeline_mode == "img2img"
     assert request.strength == 0.9
     assert "PROOFTAG_QR_CONTROLNET_PIPELINE_MODE: img2img" in manifest
+
+
+def test_targeted_repairs_run_before_global_module_repairs():
+    blueprint = generate_qr("https://example.prooftag.test/t/profile-order", "H")
+    backend = ControlNetBackend(Settings())
+    names = [name for name, _ in backend.variants(blueprint.image, blueprint)]
+
+    assert names.index("incorrect_80") < names.index("centers_45")
+    assert names.index("incorrect_85") < names.index("centers_45")
+    assert names.index("incorrect_90") < names.index("centers_45")
+    assert names.index("incorrect_100") < names.index("centers_45")

@@ -132,6 +132,10 @@ class GenerationService:
                                 ).set(quality_value)
                             if self.settings.save_debug_artifacts and variant_name in {
                                 "raw",
+                                "incorrect_80",
+                                "incorrect_85",
+                                "incorrect_90",
+                                "incorrect_100",
                                 "tonal_90",
                                 "tonal_95",
                             }:
