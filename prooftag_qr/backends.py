@@ -57,7 +57,9 @@ class ControlNetBackend(GenerationBackend):
                     import torch
                     from diffusers import (
                         ControlNetModel,
+                        DDIMScheduler,
                         DPMSolverMultistepScheduler,
+                        StableDiffusionControlNetImg2ImgPipeline,
                         StableDiffusionControlNetPipeline,
                     )
                 except ImportError as exc:
@@ -70,14 +72,24 @@ class ControlNetBackend(GenerationBackend):
                     torch_dtype=dtype,
                     cache_dir=self.settings.model_cache_dir,
                 )
-                pipe = StableDiffusionControlNetPipeline.from_pretrained(
+                pipeline_class = (
+                    StableDiffusionControlNetImg2ImgPipeline
+                    if self.settings.controlnet_pipeline_mode == "img2img"
+                    else StableDiffusionControlNetPipeline
+                )
+                pipe = pipeline_class.from_pretrained(
                     self.settings.base_model_id,
                     controlnet=controlnet,
                     torch_dtype=dtype,
                     cache_dir=self.settings.model_cache_dir,
                     safety_checker=None,
                 )
-                pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
+                scheduler_class = (
+                    DDIMScheduler
+                    if self.settings.controlnet_pipeline_mode == "img2img"
+                    else DPMSolverMultistepScheduler
+                )
+                pipe.scheduler = scheduler_class.from_config(pipe.scheduler.config)
                 pipe.set_progress_bar_config(disable=True)
                 pipe.to(self.settings.device)
                 self._pipeline = pipe
@@ -107,16 +119,28 @@ class ControlNetBackend(GenerationBackend):
 
         pipe = self._load()
         generator = torch.Generator(device=self.settings.device).manual_seed(seed)
+        arguments = {
+            "prompt": request.prompt,
+            "negative_prompt": request.negative_prompt or None,
+            "width": 512,
+            "height": 512,
+            "num_inference_steps": request.steps,
+            "guidance_scale": request.guidance_scale,
+            "controlnet_conditioning_scale": request.controlnet_scale,
+            "generator": generator,
+        }
+        if self.settings.controlnet_pipeline_mode == "img2img":
+            arguments.update(
+                {
+                    "image": blueprint.image,
+                    "control_image": blueprint.image,
+                    "strength": request.strength,
+                }
+            )
+        else:
+            arguments["image"] = blueprint.image
         result = pipe(
-            prompt=request.prompt,
-            negative_prompt=request.negative_prompt or None,
-            image=blueprint.image,
-            width=512,
-            height=512,
-            num_inference_steps=request.steps,
-            guidance_scale=request.guidance_scale,
-            controlnet_conditioning_scale=request.controlnet_scale,
-            generator=generator,
+            **arguments,
         )
         return result.images[0].convert("RGB")
 

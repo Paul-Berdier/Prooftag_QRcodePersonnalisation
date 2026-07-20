@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     default_backend: Literal["qr", "controlnet"] = "qr"
     base_model_id: str = "stable-diffusion-v1-5/stable-diffusion-v1-5"
     controlnet_model_id: str = "DionTimmer/controlnet_qrcode-control_v1p_sd15"
+    controlnet_pipeline_mode: Literal["text2img", "img2img"] = "img2img"
     device: str = "cuda"
     validation_min_pass_rate: float = Field(default=1.0, ge=0.0, le=1.0)
     max_attempts: int = Field(default=3, ge=1, le=20)

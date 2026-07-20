@@ -14,6 +14,7 @@ class GenerationRequest(BaseModel):
     steps: int = Field(default=12, ge=1, le=100)
     guidance_scale: float = Field(default=7.5, ge=0, le=30)
     controlnet_scale: float = Field(default=1.35, ge=0, le=3)
+    strength: float = Field(default=0.9, gt=0, le=1)
     max_attempts: int | None = Field(default=None, ge=1, le=20)
 
 

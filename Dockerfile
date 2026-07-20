@@ -15,7 +15,7 @@ COPY prooftag_qr ./prooftag_qr
 COPY migrations ./migrations
 RUN pip install --upgrade pip \
     && pip install '.[gpu]' \
-    && python -c "import torch; from diffusers import ControlNetModel, DPMSolverMultistepScheduler, StableDiffusionControlNetPipeline; print('GPU stack import OK:', torch.__version__)"
+    && python -c "import torch; from diffusers import ControlNetModel, DDIMScheduler, DPMSolverMultistepScheduler, StableDiffusionControlNetImg2ImgPipeline, StableDiffusionControlNetPipeline; print('GPU stack import OK:', torch.__version__)"
 
 RUN useradd --create-home --uid 10001 app \
     && mkdir -p /data /cache \
