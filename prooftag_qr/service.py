@@ -13,7 +13,7 @@ from .backends import GenerationBackend
 from .config import Settings
 from .domain import AttemptRecord, RunRecord
 from .qr import generate_qr, module_error_rate
-from .quality import image_quality_metrics
+from .quality import image_change_metrics, image_quality_metrics
 from .repository import RunRepository
 from .schemas import GenerationRequest
 from .validation import QRValidator
@@ -97,7 +97,10 @@ class GenerationService:
                         exact_count = sum(item.exact_payload_match for item in records)
                         pass_rate = exact_count / len(records) if records else 0.0
                         variant_module_error_rate = module_error_rate(candidate, blueprint)
-                        variant_quality = image_quality_metrics(candidate)
+                        variant_quality = {
+                            **image_quality_metrics(candidate),
+                            **image_change_metrics(candidate, raw_candidate),
+                        }
                         for item in records:
                             outcome = (
                                 "exact"
@@ -134,8 +137,10 @@ class GenerationService:
                                 "raw",
                                 "incorrect_80",
                                 "incorrect_85",
-                                "incorrect_90",
-                                "incorrect_100",
+                                "uncertain_16",
+                                "uncertain_32",
+                                "uncertain_48",
+                                "uncertain_64",
                                 "tonal_90",
                                 "tonal_95",
                             }:

@@ -56,7 +56,7 @@ dimensions, iPhone, Pixel et lecteurs industriels.
 | `prooftag_qr_repair_selected_total` | compteur | profil finalement retenu pour l'image |
 | `prooftag_qr_repair_variant_scan_pass_rate` | jauge | dernier taux de lecture de chaque variante |
 | `prooftag_qr_repair_variant_module_error_rate` | jauge | dernière erreur modules de chaque variante |
-| `prooftag_qr_repair_variant_image_quality` | jauge | qualité visuelle de chaque variante |
+| `prooftag_qr_repair_variant_image_quality` | jauge | qualité visuelle et écart à l'image brute de chaque variante (`changed_pixel_ratio`, `mean_absolute_change`, entropie, écrêtage, contraste, luminosité et netteté) |
 
 Les métriques DCGM existantes complètent le dashboard avec VRAM, utilisation GPU,
 température et puissance.
@@ -64,7 +64,7 @@ température et puissance.
 ## Indicateurs à ajouter pendant la phase FreeQR
 
 - perte SRL globale et par type de module ;
-- proportion exacte de pixels et de modules modifiés par la réparation ;
+- proportion exacte de modules modifiés par la réparation (la proportion de pixels est déjà suivie) ;
 - étape d'arrêt anticipé ;
 - CLIPScore prompt-image ;
 - score esthétique calibré ;

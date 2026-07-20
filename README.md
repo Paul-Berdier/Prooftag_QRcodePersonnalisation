@@ -11,7 +11,7 @@ La version `0.1.0` fournit :
 - un générateur QR de référence (`backend=qr`) ;
 - une baseline artistique Stable Diffusion 1.5 + ControlNet (`backend=controlnet`) ;
 - un verrouillage exact des motifs fonctionnels et une réparation adaptative des centres de
-  modules, du candidat le moins intrusif au plus robuste ;
+  modules incorrects ou peu contrastés, du candidat le moins intrusif au plus robuste ;
 - plusieurs tentatives avec conservation automatique du meilleur résultat ;
 - une validation exacte du payload par OpenCV et ZBar ;
 - treize scénarios de dégradation ;

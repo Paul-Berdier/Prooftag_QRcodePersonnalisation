@@ -149,23 +149,31 @@ class ControlNetBackend(GenerationBackend):
     ) -> Iterable[tuple[str, Image.Image]]:
         yield "raw", candidate
         repair_profiles = (
-            ("functional", 0.0, False, False),
-            ("incorrect_55", 0.55, True, False),
-            ("incorrect_72", 0.72, True, False),
-            ("incorrect_80", 0.80, True, False),
-            ("incorrect_85", 0.85, True, False),
-            ("incorrect_90", 0.90, True, False),
-            ("incorrect_100", 1.00, True, False),
-            ("centers_45", 0.45, False, False),
-            ("centers_60", 0.60, False, False),
-            ("centers_72", 0.72, False, False),
-            ("centers_85", 0.85, False, False),
-            ("tonal_90", 0.90, False, True),
-            ("tonal_95", 0.95, False, True),
-            ("centers_90", 0.90, False, False),
-            ("centers_95", 0.95, False, False),
+            ("functional", 0.0, False, False, 0.0),
+            ("incorrect_55", 0.55, True, False, 0.0),
+            ("incorrect_72", 0.72, True, False, 0.0),
+            ("incorrect_80", 0.80, True, False, 0.0),
+            ("incorrect_85", 0.85, True, False, 0.0),
+            ("uncertain_16", 0.85, True, False, 16.0),
+            ("uncertain_32", 0.85, True, False, 32.0),
+            ("uncertain_48", 0.85, True, False, 48.0),
+            ("uncertain_64", 0.85, True, False, 64.0),
+            ("centers_45", 0.45, False, False, 0.0),
+            ("centers_60", 0.60, False, False, 0.0),
+            ("centers_72", 0.72, False, False, 0.0),
+            ("centers_85", 0.85, False, False, 0.0),
+            ("tonal_90", 0.90, False, True, 0.0),
+            ("tonal_95", 0.95, False, True, 0.0),
+            ("centers_90", 0.90, False, False, 0.0),
+            ("centers_95", 0.95, False, False, 0.0),
         )
-        for name, center_scale, incorrect_only, preserve_tone in repair_profiles:
+        for (
+            name,
+            center_scale,
+            incorrect_only,
+            preserve_tone,
+            confidence_margin,
+        ) in repair_profiles:
             yield (
                 name,
                 repair_qr_modules(
@@ -174,6 +182,7 @@ class ControlNetBackend(GenerationBackend):
                     center_scale=center_scale,
                     incorrect_only=incorrect_only,
                     preserve_tone=preserve_tone,
+                    confidence_margin=confidence_margin,
                 ),
             )
 

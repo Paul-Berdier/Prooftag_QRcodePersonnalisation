@@ -17,3 +17,13 @@ def image_quality_metrics(image: Image.Image) -> dict[str, float]:
         "sharpness_laplacian": laplacian_variance,
         "clipped_pixel_ratio": clipped,
     }
+
+
+def image_change_metrics(image: Image.Image, reference: Image.Image) -> dict[str, float]:
+    candidate = np.asarray(image.convert("RGB"), dtype=np.int16)
+    baseline = np.asarray(reference.convert("RGB").resize(image.size), dtype=np.int16)
+    absolute_change = np.abs(candidate - baseline)
+    return {
+        "changed_pixel_ratio": float((absolute_change.max(axis=2) > 10).mean()),
+        "mean_absolute_change": float(absolute_change.mean() / 255.0),
+    }

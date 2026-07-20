@@ -41,5 +41,7 @@ def test_targeted_repairs_run_before_global_module_repairs():
 
     assert names.index("incorrect_80") < names.index("centers_45")
     assert names.index("incorrect_85") < names.index("centers_45")
-    assert names.index("incorrect_90") < names.index("centers_45")
-    assert names.index("incorrect_100") < names.index("centers_45")
+    assert names.index("uncertain_16") < names.index("centers_45")
+    assert names.index("uncertain_32") < names.index("centers_45")
+    assert names.index("uncertain_48") < names.index("centers_45")
+    assert names.index("uncertain_64") < names.index("centers_45")

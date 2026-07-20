@@ -99,10 +99,13 @@ def repair_qr_modules(
     center_scale: float,
     incorrect_only: bool = False,
     preserve_tone: bool = False,
+    confidence_margin: float = 0.0,
 ) -> Image.Image:
     """Lock functional modules and restore data-module centers over the artwork."""
     if not 0.0 <= center_scale <= 1.0:
         raise ValueError("center_scale must be between 0 and 1")
+    if not 0.0 <= confidence_margin < 128.0:
+        raise ValueError("confidence_margin must be between 0 (inclusive) and 128 (exclusive)")
 
     source = np.asarray(candidate.convert("RGB").resize(blueprint.image.size)).copy()
     gray = np.asarray(Image.fromarray(source).convert("L"), dtype=np.float32)
@@ -119,8 +122,14 @@ def repair_qr_modules(
             if protected[row, col]:
                 source[y0:y1, x0:x1] = target
                 continue
-            is_incorrect = (gray[y0:y1, x0:x1].mean() < 128) != bool(blueprint.matrix[row, col])
-            if center_scale == 0 or (incorrect_only and not is_incorrect):
+            module_mean = float(gray[y0:y1, x0:x1].mean())
+            target_is_dark = bool(blueprint.matrix[row, col])
+            needs_repair = (
+                module_mean >= 128 - confidence_margin
+                if target_is_dark
+                else module_mean < 128 + confidence_margin
+            )
+            if center_scale == 0 or (incorrect_only and not needs_repair):
                 continue
             width = max(1, round((x1 - x0) * center_scale))
             height = max(1, round((y1 - y0) * center_scale))

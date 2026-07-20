@@ -58,6 +58,22 @@ def test_repair_rejects_an_invalid_center_scale():
         raise AssertionError("An invalid repair scale must fail")
 
 
+def test_repair_rejects_an_invalid_confidence_margin():
+    blueprint = generate_qr("https://example.prooftag.test/t/confidence", "H")
+
+    try:
+        repair_qr_modules(
+            blueprint.image,
+            blueprint,
+            center_scale=0.85,
+            confidence_margin=128,
+        )
+    except ValueError as exc:
+        assert str(exc) == ("confidence_margin must be between 0 (inclusive) and 128 (exclusive)")
+    else:
+        raise AssertionError("An invalid confidence margin must fail")
+
+
 def test_tonal_repair_keeps_texture_while_remaining_robust():
     payload = "https://example.prooftag.test/t/tonal-repair"
     blueprint = generate_qr(payload, "H")
