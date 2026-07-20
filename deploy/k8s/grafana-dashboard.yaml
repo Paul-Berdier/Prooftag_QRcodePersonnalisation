@@ -142,6 +142,34 @@ data:
           "targets": [{"expr": "prooftag_qr_runs_active", "refId": "A"}],
           "title": "Générations actives",
           "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"mappings": [{"options": {"0": {"color": "red", "text": "Non chargé"}, "1": {"color": "green", "text": "Chargé"}}, "type": "value"}], "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}},
+          "gridPos": {"h": 6, "w": 6, "x": 0, "y": 28},
+          "id": 14,
+          "options": {"colorMode": "background", "reduceOptions": {"calcs": ["lastNotNull"]}},
+          "targets": [{"expr": "max(prooftag_qr_model_loaded)", "refId": "A"}],
+          "title": "Modèle ControlNet en mémoire",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "s"}},
+          "gridPos": {"h": 6, "w": 9, "x": 6, "y": 28},
+          "id": 15,
+          "targets": [{"expr": "histogram_quantile(0.95, sum by (le, status) (rate(prooftag_qr_model_load_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "P95 {{status}}", "refId": "A"}],
+          "title": "Durée de chargement du modèle",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "short"}},
+          "gridPos": {"h": 6, "w": 9, "x": 15, "y": 28},
+          "id": 16,
+          "targets": [{"expr": "sum by (status) (increase(prooftag_qr_model_loads_total[$__range]))", "legendFormat": "{{status}}", "refId": "A"}],
+          "title": "Chargements du modèle par résultat",
+          "type": "barchart"
         }
       ],
       "refresh": "30s",

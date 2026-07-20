@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import logging
 import threading
+import time
 from abc import ABC, abstractmethod
 
 from PIL import Image
 
+from . import metrics
 from .config import Settings
 from .qr import QRBlueprint
 from .schemas import GenerationRequest
+
+logger = logging.getLogger(__name__)
 
 
 class GenerationBackend(ABC):
@@ -40,34 +45,53 @@ class ControlNetBackend(GenerationBackend):
         with self._load_lock:
             if self._pipeline is not None:
                 return self._pipeline
+            started = time.perf_counter()
             try:
-                import torch
-                from diffusers import (
-                    ControlNetModel,
-                    DPMSolverMultistepScheduler,
-                    StableDiffusionControlNetPipeline,
+                try:
+                    import torch
+                    from diffusers import (
+                        ControlNetModel,
+                        DPMSolverMultistepScheduler,
+                        StableDiffusionControlNetPipeline,
+                    )
+                except ImportError as exc:
+                    raise RuntimeError("Install the 'gpu' dependencies to use ControlNet") from exc
+                if not torch.cuda.is_available():
+                    raise RuntimeError("ControlNet backend requires an available CUDA GPU")
+                dtype = torch.float16
+                controlnet = ControlNetModel.from_pretrained(
+                    self.settings.controlnet_model_id,
+                    torch_dtype=dtype,
+                    cache_dir=self.settings.model_cache_dir,
                 )
-            except ImportError as exc:
-                raise RuntimeError("Install the 'gpu' dependencies to use ControlNet") from exc
-            if not torch.cuda.is_available():
-                raise RuntimeError("ControlNet backend requires an available CUDA GPU")
-            dtype = torch.float16
-            controlnet = ControlNetModel.from_pretrained(
-                self.settings.controlnet_model_id,
-                torch_dtype=dtype,
-                cache_dir=self.settings.model_cache_dir,
+                pipe = StableDiffusionControlNetPipeline.from_pretrained(
+                    self.settings.base_model_id,
+                    controlnet=controlnet,
+                    torch_dtype=dtype,
+                    cache_dir=self.settings.model_cache_dir,
+                    safety_checker=None,
+                )
+                pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
+                pipe.set_progress_bar_config(disable=True)
+                pipe.to(self.settings.device)
+                self._pipeline = pipe
+            except Exception:
+                duration = time.perf_counter() - started
+                metrics.MODEL_LOADS.labels("error").inc()
+                metrics.MODEL_LOAD_DURATION.labels("error").observe(duration)
+                logger.exception(
+                    "controlnet_model_load_failed",
+                    extra={"backend": "controlnet", "duration_ms": round(duration * 1000, 2)},
+                )
+                raise
+            duration = time.perf_counter() - started
+            metrics.MODEL_LOADS.labels("success").inc()
+            metrics.MODEL_LOAD_DURATION.labels("success").observe(duration)
+            metrics.MODEL_LOADED.set(1)
+            logger.info(
+                "controlnet_model_loaded",
+                extra={"backend": "controlnet", "duration_ms": round(duration * 1000, 2)},
             )
-            pipe = StableDiffusionControlNetPipeline.from_pretrained(
-                self.settings.base_model_id,
-                controlnet=controlnet,
-                torch_dtype=dtype,
-                cache_dir=self.settings.model_cache_dir,
-                safety_checker=None,
-            )
-            pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
-            pipe.set_progress_bar_config(disable=True)
-            pipe.to(self.settings.device)
-            self._pipeline = pipe
         return self._pipeline
 
     def generate(

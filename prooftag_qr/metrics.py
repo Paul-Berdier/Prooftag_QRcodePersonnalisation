@@ -48,3 +48,18 @@ PHYSICAL_VALIDATIONS = Counter(
     "Physical scan validation outcomes",
     ["outcome"],
 )
+MODEL_LOADS = Counter(
+    "prooftag_qr_model_loads_total",
+    "ControlNet model load outcomes",
+    ["status"],
+)
+MODEL_LOAD_DURATION = Histogram(
+    "prooftag_qr_model_load_duration_seconds",
+    "Time spent loading the ControlNet pipeline by outcome",
+    ["status"],
+    buckets=(1, 5, 10, 30, 60, 120, 300, 600, 1200),
+)
+MODEL_LOADED = Gauge(
+    "prooftag_qr_model_loaded",
+    "Whether the ControlNet pipeline is loaded in this process",
+)

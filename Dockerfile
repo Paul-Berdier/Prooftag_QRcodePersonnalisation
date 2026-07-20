@@ -3,8 +3,7 @@ FROM pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
-    HF_HOME=/cache/huggingface \
-    TRANSFORMERS_CACHE=/cache/huggingface
+    HF_HOME=/cache/huggingface
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl libgl1 libglib2.0-0 libzbar0 \
@@ -15,7 +14,8 @@ COPY pyproject.toml README.md alembic.ini ./
 COPY prooftag_qr ./prooftag_qr
 COPY migrations ./migrations
 RUN pip install --upgrade pip \
-    && pip install '.[gpu]'
+    && pip install '.[gpu]' \
+    && python -c "import torch; from diffusers import ControlNetModel, DPMSolverMultistepScheduler, StableDiffusionControlNetPipeline; print('GPU stack import OK:', torch.__version__)"
 
 RUN useradd --create-home --uid 10001 app \
     && mkdir -p /data /cache \

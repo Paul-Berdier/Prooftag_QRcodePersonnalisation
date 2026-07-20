@@ -17,6 +17,7 @@ from .config import get_settings
 from .domain import RunRecord
 from .logging import configure_logging
 from .repository import RunRepository
+from .runtime import runtime_info
 from .schemas import (
     AttemptResult,
     GenerationRequest,
@@ -100,6 +101,11 @@ def health() -> dict:
 def ready() -> dict:
     repository.ping()
     return {"status": "ready", "backend": settings.default_backend}
+
+
+@app.get("/v1/runtime", tags=["operations"])
+def runtime() -> dict:
+    return runtime_info()
 
 
 @app.get("/metrics", include_in_schema=False)

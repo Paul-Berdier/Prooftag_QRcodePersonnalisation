@@ -33,3 +33,8 @@ def test_api_generation_reports_and_physical_validation(tmp_path, monkeypatch):
 
     assert client.get("/v1/reports/summary").json()["accepted_runs"] == 1
     assert client.get("/metrics").status_code == 200
+
+    runtime = client.get("/v1/runtime")
+    assert runtime.status_code == 200
+    assert "torch" in runtime.json()["packages"]
+    assert "cuda_available" in runtime.json()

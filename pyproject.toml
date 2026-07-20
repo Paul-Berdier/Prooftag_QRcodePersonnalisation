@@ -25,10 +25,13 @@ dependencies = [
 
 [project.optional-dependencies]
 gpu = [
-  "accelerate>=1.1,<2",
-  "diffusers>=0.32,<1",
-  "safetensors>=0.4,<1",
-  "transformers>=4.46,<5",
+  # Compatibility set for pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime.
+  # Upgrade these versions together with the PyTorch base image.
+  "accelerate==0.34.2",
+  "diffusers==0.31.0",
+  "huggingface-hub==0.25.2",
+  "safetensors==0.4.5",
+  "transformers==4.44.2",
 ]
 dev = [
   "httpx>=0.27,<1",
