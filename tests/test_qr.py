@@ -92,3 +92,30 @@ def test_tonal_repair_keeps_texture_while_remaining_robust():
     assert all(record.exact_payload_match for record in records)
     assert module_error_rate(repaired, blueprint) == 0.0
     assert clipped_ratio < 0.6
+
+
+def test_perceptual_repair_feathers_edges_and_preserves_functional_texture():
+    payload = "https://example.prooftag.test/t/perceptual-repair"
+    blueprint = generate_qr(payload, "H")
+    noise = np.random.default_rng(2027).integers(0, 256, (512, 512, 3), dtype=np.uint8)
+    source = Image.fromarray(noise)
+
+    repaired = repair_qr_modules(
+        source,
+        blueprint,
+        center_scale=0.85,
+        incorrect_only=True,
+        preserve_tone=True,
+        confidence_margin=64,
+        tone_factor=0.35,
+        edge_feather=0.22,
+        preserve_functional_tone=True,
+    )
+    records = QRValidator(decoders=[OpenCVDecoder()]).validate(repaired, payload)
+    repaired_array = np.asarray(repaired)
+    changed = np.abs(repaired_array.astype(np.int16) - noise.astype(np.int16))
+
+    assert all(record.exact_payload_match for record in records)
+    assert module_error_rate(repaired, blueprint) == 0.0
+    assert np.any(repaired_array[:40] != 255)
+    assert changed.mean() < 75

@@ -162,23 +162,36 @@ class ControlNetBackend(GenerationBackend):
     ) -> Iterable[tuple[str, Image.Image]]:
         yield "raw", candidate
         repair_profiles = (
-            ("functional", 0.0, False, False, 0.0),
-            ("incorrect_55", 0.55, True, False, 0.0),
-            ("incorrect_72", 0.72, True, False, 0.0),
-            ("incorrect_80", 0.80, True, False, 0.0),
-            ("incorrect_85", 0.85, True, False, 0.0),
-            ("uncertain_16", 0.85, True, False, 16.0),
-            ("uncertain_32", 0.85, True, False, 32.0),
-            ("uncertain_48", 0.85, True, False, 48.0),
-            ("uncertain_64", 0.85, True, False, 64.0),
-            ("centers_45", 0.45, False, False, 0.0),
-            ("centers_60", 0.60, False, False, 0.0),
-            ("centers_72", 0.72, False, False, 0.0),
-            ("centers_85", 0.85, False, False, 0.0),
-            ("tonal_90", 0.90, False, True, 0.0),
-            ("tonal_95", 0.95, False, True, 0.0),
-            ("centers_90", 0.90, False, False, 0.0),
-            ("centers_95", 0.95, False, False, 0.0),
+            # Rounded profiles trade the visible QR grid for small, blended superellipses.
+            ("rounded_16", 0.95, True, True, 16.0, 0.05, 0.18, True, True),
+            ("rounded_32", 0.95, True, True, 32.0, 0.00, 0.35, True, True),
+            ("rounded_48", 0.95, True, True, 48.0, 0.05, 0.25, True, True),
+            # Perceptual profiles retain chroma/texture and feather center-patch edges.
+            # Binary profiles remain as a safe fallback when a softer result does not scan.
+            ("perceptual_16", 0.85, True, True, 16.0, 0.20, 0.10, True, False),
+            ("perceptual_16_strong", 0.90, True, True, 16.0, 0.05, 0.10, True, False),
+            ("perceptual_32", 0.85, True, True, 32.0, 0.15, 0.10, True, False),
+            ("perceptual_32_strong", 0.85, True, True, 32.0, 0.05, 0.10, True, False),
+            ("perceptual_32_wide", 0.90, True, True, 32.0, 0.10, 0.10, True, False),
+            ("perceptual_48", 0.90, True, True, 48.0, 0.05, 0.10, True, False),
+            ("perceptual_64", 0.90, True, True, 64.0, 0.05, 0.10, True, False),
+            ("functional", 0.0, False, False, 0.0, 0.25, 0.0, False, False),
+            ("incorrect_55", 0.55, True, False, 0.0, 0.25, 0.0, False, False),
+            ("incorrect_72", 0.72, True, False, 0.0, 0.25, 0.0, False, False),
+            ("incorrect_80", 0.80, True, False, 0.0, 0.25, 0.0, False, False),
+            ("incorrect_85", 0.85, True, False, 0.0, 0.25, 0.0, False, False),
+            ("uncertain_16", 0.85, True, False, 16.0, 0.25, 0.0, False, False),
+            ("uncertain_32", 0.85, True, False, 32.0, 0.25, 0.0, False, False),
+            ("uncertain_48", 0.85, True, False, 48.0, 0.25, 0.0, False, False),
+            ("uncertain_64", 0.85, True, False, 64.0, 0.25, 0.0, False, False),
+            ("centers_45", 0.45, False, False, 0.0, 0.25, 0.0, False, False),
+            ("centers_60", 0.60, False, False, 0.0, 0.25, 0.0, False, False),
+            ("centers_72", 0.72, False, False, 0.0, 0.25, 0.0, False, False),
+            ("centers_85", 0.85, False, False, 0.0, 0.25, 0.0, False, False),
+            ("tonal_90", 0.90, False, True, 0.0, 0.25, 0.0, False, False),
+            ("tonal_95", 0.95, False, True, 0.0, 0.25, 0.0, False, False),
+            ("centers_90", 0.90, False, False, 0.0, 0.25, 0.0, False, False),
+            ("centers_95", 0.95, False, False, 0.0, 0.25, 0.0, False, False),
         )
         for (
             name,
@@ -186,6 +199,10 @@ class ControlNetBackend(GenerationBackend):
             incorrect_only,
             preserve_tone,
             confidence_margin,
+            tone_factor,
+            edge_feather,
+            preserve_functional_tone,
+            rounded_edges,
         ) in repair_profiles:
             yield (
                 name,
@@ -196,6 +213,10 @@ class ControlNetBackend(GenerationBackend):
                     incorrect_only=incorrect_only,
                     preserve_tone=preserve_tone,
                     confidence_margin=confidence_margin,
+                    tone_factor=tone_factor,
+                    edge_feather=edge_feather,
+                    preserve_functional_tone=preserve_functional_tone,
+                    rounded_edges=rounded_edges,
                 ),
             )
 

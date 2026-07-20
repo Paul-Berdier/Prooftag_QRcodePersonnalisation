@@ -33,6 +33,11 @@ Le taux « premier essai » mesure la qualité intrinsèque d'une seed. Le taux 
 finale » mesure la capacité réelle du service après régénération et fallback. Le rapport
 indique séparément le nombre de cas ayant nécessité une correction globale.
 
+Les variantes `rounded_*` sont essayées en premier : elles corrigent la luminance avec des
+formes arrondies à bords fondus pour réduire l'effet de grille. Les variantes `perceptual_*`
+puis binaires restent disponibles comme replis de robustesse. `selected_variant` et
+`variant-failures.csv` permettent de suivre le palier retenu pour chaque image.
+
 ## Une commande depuis le PC Windows
 
 Depuis PowerShell, dans le dépôt local :

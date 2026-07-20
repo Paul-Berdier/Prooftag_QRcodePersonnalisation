@@ -92,6 +92,37 @@ def functional_pattern_mask(blueprint: QRBlueprint) -> np.ndarray:
     return mask
 
 
+def _tone_region(region: np.ndarray, target: int, factor: float) -> np.ndarray:
+    """Move RGB values toward a QR tone while retaining hue and local texture."""
+    source = region.astype(np.float32)
+    if target == 0:
+        return source * factor
+    return 255 - (255 - source) * factor
+
+
+def _feather_mask(
+    height: int, width: int, edge_feather: float, rounded_edges: bool
+) -> np.ndarray:
+    """Return a smooth mask whose edges blend a repaired center into the artwork."""
+    if edge_feather == 0:
+        return np.ones((height, width, 1), dtype=np.float32)
+    yy, xx = np.mgrid[:height, :width]
+    if rounded_edges:
+        normalized_x = np.abs((xx + 0.5 - width / 2) / (width / 2))
+        normalized_y = np.abs((yy + 0.5 - height / 2) / (height / 2))
+        # A fourth-order superellipse looks organic while retaining enough module area.
+        radius = (normalized_x**4 + normalized_y**4) ** 0.25
+        alpha = np.clip((1.0 - radius) / edge_feather, 0.0, 1.0)
+    else:
+        distance = np.minimum.reduce(
+            (xx + 0.5, width - xx - 0.5, yy + 0.5, height - yy - 0.5)
+        )
+        feather_pixels = max(1.0, min(height, width) * edge_feather)
+        alpha = np.clip(distance / feather_pixels, 0.0, 1.0)
+    alpha = alpha * alpha * (3.0 - 2.0 * alpha)
+    return alpha[..., None].astype(np.float32)
+
+
 def repair_qr_modules(
     candidate: Image.Image,
     blueprint: QRBlueprint,
@@ -100,12 +131,20 @@ def repair_qr_modules(
     incorrect_only: bool = False,
     preserve_tone: bool = False,
     confidence_margin: float = 0.0,
+    tone_factor: float = 0.25,
+    edge_feather: float = 0.0,
+    preserve_functional_tone: bool = False,
+    rounded_edges: bool = False,
 ) -> Image.Image:
     """Lock functional modules and restore data-module centers over the artwork."""
     if not 0.0 <= center_scale <= 1.0:
         raise ValueError("center_scale must be between 0 and 1")
     if not 0.0 <= confidence_margin < 128.0:
         raise ValueError("confidence_margin must be between 0 (inclusive) and 128 (exclusive)")
+    if not 0.0 <= tone_factor <= 1.0:
+        raise ValueError("tone_factor must be between 0 and 1")
+    if not 0.0 <= edge_feather <= 0.5:
+        raise ValueError("edge_feather must be between 0 and 0.5")
 
     source = np.asarray(candidate.convert("RGB").resize(blueprint.image.size)).copy()
     gray = np.asarray(Image.fromarray(source).convert("L"), dtype=np.float32)
@@ -120,7 +159,12 @@ def repair_qr_modules(
             x1 = max(x0 + 1, round((col + 1) * source.shape[1] / count))
             target = 0 if blueprint.matrix[row, col] else 255
             if protected[row, col]:
-                source[y0:y1, x0:x1] = target
+                if preserve_functional_tone:
+                    source[y0:y1, x0:x1] = np.rint(
+                        _tone_region(source[y0:y1, x0:x1], target, min(tone_factor, 0.12))
+                    ).astype(np.uint8)
+                else:
+                    source[y0:y1, x0:x1] = target
                 continue
             module_mean = float(gray[y0:y1, x0:x1].mean())
             target_is_dark = bool(blueprint.matrix[row, col])
@@ -141,11 +185,13 @@ def repair_qr_modules(
             ry1 = min(y1, ry0 + height)
             if preserve_tone:
                 region = source[ry0:ry1, rx0:rx1].astype(np.float32)
-                if target == 0:
-                    region *= 0.25
-                else:
-                    region = 255 - (255 - region) * 0.25
-                source[ry0:ry1, rx0:rx1] = np.rint(region).astype(np.uint8)
+                toned = _tone_region(region, target, tone_factor)
+                alpha = _feather_mask(
+                    region.shape[0], region.shape[1], edge_feather, rounded_edges
+                )
+                source[ry0:ry1, rx0:rx1] = np.rint(
+                    region * (1.0 - alpha) + toned * alpha
+                ).astype(np.uint8)
             else:
                 source[ry0:ry1, rx0:rx1] = target
     return Image.fromarray(source)

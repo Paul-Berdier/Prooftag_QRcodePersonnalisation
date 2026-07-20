@@ -158,6 +158,16 @@ class GenerationService:
                                 ).set(quality_value)
                             if self.settings.save_debug_artifacts and variant_name in {
                                 "raw",
+                                "rounded_16",
+                                "rounded_32",
+                                "rounded_48",
+                                "perceptual_16",
+                                "perceptual_16_strong",
+                                "perceptual_32",
+                                "perceptual_32_strong",
+                                "perceptual_32_wide",
+                                "perceptual_48",
+                                "perceptual_64",
                                 "incorrect_80",
                                 "incorrect_85",
                                 "uncertain_16",

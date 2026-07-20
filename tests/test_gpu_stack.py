@@ -41,6 +41,13 @@ def test_targeted_repairs_run_before_global_module_repairs():
     backend = ControlNetBackend(Settings())
     names = [name for name, _ in backend.variants(blueprint.image, blueprint)]
 
+    assert names.index("rounded_16") < names.index("perceptual_16")
+    assert names.index("rounded_48") < names.index("perceptual_16")
+    assert names.index("perceptual_16") < names.index("incorrect_80")
+    assert names.index("perceptual_16_strong") < names.index("incorrect_80")
+    assert names.index("perceptual_32_strong") < names.index("incorrect_80")
+    assert names.index("perceptual_32_wide") < names.index("incorrect_80")
+    assert names.index("perceptual_64") < names.index("incorrect_80")
     assert names.index("incorrect_80") < names.index("centers_45")
     assert names.index("incorrect_85") < names.index("centers_45")
     assert names.index("uncertain_16") < names.index("centers_45")

@@ -10,8 +10,9 @@ La version `0.1.0` fournit :
 - une API FastAPI ;
 - un générateur QR de référence (`backend=qr`) ;
 - une baseline artistique Stable Diffusion 1.5 + ControlNet (`backend=controlnet`) ;
-- un verrouillage exact des motifs fonctionnels et une réparation adaptative des centres de
-  modules incorrects ou peu contrastés, du candidat le moins intrusif au plus robuste ;
+- un verrouillage des motifs fonctionnels et une réparation adaptative des modules incorrects
+  ou peu contrastés, d'abord par luminance et formes arrondies fondues dans l'illustration,
+  puis par profils binaires de secours ;
 - une régénération avec une nouvelle seed avant tout fallback de réparation globale ;
 - plusieurs tentatives avec conservation automatique du meilleur résultat ;
 - une validation exacte du payload par OpenCV et ZBar ;
@@ -24,8 +25,9 @@ La version `0.1.0` fournit :
 - une image Docker CUDA et des ressources Kubernetes adaptées au cluster Prooftag.
 
 L'injection latente inspirée de FreeQR n'est pas encore implémentée. La réparation locale
-actuelle constitue le premier garde-fou structurel mesurable : chaque variante est validée
-et la première qui atteint le seuil strict est livrée.
+actuelle conserve teinte et texture, remplace les centres carrés visibles par des superellipses
+à bords progressifs et constitue le premier garde-fou structurel mesurable : chaque variante
+est validée et la première qui atteint le seuil strict est livrée.
 
 ## API
 
