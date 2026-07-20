@@ -125,17 +125,19 @@ class ControlNetBackend(GenerationBackend):
     ) -> Iterable[tuple[str, Image.Image]]:
         yield "raw", candidate
         repair_profiles = (
-            ("functional", 0.0, False),
-            ("incorrect_55", 0.55, True),
-            ("incorrect_72", 0.72, True),
-            ("centers_45", 0.45, False),
-            ("centers_60", 0.60, False),
-            ("centers_72", 0.72, False),
-            ("centers_85", 0.85, False),
-            ("centers_90", 0.90, False),
-            ("centers_95", 0.95, False),
+            ("functional", 0.0, False, False),
+            ("incorrect_55", 0.55, True, False),
+            ("incorrect_72", 0.72, True, False),
+            ("centers_45", 0.45, False, False),
+            ("centers_60", 0.60, False, False),
+            ("centers_72", 0.72, False, False),
+            ("centers_85", 0.85, False, False),
+            ("tonal_90", 0.90, False, True),
+            ("tonal_95", 0.95, False, True),
+            ("centers_90", 0.90, False, False),
+            ("centers_95", 0.95, False, False),
         )
-        for name, center_scale, incorrect_only in repair_profiles:
+        for name, center_scale, incorrect_only, preserve_tone in repair_profiles:
             yield (
                 name,
                 repair_qr_modules(
@@ -143,6 +145,7 @@ class ControlNetBackend(GenerationBackend):
                     blueprint,
                     center_scale=center_scale,
                     incorrect_only=incorrect_only,
+                    preserve_tone=preserve_tone,
                 ),
             )
 

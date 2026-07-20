@@ -56,3 +56,23 @@ def test_repair_rejects_an_invalid_center_scale():
         assert str(exc) == "center_scale must be between 0 and 1"
     else:
         raise AssertionError("An invalid repair scale must fail")
+
+
+def test_tonal_repair_keeps_texture_while_remaining_robust():
+    payload = "https://example.prooftag.test/t/tonal-repair"
+    blueprint = generate_qr(payload, "H")
+    noise = np.random.default_rng(2026).integers(0, 256, (512, 512, 3), dtype=np.uint8)
+
+    repaired = repair_qr_modules(
+        Image.fromarray(noise),
+        blueprint,
+        center_scale=0.95,
+        preserve_tone=True,
+    )
+    records = QRValidator(decoders=[OpenCVDecoder()]).validate(repaired, payload)
+    gray = np.asarray(repaired.convert("L"))
+    clipped_ratio = float(((gray <= 3) | (gray >= 252)).mean())
+
+    assert all(record.exact_payload_match for record in records)
+    assert module_error_rate(repaired, blueprint) == 0.0
+    assert clipped_ratio < 0.6

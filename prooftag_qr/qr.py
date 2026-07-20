@@ -98,6 +98,7 @@ def repair_qr_modules(
     *,
     center_scale: float,
     incorrect_only: bool = False,
+    preserve_tone: bool = False,
 ) -> Image.Image:
     """Lock functional modules and restore data-module centers over the artwork."""
     if not 0.0 <= center_scale <= 1.0:
@@ -129,5 +130,13 @@ def repair_qr_modules(
             ry0 = max(y0, cy - height // 2)
             rx1 = min(x1, rx0 + width)
             ry1 = min(y1, ry0 + height)
-            source[ry0:ry1, rx0:rx1] = target
+            if preserve_tone:
+                region = source[ry0:ry1, rx0:rx1].astype(np.float32)
+                if target == 0:
+                    region *= 0.25
+                else:
+                    region = 255 - (255 - region) * 0.25
+                source[ry0:ry1, rx0:rx1] = np.rint(region).astype(np.uint8)
+            else:
+                source[ry0:ry1, rx0:rx1] = target
     return Image.fromarray(source)
