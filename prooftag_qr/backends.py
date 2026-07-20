@@ -9,7 +9,7 @@ from PIL import Image
 
 from . import metrics
 from .config import Settings
-from .qr import QRBlueprint
+from .qr import QRBlueprint, repair_qr_modules
 from .schemas import GenerationRequest
 
 logger = logging.getLogger(__name__)
@@ -21,6 +21,11 @@ class GenerationBackend(ABC):
         self, request: GenerationRequest, blueprint: QRBlueprint, seed: int
     ) -> Image.Image:
         raise NotImplementedError
+
+    def variants(
+        self, candidate: Image.Image, blueprint: QRBlueprint
+    ) -> list[tuple[str, Image.Image]]:
+        return [("raw", candidate)]
 
 
 class QRBackend(GenerationBackend):
@@ -113,6 +118,33 @@ class ControlNetBackend(GenerationBackend):
             generator=generator,
         )
         return result.images[0].convert("RGB")
+
+    def variants(
+        self, candidate: Image.Image, blueprint: QRBlueprint
+    ) -> list[tuple[str, Image.Image]]:
+        variants = [("raw", candidate)]
+        repair_profiles = (
+            ("functional", 0.0, False),
+            ("incorrect_55", 0.55, True),
+            ("incorrect_72", 0.72, True),
+            ("centers_45", 0.45, False),
+            ("centers_60", 0.60, False),
+            ("centers_72", 0.72, False),
+            ("centers_85", 0.85, False),
+        )
+        variants.extend(
+            (
+                name,
+                repair_qr_modules(
+                    candidate,
+                    blueprint,
+                    center_scale=center_scale,
+                    incorrect_only=incorrect_only,
+                ),
+            )
+            for name, center_scale, incorrect_only in repair_profiles
+        )
+        return variants
 
 
 def build_backends(settings: Settings) -> dict[str, GenerationBackend]:

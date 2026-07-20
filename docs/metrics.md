@@ -49,6 +49,11 @@ dimensions, iPhone, Pixel et lecteurs industriels.
 | `prooftag_qr_module_error_rate` | histogramme | fidélité structurelle au QR source |
 | `prooftag_qr_image_quality_latest` | jauge | dernière mesure de qualité d'image |
 | `prooftag_qr_physical_validations_total` | compteur | résultats des scans terrain |
+| `prooftag_qr_model_loads_total` | compteur | chargements ControlNet réussis ou en erreur |
+| `prooftag_qr_model_load_duration_seconds` | histogramme | durée du chargement initial par résultat |
+| `prooftag_qr_model_loaded` | jauge | présence du pipeline ControlNet en VRAM |
+| `prooftag_qr_repair_variants_total` | compteur | acceptation de chaque profil de réparation |
+| `prooftag_qr_repair_selected_total` | compteur | profil finalement retenu pour l'image |
 
 Les métriques DCGM existantes complètent le dashboard avec VRAM, utilisation GPU,
 température et puissance.
@@ -56,7 +61,7 @@ température et puissance.
 ## Indicateurs à ajouter pendant la phase FreeQR
 
 - perte SRL globale et par type de module ;
-- nombre de modules réparés et coût de réparation ;
+- proportion exacte de pixels et de modules modifiés par la réparation ;
 - étape d'arrêt anticipé ;
 - CLIPScore prompt-image ;
 - score esthétique calibré ;

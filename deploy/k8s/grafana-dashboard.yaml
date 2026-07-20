@@ -170,6 +170,24 @@ data:
           "targets": [{"expr": "sum by (status) (increase(prooftag_qr_model_loads_total[$__range]))", "legendFormat": "{{status}}", "refId": "A"}],
           "title": "Chargements du modèle par résultat",
           "type": "barchart"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "short"}},
+          "gridPos": {"h": 7, "w": 12, "x": 0, "y": 34},
+          "id": 17,
+          "targets": [{"expr": "sum by (variant) (increase(prooftag_qr_repair_selected_total[$__range]))", "legendFormat": "{{variant}}", "refId": "A"}],
+          "title": "Profils de réparation retenus",
+          "type": "barchart"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "percentunit"}},
+          "gridPos": {"h": 7, "w": 12, "x": 12, "y": 34},
+          "id": 18,
+          "targets": [{"expr": "sum by (variant) (increase(prooftag_qr_repair_variants_total{outcome=\"accepted\"}[$__range])) / clamp_min(sum by (variant) (increase(prooftag_qr_repair_variants_total[$__range])), 1)", "legendFormat": "{{variant}}", "refId": "A"}],
+          "title": "Taux d'acceptation par profil de réparation",
+          "type": "barchart"
         }
       ],
       "refresh": "30s",

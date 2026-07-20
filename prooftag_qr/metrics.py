@@ -63,3 +63,13 @@ MODEL_LOADED = Gauge(
     "prooftag_qr_model_loaded",
     "Whether the ControlNet pipeline is loaded in this process",
 )
+REPAIR_VARIANTS = Counter(
+    "prooftag_qr_repair_variants_total",
+    "QR repair variants validated by outcome",
+    ["variant", "outcome"],
+)
+REPAIR_SELECTED = Counter(
+    "prooftag_qr_repair_selected_total",
+    "QR repair variants selected as the best candidate",
+    ["variant"],
+)

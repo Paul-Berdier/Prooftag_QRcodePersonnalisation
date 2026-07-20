@@ -10,6 +10,8 @@ La version `0.1.0` fournit :
 - une API FastAPI ;
 - un générateur QR de référence (`backend=qr`) ;
 - une baseline artistique Stable Diffusion 1.5 + ControlNet (`backend=controlnet`) ;
+- un verrouillage exact des motifs fonctionnels et une réparation adaptative des centres de
+  modules, du candidat le moins intrusif au plus robuste ;
 - plusieurs tentatives avec conservation automatique du meilleur résultat ;
 - une validation exacte du payload par OpenCV et ZBar ;
 - treize scénarios de dégradation ;
@@ -20,9 +22,9 @@ La version `0.1.0` fournit :
 - des métriques Prometheus, alertes et un dashboard Grafana ;
 - une image Docker CUDA et des ressources Kubernetes adaptées au cluster Prooftag.
 
-L'injection latente inspirée de FreeQR et la réparation locale des modules ne sont pas
-encore implémentées. ControlNet est la baseline mesurable qui permettra de comparer ces
-optimisations sans changer le protocole de validation.
+L'injection latente inspirée de FreeQR n'est pas encore implémentée. La réparation locale
+actuelle constitue le premier garde-fou structurel mesurable : chaque variante est validée
+et la première qui atteint le seuil strict est livrée.
 
 ## API
 

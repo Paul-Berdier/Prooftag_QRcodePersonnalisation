@@ -40,6 +40,7 @@ class GenerationService:
     def generate(self, request: GenerationRequest) -> RunRecord:
         started = time.perf_counter()
         backend_name = request.backend or self.settings.default_backend
+        best_variant = "raw"
         run = RunRecord(
             id=str(uuid.uuid4()),
             created_at=datetime.now(UTC),
@@ -69,51 +70,82 @@ class GenerationService:
                 for attempt in range(max_attempts):
                     run.attempts = attempt + 1
                     generation_started = time.perf_counter()
-                    candidate = backend.generate(request, blueprint, request.seed + attempt)
+                    raw_candidate = backend.generate(request, blueprint, request.seed + attempt)
                     attempt_generation_ms = (time.perf_counter() - generation_started) * 1000
                     generation_ms += attempt_generation_ms
                     metrics.DURATION.labels(backend_name, "generation").observe(
                         attempt_generation_ms / 1000
                     )
 
-                    validation_started = time.perf_counter()
-                    records = self.validator.validate(candidate, request.payload)
-                    attempt_validation_ms = (time.perf_counter() - validation_started) * 1000
-                    validation_ms += attempt_validation_ms
-                    metrics.DURATION.labels(backend_name, "validation").observe(
-                        attempt_validation_ms / 1000
-                    )
-                    exact_count = sum(item.exact_payload_match for item in records)
-                    pass_rate = exact_count / len(records) if records else 0.0
-                    attempt_module_error_rate = module_error_rate(candidate, blueprint)
-                    for item in records:
-                        outcome = (
-                            "exact"
-                            if item.exact_payload_match
-                            else ("wrong_payload" if item.success else "not_detected")
+                    attempt_best = None
+                    attempt_best_records = []
+                    attempt_best_pass_rate = -1.0
+                    attempt_best_module_error_rate = 1.0
+                    attempt_best_variant = "raw"
+                    attempt_validation_ms = 0.0
+                    attempt_accepted = False
+
+                    for variant_name, candidate in backend.variants(raw_candidate, blueprint):
+                        validation_started = time.perf_counter()
+                        records = self.validator.validate(candidate, request.payload)
+                        variant_validation_ms = (time.perf_counter() - validation_started) * 1000
+                        attempt_validation_ms += variant_validation_ms
+                        validation_ms += variant_validation_ms
+                        metrics.DURATION.labels(backend_name, "validation").observe(
+                            variant_validation_ms / 1000
                         )
-                        metrics.VALIDATIONS.labels(item.decoder, item.scenario, outcome).inc()
-                        metrics.VALIDATION_DURATION.labels(item.decoder).observe(
-                            item.latency_ms / 1000
+                        exact_count = sum(item.exact_payload_match for item in records)
+                        pass_rate = exact_count / len(records) if records else 0.0
+                        variant_module_error_rate = module_error_rate(candidate, blueprint)
+                        for item in records:
+                            outcome = (
+                                "exact"
+                                if item.exact_payload_match
+                                else ("wrong_payload" if item.success else "not_detected")
+                            )
+                            metrics.VALIDATIONS.labels(item.decoder, item.scenario, outcome).inc()
+                            metrics.VALIDATION_DURATION.labels(item.decoder).observe(
+                                item.latency_ms / 1000
+                            )
+                        original_ok = all(
+                            item.exact_payload_match
+                            for item in records
+                            if item.scenario == "original"
                         )
-                    if pass_rate > best_pass_rate:
-                        best, best_records, best_pass_rate = candidate, records, pass_rate
-                    original_ok = all(
-                        item.exact_payload_match for item in records if item.scenario == "original"
-                    )
-                    accepted = original_ok and pass_rate >= self.settings.validation_min_pass_rate
+                        accepted = (
+                            original_ok and pass_rate >= self.settings.validation_min_pass_rate
+                        )
+                        if backend_name == "controlnet":
+                            metrics.REPAIR_VARIANTS.labels(
+                                variant_name, "accepted" if accepted else "rejected"
+                            ).inc()
+                        if accepted or pass_rate > attempt_best_pass_rate:
+                            attempt_best = candidate
+                            attempt_best_records = records
+                            attempt_best_pass_rate = pass_rate
+                            attempt_best_module_error_rate = variant_module_error_rate
+                            attempt_best_variant = variant_name
+                        if accepted:
+                            attempt_accepted = True
+                            break
+
+                    if attempt_accepted or attempt_best_pass_rate > best_pass_rate:
+                        best = attempt_best
+                        best_records = attempt_best_records
+                        best_pass_rate = attempt_best_pass_rate
+                        best_variant = attempt_best_variant
                     run.attempt_details.append(
                         AttemptRecord(
                             attempt=attempt + 1,
                             seed=request.seed + attempt,
                             generation_ms=attempt_generation_ms,
                             validation_ms=attempt_validation_ms,
-                            scan_pass_rate=pass_rate,
-                            module_error_rate=attempt_module_error_rate,
-                            accepted=accepted,
+                            scan_pass_rate=attempt_best_pass_rate,
+                            module_error_rate=attempt_best_module_error_rate,
+                            accepted=attempt_accepted,
                         )
                     )
-                    if accepted:
+                    if attempt_accepted:
                         break
 
             if best is None:
@@ -125,6 +157,8 @@ class GenerationService:
             )
             run.module_error_rate = module_error_rate(best, blueprint)
             run.quality_metrics = image_quality_metrics(best)
+            if backend_name == "controlnet":
+                metrics.REPAIR_SELECTED.labels(best_variant).inc()
             run.image_path = self.artifact_store.save_image(run.id, best)
             run.generation_ms = generation_ms
             run.validation_ms = validation_ms
@@ -157,6 +191,7 @@ class GenerationService:
                     "backend": backend_name,
                     "status": run.status,
                     "duration_ms": round(run.total_ms, 2),
+                    "repair_variant": best_variant if backend_name == "controlnet" else None,
                 },
             )
         return run
