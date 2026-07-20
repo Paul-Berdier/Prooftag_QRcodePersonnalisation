@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     device: str = "cuda"
     validation_min_pass_rate: float = Field(default=1.0, ge=0.0, le=1.0)
     max_attempts: int = Field(default=3, ge=1, le=20)
+    save_debug_artifacts: bool = False
     artifact_store: Literal["local", "s3"] = "local"
     database_backend: Literal["sqlite", "postgresql"] = "sqlite"
     database_host: str = "prooftag-qr-postgres"

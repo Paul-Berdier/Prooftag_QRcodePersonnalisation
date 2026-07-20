@@ -59,6 +59,7 @@ def test_pipeline_selects_a_valid_repair_without_regenerating(tmp_path):
         model_cache_dir=tmp_path / "models",
         validation_min_pass_rate=1.0,
         max_attempts=1,
+        save_debug_artifacts=True,
     )
     settings.ensure_directories()
     repository = RunRepository(settings.database_url)
@@ -83,3 +84,4 @@ def test_pipeline_selects_a_valid_repair_without_regenerating(tmp_path):
     assert run.attempts == 1
     assert run.scan_pass_rate == 1.0
     assert run.attempt_details[0].accepted
+    assert (settings.artifacts_dir / run.id / "variants" / "raw.png").is_file()

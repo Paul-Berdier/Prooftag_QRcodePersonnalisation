@@ -11,6 +11,9 @@ class ArtifactStore:
     def save_image(self, run_id: str, image: Image.Image) -> str:
         raise NotImplementedError
 
+    def save_variant(self, run_id: str, variant: str, image: Image.Image) -> str:
+        raise NotImplementedError
+
 
 class LocalArtifactStore(ArtifactStore):
     def __init__(self, root: Path):
@@ -21,6 +24,13 @@ class LocalArtifactStore(ArtifactStore):
         run_dir = self.root / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
         path = run_dir / "final.png"
+        image.save(path, format="PNG", optimize=True)
+        return str(path)
+
+    def save_variant(self, run_id: str, variant: str, image: Image.Image) -> str:
+        variant_dir = self.root / run_id / "variants"
+        variant_dir.mkdir(parents=True, exist_ok=True)
+        path = variant_dir / f"{variant}.png"
         image.save(path, format="PNG", optimize=True)
         return str(path)
 
@@ -50,6 +60,16 @@ class S3ArtifactStore(ArtifactStore):
         image.save(stream, format="PNG", optimize=True)
         stream.seek(0)
         key = f"runs/{run_id}/final.png"
+        self.client.upload_fileobj(stream, self.bucket, key, ExtraArgs={"ContentType": "image/png"})
+        return f"s3://{self.bucket}/{key}"
+
+    def save_variant(self, run_id: str, variant: str, image: Image.Image) -> str:
+        import io
+
+        stream = io.BytesIO()
+        image.save(stream, format="PNG", optimize=True)
+        stream.seek(0)
+        key = f"runs/{run_id}/variants/{variant}.png"
         self.client.upload_fileobj(stream, self.bucket, key, ExtraArgs={"ContentType": "image/png"})
         return f"s3://{self.bucket}/{key}"
 

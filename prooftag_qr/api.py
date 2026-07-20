@@ -3,8 +3,10 @@ from __future__ import annotations
 import csv
 import hashlib
 import io
+import re
 from contextlib import asynccontextmanager
 from dataclasses import asdict
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, Response, StreamingResponse
@@ -140,6 +142,21 @@ def get_image(run_id: str):
     if run.image_path.startswith("s3://"):
         raise HTTPException(status_code=501, detail="S3 download endpoint is not enabled yet")
     return FileResponse(run.image_path, media_type="image/png", filename=f"{run_id}.png")
+
+
+@app.get("/v1/generations/{run_id}/variants/{variant}", tags=["experiments"])
+def get_generation_variant(run_id: str, variant: str):
+    run = repository.get(run_id)
+    if not run or not run.image_path:
+        raise HTTPException(status_code=404, detail="Generation not found")
+    if not re.fullmatch(r"[a-z0-9_]+", variant):
+        raise HTTPException(status_code=400, detail="Invalid variant name")
+    if run.image_path.startswith("s3://"):
+        raise HTTPException(status_code=501, detail="S3 download endpoint is not enabled yet")
+    path = Path(run.image_path).parent / "variants" / f"{variant}.png"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Variant image not found")
+    return FileResponse(path, media_type="image/png", filename=f"{run_id}-{variant}.png")
 
 
 @app.get("/v1/reports/summary", response_model=MetricsSummary, tags=["reports"])

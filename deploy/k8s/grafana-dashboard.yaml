@@ -188,6 +188,33 @@ data:
           "targets": [{"expr": "sum by (variant) (increase(prooftag_qr_repair_variants_total{outcome=\"accepted\"}[$__range])) / clamp_min(sum by (variant) (increase(prooftag_qr_repair_variants_total[$__range])), 1)", "legendFormat": "{{variant}}", "refId": "A"}],
           "title": "Taux d'acceptation par profil de réparation",
           "type": "barchart"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "percentunit"}},
+          "gridPos": {"h": 7, "w": 8, "x": 0, "y": 41},
+          "id": 19,
+          "targets": [{"expr": "prooftag_qr_repair_variant_scan_pass_rate", "legendFormat": "{{variant}}", "refId": "A"}],
+          "title": "Dernier taux de lecture par variante",
+          "type": "barchart"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "percentunit"}},
+          "gridPos": {"h": 7, "w": 8, "x": 8, "y": 41},
+          "id": 20,
+          "targets": [{"expr": "prooftag_qr_repair_variant_image_quality{metric=\"clipped_pixel_ratio\"}", "legendFormat": "{{variant}}", "refId": "A"}],
+          "title": "Pixels écrêtés par variante",
+          "type": "barchart"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "short"}},
+          "gridPos": {"h": 7, "w": 8, "x": 16, "y": 41},
+          "id": 21,
+          "targets": [{"expr": "prooftag_qr_repair_variant_image_quality{metric=\"entropy_bits\"}", "legendFormat": "{{variant}}", "refId": "A"}],
+          "title": "Entropie visuelle par variante",
+          "type": "barchart"
         }
       ],
       "refresh": "30s",

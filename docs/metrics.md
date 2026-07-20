@@ -54,6 +54,9 @@ dimensions, iPhone, Pixel et lecteurs industriels.
 | `prooftag_qr_model_loaded` | jauge | présence du pipeline ControlNet en VRAM |
 | `prooftag_qr_repair_variants_total` | compteur | acceptation de chaque profil de réparation |
 | `prooftag_qr_repair_selected_total` | compteur | profil finalement retenu pour l'image |
+| `prooftag_qr_repair_variant_scan_pass_rate` | jauge | dernier taux de lecture de chaque variante |
+| `prooftag_qr_repair_variant_module_error_rate` | jauge | dernière erreur modules de chaque variante |
+| `prooftag_qr_repair_variant_image_quality` | jauge | qualité visuelle de chaque variante |
 
 Les métriques DCGM existantes complètent le dashboard avec VRAM, utilisation GPU,
 température et puissance.

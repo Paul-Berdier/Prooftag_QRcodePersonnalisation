@@ -97,6 +97,7 @@ class GenerationService:
                         exact_count = sum(item.exact_payload_match for item in records)
                         pass_rate = exact_count / len(records) if records else 0.0
                         variant_module_error_rate = module_error_rate(candidate, blueprint)
+                        variant_quality = image_quality_metrics(candidate)
                         for item in records:
                             outcome = (
                                 "exact"
@@ -119,6 +120,34 @@ class GenerationService:
                             metrics.REPAIR_VARIANTS.labels(
                                 variant_name, "accepted" if accepted else "rejected"
                             ).inc()
+                            metrics.REPAIR_VARIANT_SCAN_PASS_RATE.labels(variant_name).set(
+                                pass_rate
+                            )
+                            metrics.REPAIR_VARIANT_MODULE_ERROR_RATE.labels(variant_name).set(
+                                variant_module_error_rate
+                            )
+                            for quality_name, quality_value in variant_quality.items():
+                                metrics.REPAIR_VARIANT_IMAGE_QUALITY.labels(
+                                    variant_name, quality_name
+                                ).set(quality_value)
+                            if self.settings.save_debug_artifacts and variant_name in {
+                                "raw",
+                                "tonal_90",
+                                "tonal_95",
+                            }:
+                                self.artifact_store.save_variant(run.id, variant_name, candidate)
+                            logger.info(
+                                "repair_variant_validated",
+                                extra={
+                                    "run_id": run.id,
+                                    "backend": backend_name,
+                                    "repair_variant": variant_name,
+                                    "status": "accepted" if accepted else "rejected",
+                                    "scan_pass_rate": round(pass_rate, 6),
+                                    "module_error_rate": round(variant_module_error_rate, 6),
+                                    "exact_payload_match": original_ok,
+                                },
+                            )
                         if accepted or pass_rate > attempt_best_pass_rate:
                             attempt_best = candidate
                             attempt_best_records = records

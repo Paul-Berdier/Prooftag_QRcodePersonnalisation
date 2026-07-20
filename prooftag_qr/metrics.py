@@ -73,3 +73,18 @@ REPAIR_SELECTED = Counter(
     "QR repair variants selected as the best candidate",
     ["variant"],
 )
+REPAIR_VARIANT_SCAN_PASS_RATE = Gauge(
+    "prooftag_qr_repair_variant_scan_pass_rate",
+    "Latest scan pass rate measured for each repair variant",
+    ["variant"],
+)
+REPAIR_VARIANT_MODULE_ERROR_RATE = Gauge(
+    "prooftag_qr_repair_variant_module_error_rate",
+    "Latest module error rate measured for each repair variant",
+    ["variant"],
+)
+REPAIR_VARIANT_IMAGE_QUALITY = Gauge(
+    "prooftag_qr_repair_variant_image_quality",
+    "Latest image quality measurement for each repair variant",
+    ["variant", "metric"],
+)
