@@ -1,4 +1,4 @@
-.PHONY: install test lint run build deploy status pause-vllm resume-vllm
+.PHONY: install test lint run build deploy status benchmark pause-vllm resume-vllm
 
 install:
 	python -m pip install -e '.[dev]'
@@ -21,6 +21,9 @@ deploy:
 
 status:
 	kubectl get pods,services,pvc -n qr-core
+
+benchmark:
+	bash scripts/benchmark.sh
 
 pause-vllm:
 	bash scripts/gpu-workload.sh pause-vllm

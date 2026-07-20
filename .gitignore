@@ -11,5 +11,6 @@ build/
 dist/
 data/
 artifacts/
+benchmark-results/
 coverage.xml
 .coverage

@@ -81,7 +81,15 @@ l'analyse du modèle, mais ne doit pas être publiée par l'application appelant
 
 Le projet ne déploie pas de second Prometheus, Grafana, Loki ou MinIO. Voir
 [`docs/deployment.md`](docs/deployment.md) pour le déploiement K3s et la permutation avec
-vLLM, et [`docs/metrics.md`](docs/metrics.md) pour le catalogue de mesures.
+vLLM, [`docs/metrics.md`](docs/metrics.md) pour le catalogue de mesures et
+[`docs/benchmark.md`](docs/benchmark.md) pour générer et rapatrier un rapport comparatif en
+une commande.
+
+## Benchmark après une modification
+
+Depuis le serveur, `make benchmark` génère six cas reproductibles, toutes les images et les
+mesures comparatives. Depuis le PC Windows, `.\scripts\benchmark-remote.ps1` lance le même
+benchmark à distance, copie l'archive, l'extrait et ouvre le rapport HTML.
 
 ## Tests
 
