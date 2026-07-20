@@ -45,3 +45,14 @@ def test_repair_locks_patterns_and_recovers_a_noisy_artwork():
     assert protected[blueprint.border : blueprint.border + 9, blueprint.border].all()
     assert module_error_rate(repaired, blueprint) == 0.0
     assert all(record.exact_payload_match for record in records)
+
+
+def test_repair_rejects_an_invalid_center_scale():
+    blueprint = generate_qr("https://example.prooftag.test/t/scale", "H")
+
+    try:
+        repair_qr_modules(blueprint.image, blueprint, center_scale=1.01)
+    except ValueError as exc:
+        assert str(exc) == "center_scale must be between 0 and 1"
+    else:
+        raise AssertionError("An invalid repair scale must fail")

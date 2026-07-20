@@ -4,6 +4,7 @@ import logging
 import threading
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 
 from PIL import Image
 
@@ -24,8 +25,8 @@ class GenerationBackend(ABC):
 
     def variants(
         self, candidate: Image.Image, blueprint: QRBlueprint
-    ) -> list[tuple[str, Image.Image]]:
-        return [("raw", candidate)]
+    ) -> Iterable[tuple[str, Image.Image]]:
+        yield "raw", candidate
 
 
 class QRBackend(GenerationBackend):
@@ -121,8 +122,8 @@ class ControlNetBackend(GenerationBackend):
 
     def variants(
         self, candidate: Image.Image, blueprint: QRBlueprint
-    ) -> list[tuple[str, Image.Image]]:
-        variants = [("raw", candidate)]
+    ) -> Iterable[tuple[str, Image.Image]]:
+        yield "raw", candidate
         repair_profiles = (
             ("functional", 0.0, False),
             ("incorrect_55", 0.55, True),
@@ -131,9 +132,11 @@ class ControlNetBackend(GenerationBackend):
             ("centers_60", 0.60, False),
             ("centers_72", 0.72, False),
             ("centers_85", 0.85, False),
+            ("centers_90", 0.90, False),
+            ("centers_95", 0.95, False),
         )
-        variants.extend(
-            (
+        for name, center_scale, incorrect_only in repair_profiles:
+            yield (
                 name,
                 repair_qr_modules(
                     candidate,
@@ -142,9 +145,6 @@ class ControlNetBackend(GenerationBackend):
                     incorrect_only=incorrect_only,
                 ),
             )
-            for name, center_scale, incorrect_only in repair_profiles
-        )
-        return variants
 
 
 def build_backends(settings: Settings) -> dict[str, GenerationBackend]:
