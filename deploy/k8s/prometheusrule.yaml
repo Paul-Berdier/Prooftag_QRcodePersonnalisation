@@ -69,4 +69,23 @@ spec:
           annotations:
             summary: Erreur dans le pipeline QR
             description: Au moins une génération s'est terminée en erreur au cours des quinze dernières minutes.
-
+        - alert: ProoftagQRPostgresUnavailable
+          expr: kube_statefulset_status_replicas_ready{namespace="qr-core",statefulset="prooftag-qr-postgres"} < 1
+          for: 5m
+          labels:
+            severity: critical
+            service: prooftag-qr-postgres
+            team: proofchat
+          annotations:
+            summary: PostgreSQL du pipeline QR est indisponible
+            description: Aucun réplica PostgreSQL n'est prêt depuis cinq minutes.
+        - alert: ProoftagQRPostgresBackupOverdue
+          expr: time() - kube_cronjob_status_last_successful_time{namespace="qr-core",cronjob="prooftag-qr-postgres-backup"} > 93600
+          for: 15m
+          labels:
+            severity: warning
+            service: prooftag-qr-postgres
+            team: proofchat
+          annotations:
+            summary: Sauvegarde PostgreSQL QR en retard
+            description: Aucune sauvegarde PostgreSQL n'a réussi depuis plus de 26 heures.

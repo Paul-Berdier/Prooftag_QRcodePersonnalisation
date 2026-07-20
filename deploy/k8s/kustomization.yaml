@@ -3,10 +3,11 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - pvc.yaml
+  - postgres.yaml
+  - postgres-backup.yaml
   - app-config.yaml
   - deployment.yaml
   - service.yaml
   - servicemonitor.yaml
   - prometheusrule.yaml
   - grafana-dashboard.yaml
-

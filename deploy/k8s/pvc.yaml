@@ -25,4 +25,17 @@ spec:
   resources:
     requests:
       storage: 80Gi
-
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prooftag-qr-database-backups
+  namespace: qr-core
+  labels:
+    app: prooftag-qr-postgres
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path-retain
+  resources:
+    requests:
+      storage: 20Gi

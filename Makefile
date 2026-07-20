@@ -16,6 +16,7 @@ build:
 	docker build -t prooftag-qr:dev .
 
 deploy:
+	bash scripts/create-database-secret.sh
 	kubectl apply -k deploy/k8s
 
 status:
@@ -26,4 +27,3 @@ pause-vllm:
 
 resume-vllm:
 	bash scripts/gpu-workload.sh resume-vllm
-

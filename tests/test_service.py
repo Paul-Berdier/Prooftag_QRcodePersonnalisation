@@ -15,7 +15,7 @@ def test_reference_pipeline_accepts_and_persists_run(tmp_path):
         max_attempts=1,
     )
     settings.ensure_directories()
-    repository = RunRepository(settings.database_path)
+    repository = RunRepository(settings.database_url)
     service = GenerationService(
         settings=settings,
         repository=repository,

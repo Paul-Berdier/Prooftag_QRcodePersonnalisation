@@ -11,8 +11,9 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md alembic.ini ./
 COPY prooftag_qr ./prooftag_qr
+COPY migrations ./migrations
 RUN pip install --upgrade pip \
     && pip install '.[gpu]'
 
@@ -26,4 +27,3 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD curl --fail http://127.0.0.1:8080/healthz || exit 1
 
 CMD ["uvicorn", "prooftag_qr.api:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1", "--proxy-headers"]
-

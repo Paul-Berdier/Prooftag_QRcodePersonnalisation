@@ -2,7 +2,8 @@
 
 ## Historique durable par génération
 
-La base `/data/runs.sqlite3` conserve :
+PostgreSQL conserve en production les éléments suivants ; SQLite utilise le même schéma pendant
+les tests locaux :
 
 | Groupe | Champs principaux |
 |---|---|

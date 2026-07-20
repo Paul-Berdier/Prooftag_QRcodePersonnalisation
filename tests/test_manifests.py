@@ -11,7 +11,14 @@ def test_kubernetes_manifests_and_dashboard_are_valid():
         documents.extend(document for document in yaml.safe_load_all(path.read_text()) if document)
 
     kinds = {document["kind"] for document in documents}
-    assert {"Deployment", "Service", "ServiceMonitor", "PrometheusRule"} <= kinds
+    assert {
+        "CronJob",
+        "Deployment",
+        "PrometheusRule",
+        "Service",
+        "ServiceMonitor",
+        "StatefulSet",
+    } <= kinds
 
     dashboard_config = next(
         document

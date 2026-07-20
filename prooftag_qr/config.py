@@ -4,6 +4,7 @@ from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import URL
 
 
 class Settings(BaseSettings):
@@ -15,19 +16,37 @@ class Settings(BaseSettings):
     model_cache_dir: Path = Path("models")
     default_backend: Literal["qr", "controlnet"] = "qr"
     base_model_id: str = "stable-diffusion-v1-5/stable-diffusion-v1-5"
-    controlnet_model_id: str = "DionTimmer/controlnet_qrcode"
+    controlnet_model_id: str = "DionTimmer/controlnet_qrcode-control_v1p_sd15"
     device: str = "cuda"
     validation_min_pass_rate: float = Field(default=1.0, ge=0.0, le=1.0)
     max_attempts: int = Field(default=3, ge=1, le=20)
     artifact_store: Literal["local", "s3"] = "local"
+    database_backend: Literal["sqlite", "postgresql"] = "sqlite"
+    database_host: str = "prooftag-qr-postgres"
+    database_port: int = 5432
+    database_name: str = "prooftag_qr"
+    database_user: str = "prooftag_qr"
+    database_password: str = ""
+    database_url_override: str = ""
     s3_endpoint: str = "http://minio.data-core.svc.cluster.local:9000"
     s3_bucket: str = "prooftag-qr"
     s3_access_key: str = ""
     s3_secret_key: str = ""
 
     @property
-    def database_path(self) -> Path:
-        return self.data_dir / "runs.sqlite3"
+    def database_url(self) -> str:
+        if self.database_url_override:
+            return self.database_url_override
+        if self.database_backend == "postgresql":
+            return URL.create(
+                drivername="postgresql+psycopg",
+                username=self.database_user,
+                password=self.database_password,
+                host=self.database_host,
+                port=self.database_port,
+                database=self.database_name,
+            ).render_as_string(hide_password=False)
+        return f"sqlite:///{(self.data_dir / 'runs.sqlite3').resolve().as_posix()}"
 
     @property
     def artifacts_dir(self) -> Path:

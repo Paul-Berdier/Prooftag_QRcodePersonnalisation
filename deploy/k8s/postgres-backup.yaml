@@ -1,0 +1,55 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: prooftag-qr-postgres-backup
+  namespace: qr-core
+  labels:
+    app: prooftag-qr-postgres
+    app.kubernetes.io/part-of: prooftag-qr
+spec:
+  schedule: "15 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      template:
+        metadata:
+          labels:
+            app: prooftag-qr-postgres-backup
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: pg-dump
+              image: postgres:16-alpine
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/sh
+                - -ec
+                - >-
+                  timestamp="$(date -u +%Y%m%dT%H%M%SZ)";
+                  pg_dump --host=prooftag-qr-postgres --username=prooftag_qr
+                  --dbname=prooftag_qr --format=custom
+                  --file="/backups/prooftag_qr_${timestamp}.dump";
+                  find /backups -type f -name 'prooftag_qr_*.dump' -mtime +30 -delete
+              env:
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: prooftag-qr-database
+                      key: password
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: "1"
+                  memory: 512Mi
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: prooftag-qr-database-backups

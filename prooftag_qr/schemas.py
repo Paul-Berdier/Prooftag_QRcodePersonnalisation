@@ -9,7 +9,7 @@ class GenerationRequest(BaseModel):
     prompt: str = Field(default="", max_length=2000)
     negative_prompt: str = Field(default="", max_length=2000)
     backend: Literal["qr", "controlnet"] | None = None
-    error_correction: Literal["M", "Q", "H"] = "Q"
+    error_correction: Literal["M", "Q", "H"] = "H"
     seed: int = Field(default=0, ge=0, le=2**32 - 1)
     steps: int = Field(default=12, ge=1, le=100)
     guidance_scale: float = Field(default=7.5, ge=0, le=30)

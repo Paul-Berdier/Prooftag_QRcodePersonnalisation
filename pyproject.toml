@@ -9,14 +9,17 @@ description = "Generation, validation and observability pipeline for aesthetic P
 requires-python = ">=3.11"
 dependencies = [
   "boto3>=1.35,<2",
+  "alembic>=1.14,<2",
   "fastapi>=0.115,<1",
   "numpy>=1.26,<3",
   "opencv-python-headless>=4.10,<5",
   "pillow>=10.4,<12",
   "prometheus-client>=0.21,<1",
+  "psycopg[binary]>=3.2,<4",
   "pydantic-settings>=2.6,<3",
   "pyzbar>=0.1.9,<1",
   "qrcode[pil]>=8,<9",
+  "sqlalchemy>=2.0,<3",
   "uvicorn[standard]>=0.32,<1",
 ]
 

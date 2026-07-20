@@ -13,7 +13,9 @@ La version `0.1.0` fournit :
 - plusieurs tentatives avec conservation automatique du meilleur résultat ;
 - une validation exacte du payload par OpenCV et ZBar ;
 - treize scénarios de dégradation ;
-- une base SQLite persistante contenant runs, tentatives, validations et qualité ;
+- PostgreSQL en production, avec migrations Alembic et sauvegardes quotidiennes ;
+- SQLite pour les tests et le développement local ;
+- une base relationnelle contenant runs, tentatives, validations et qualité ;
 - des exports JSON et CSV ;
 - des métriques Prometheus, alertes et un dashboard Grafana ;
 - une image Docker CUDA et des ressources Kubernetes adaptées au cluster Prooftag.
@@ -40,7 +42,7 @@ curl -X POST http://127.0.0.1:8080/v1/generations \
     "payload": "https://example.prooftag.test/t/abc123",
     "prompt": "engraved botanical illustration, high contrast",
     "backend": "qr",
-    "error_correction": "Q",
+    "error_correction": "H",
     "seed": 42
   }'
 ```

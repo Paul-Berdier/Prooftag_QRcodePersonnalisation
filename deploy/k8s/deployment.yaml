@@ -36,6 +36,12 @@ spec:
           envFrom:
             - configMapRef:
                 name: prooftag-qr-config
+          env:
+            - name: PROOFTAG_QR_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: prooftag-qr-database
+                  key: password
           resources:
             requests:
               cpu: "2"
@@ -68,6 +74,27 @@ spec:
               port: http
             periodSeconds: 30
             timeoutSeconds: 3
+      initContainers:
+        - name: database-migrations
+          image: prooftag-qr:dev
+          imagePullPolicy: IfNotPresent
+          command: [python, -m, prooftag_qr.migrate]
+          envFrom:
+            - configMapRef:
+                name: prooftag-qr-config
+          env:
+            - name: PROOFTAG_QR_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: prooftag-qr-database
+                  key: password
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
       volumes:
         - name: data
           persistentVolumeClaim:
@@ -75,4 +102,3 @@ spec:
         - name: model-cache
           persistentVolumeClaim:
             claimName: prooftag-qr-model-cache
-

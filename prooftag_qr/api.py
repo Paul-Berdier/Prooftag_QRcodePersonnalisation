@@ -32,7 +32,9 @@ from .validation import QRValidator
 settings = get_settings()
 configure_logging(settings.log_level)
 settings.ensure_directories()
-repository = RunRepository(settings.database_path)
+repository = RunRepository(
+    settings.database_url, create_schema=settings.database_backend == "sqlite"
+)
 artifact_store = build_artifact_store(settings)
 service = GenerationService(
     settings=settings,
@@ -96,7 +98,7 @@ def health() -> dict:
 
 @app.get("/readyz", tags=["operations"])
 def ready() -> dict:
-    repository.summary()
+    repository.ping()
     return {"status": "ready", "backend": settings.default_backend}
 
 
@@ -176,8 +178,7 @@ def list_physical_validations(run_id: str) -> list[PhysicalValidationResponse]:
     if not repository.get(run_id):
         raise HTTPException(status_code=404, detail="Generation not found")
     return [
-        PhysicalValidationResponse(**item)
-        for item in repository.list_physical_validations(run_id)
+        PhysicalValidationResponse(**item) for item in repository.list_physical_validations(run_id)
     ]
 
 
