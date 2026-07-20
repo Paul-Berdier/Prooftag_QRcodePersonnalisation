@@ -35,12 +35,14 @@ class TorchModuleLayout:
 @dataclass(frozen=True, slots=True)
 class LatentRefinementConfig:
     iterations: int = 8
-    learning_rate: float = 0.20
+    learning_rate: float = 0.02
     qr_weight: float = 1.0
-    preservation_weight: float = 0.15
+    preservation_weight: float = 1.0
     functional_weight: float = 4.0
     center_fraction: float = 1 / 3
     target_module_error_rate: float = 0.0
+    max_latent_delta: float = 0.10
+    max_mean_absolute_change: float = 0.08
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,8 +53,13 @@ class LatentRefinementResult:
     final_module_error_rate: float
     final_srl: float
     final_preservation_loss: float
+    final_mean_absolute_change: float
+    best_observed_module_error_rate: float
+    best_observed_mean_absolute_change: float
     improved: bool
+    accepted: bool
     converged: bool
+    rejection_reason: str | None
 
 
 def build_module_layout(
@@ -238,6 +245,7 @@ def scanning_robust_loss(
             else images.new_tensor(0.0)
         ),
         "active_modules": active.sum(),
+        "active_mask": active,
         "mean_module_error": module_errors.mean(),
     }
     return loss, diagnostics
@@ -287,9 +295,9 @@ def refine_candidate_latent(
 ) -> LatentRefinementResult:
     """Refine only the VAE latent while keeping every model parameter frozen.
 
-    The best intermediate latent is retained. If no iteration improves the central-module
-    error rate, the original image is returned unchanged; this prevents an experimental
-    optimizer from silently degrading a production candidate.
+    Only spatial regions covering incorrect modules may move. The latent is also kept inside
+    a trust region around its VAE encoding, and an improved candidate is returned only when
+    its mean absolute pixel change remains below the configured quality gate.
     """
     import torch
 
@@ -301,6 +309,10 @@ def refine_candidate_latent(
         raise ValueError("qr_weight must be positive")
     if config.preservation_weight < 0:
         raise ValueError("preservation_weight cannot be negative")
+    if config.max_latent_delta <= 0:
+        raise ValueError("max_latent_delta must be positive")
+    if not 0 < config.max_mean_absolute_change <= 1:
+        raise ValueError("max_mean_absolute_change must be between 0 (exclusive) and 1")
 
     vae = pipeline.vae
     vae.requires_grad_(False)
@@ -327,12 +339,16 @@ def refine_candidate_latent(
         encoded = vae.encode(reference * 2 - 1).latent_dist.mode()
         scaling_factor = vae.config.scaling_factor
         latent = encoded * scaling_factor
+        initial_latent = latent.detach().clone()
 
     initial_error = float(initial_diagnostics["module_error_rate"].float().item())
-    best_error = initial_error
-    best_image = reference.detach()
-    best_srl = 0.0
-    best_preservation = 0.0
+    selected_error = initial_error
+    selected_image = reference.detach()
+    selected_srl = 0.0
+    selected_preservation = 0.0
+    selected_mean_absolute_change = 0.0
+    best_observed_error = initial_error
+    best_observed_mean_absolute_change = 0.0
     completed_iterations = 0
 
     with torch.enable_grad():
@@ -350,29 +366,75 @@ def refine_candidate_latent(
             preservation = multiscale_preservation_loss(decoded, reference)
             objective = config.qr_weight * srl + config.preservation_weight * preservation
             error_rate = float(diagnostics["module_error_rate"].float().item())
-            if error_rate < best_error:
-                best_error = error_rate
-                best_image = decoded.detach()
-                best_srl = float(srl.detach().float().item())
-                best_preservation = float(preservation.detach().float().item())
+            mean_absolute_change = float(
+                (decoded.detach().float() - reference.detach().float()).abs().mean().item()
+            )
+            if error_rate < best_observed_error:
+                best_observed_error = error_rate
+                best_observed_mean_absolute_change = mean_absolute_change
+            if (
+                mean_absolute_change <= config.max_mean_absolute_change
+                and error_rate < selected_error
+            ):
+                selected_error = error_rate
+                selected_image = decoded.detach()
+                selected_srl = float(srl.detach().float().item())
+                selected_preservation = float(preservation.detach().float().item())
+                selected_mean_absolute_change = mean_absolute_change
             if error_rate <= config.target_module_error_rate:
                 break
             if iteration == config.iterations:
                 break
 
             gradient = torch.autograd.grad(objective, latent, only_inputs=True)[0]
-            normalized_gradient = gradient / gradient.abs().mean().clamp_min(1e-6)
-            latent = latent - config.learning_rate * normalized_gradient
+            active_pixels = diagnostics["active_mask"][:, layout.module_ids]
+            active_pixels = active_pixels.reshape(
+                decoded.shape[0], 1, decoded.shape[-2], decoded.shape[-1]
+            ).to(dtype=gradient.dtype)
+            latent_mask = torch.nn.functional.interpolate(
+                active_pixels,
+                size=gradient.shape[-2:],
+                mode="area",
+            )
+            latent_mask = torch.nn.functional.max_pool2d(
+                latent_mask,
+                kernel_size=3,
+                stride=1,
+                padding=1,
+            )
+            latent_mask = latent_mask.gt(0).to(dtype=gradient.dtype).expand_as(gradient)
+            masked_gradient = gradient * latent_mask
+            active_values = masked_gradient[latent_mask.bool()]
+            if active_values.numel() == 0:
+                break
+            gradient_rms = active_values.square().mean().sqrt().clamp_min(1e-6)
+            proposal = latent - config.learning_rate * masked_gradient / gradient_rms
+            latent_delta = (proposal - initial_latent).clamp(
+                -config.max_latent_delta,
+                config.max_latent_delta,
+            )
+            latent = initial_latent + latent_delta
             completed_iterations += 1
 
-    improved = best_error < initial_error
+    improved = best_observed_error < initial_error
+    accepted = selected_error < initial_error
+    rejection_reason = None
+    if improved and not accepted:
+        rejection_reason = "mean_absolute_change_limit"
+    elif not improved:
+        rejection_reason = "no_module_improvement"
     return LatentRefinementResult(
-        image=_tensor_to_pil(best_image) if improved else candidate,
+        image=_tensor_to_pil(selected_image) if accepted else candidate,
         iterations=completed_iterations,
         initial_module_error_rate=initial_error,
-        final_module_error_rate=best_error,
-        final_srl=best_srl,
-        final_preservation_loss=best_preservation,
+        final_module_error_rate=selected_error,
+        final_srl=selected_srl,
+        final_preservation_loss=selected_preservation,
+        final_mean_absolute_change=selected_mean_absolute_change,
+        best_observed_module_error_rate=best_observed_error,
+        best_observed_mean_absolute_change=best_observed_mean_absolute_change,
         improved=improved,
-        converged=best_error <= config.target_module_error_rate,
+        accepted=accepted,
+        converged=accepted and selected_error <= config.target_module_error_rate,
+        rejection_reason=rejection_reason,
     )

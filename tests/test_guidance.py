@@ -53,6 +53,8 @@ def test_srl_is_zero_for_reference_and_differentiable_for_inverted_qr():
 
     assert inverted_loss.item() > 0
     assert inverted_diagnostics["module_error_rate"].item() == pytest.approx(1.0)
+    assert inverted_diagnostics["active_mask"].shape == (1, blueprint.matrix.size)
+    assert inverted_diagnostics["active_mask"].all()
     assert inverted.grad is not None
     assert torch.isfinite(inverted.grad).all()
     assert inverted.grad.abs().sum().item() > 0

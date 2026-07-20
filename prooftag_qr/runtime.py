@@ -37,6 +37,12 @@ def runtime_info(settings: Settings | None = None) -> dict:
             "latent_refinement_target_module_error_rate": (
                 settings.latent_refinement_target_module_error_rate
             ),
+            "latent_refinement_max_latent_delta": (
+                settings.latent_refinement_max_latent_delta
+            ),
+            "latent_refinement_max_mean_absolute_change": (
+                settings.latent_refinement_max_mean_absolute_change
+            ),
         }
     try:
         import torch

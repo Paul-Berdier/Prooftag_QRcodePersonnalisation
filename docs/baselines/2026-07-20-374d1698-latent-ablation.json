@@ -1,0 +1,75 @@
+{
+  "schema_version": "1.0",
+  "experiment_id": "E002",
+  "date": "2026-07-20",
+  "benchmark_protocol_version": "2.0",
+  "case_definitions_sha256": "7c15bd3ac05537fbd74c0458bea2a223158c6341d1024b00f8751c70c25e7f4e",
+  "git_commit": "374d1698e04274cc0762f9c07bd36e0880355378",
+  "docker_image_id": "sha256:f5377eb37a8e5745540f86a731ceaa8875b9afc0aca69ed7d0f83add3d23eda1",
+  "archives": {
+    "control": "20260720T142359Z-374d1698.tar.gz",
+    "latent_v1": "20260720T142446Z-374d1698.tar.gz"
+  },
+  "generation": {
+    "backend": "controlnet",
+    "pipeline_mode": "img2img",
+    "steps": 12,
+    "guidance_scale": 12.0,
+    "controlnet_scale": 1.5,
+    "strength": 0.9,
+    "error_correction": "H",
+    "max_attempts": 3
+  },
+  "latent_v1": {
+    "iterations": 8,
+    "learning_rate": 0.2,
+    "qr_weight": 1.0,
+    "preservation_weight": 0.15,
+    "functional_weight": 4.0,
+    "target_module_error_rate": 0.0
+  },
+  "aggregate": {
+    "cases": 6,
+    "control_delivered": 6,
+    "latent_delivered": 6,
+    "control_raw_strict_passes": 0,
+    "latent_strict_passes": 0,
+    "control_mean_total_ms": 5185.461753979325,
+    "latent_mean_total_ms": 7774.545417632908,
+    "total_latency_delta_percent": 49.929664637228,
+    "mean_raw_module_error_rate": 0.1315245,
+    "mean_latent_module_error_rate": 0.052688333333,
+    "mean_relative_module_error_reduction": 0.524247555218,
+    "mean_latent_changed_pixel_ratio": 0.993892033895,
+    "mean_latent_absolute_change": 0.28135351127,
+    "control_peak_vram_mib": 3880,
+    "latent_peak_vram_mib": 6180,
+    "control_max_temperature_c": 54,
+    "latent_max_temperature_c": 62,
+    "control_average_power_w": 38.860625,
+    "latent_average_power_w": 45.551041666667,
+    "raw_images_identical_between_campaigns": true,
+    "final_images_identical_between_campaigns": true
+  },
+  "cases": [
+    {"name": "botanical-short", "raw_module_error": 0.068642, "latent_module_error": 0.063704, "latent_scan_pass_rate": 0.0, "changed_pixel_ratio": 0.993564605713, "mean_absolute_change": 0.296501598483},
+    {"name": "wine-label", "raw_module_error": 0.088889, "latent_module_error": 0.043951, "latent_scan_pass_rate": 0.0, "changed_pixel_ratio": 0.997142791748, "mean_absolute_change": 0.261568650389},
+    {"name": "geometric-packaging", "raw_module_error": 0.142024, "latent_module_error": 0.048313, "latent_scan_pass_rate": 0.230769, "changed_pixel_ratio": 0.993213653564, "mean_absolute_change": 0.30352950252},
+    {"name": "cosmetics-organic", "raw_module_error": 0.083715, "latent_module_error": 0.041649, "latent_scan_pass_rate": 0.0, "changed_pixel_ratio": 0.994457244873, "mean_absolute_change": 0.267926708546},
+    {"name": "industrial-technical", "raw_module_error": 0.137026, "latent_module_error": 0.042899, "latent_scan_pass_rate": 0.0, "changed_pixel_ratio": 0.992610931396, "mean_absolute_change": 0.323885654624},
+    {"name": "dense-payload", "raw_module_error": 0.268851, "latent_module_error": 0.075614, "latent_scan_pass_rate": 0.0, "changed_pixel_ratio": 0.992362976074, "mean_absolute_change": 0.23470895306}
+  ],
+  "partial_success": {
+    "case": "geometric-packaging",
+    "decoder": "zbar",
+    "successful_scenarios": ["original", "jpeg_90", "blur_3", "brightness_high", "contrast_low", "downscale_75"]
+  },
+  "decision": "reject_latent_v1",
+  "reasons": [
+    "zero of six latent images passed all 26 software validations",
+    "five of six latent images passed no validation scenario",
+    "all six images were visually blurred and strongly color shifted",
+    "the latent stage changed more than 99 percent of pixels on average",
+    "latency increased by about 50 percent"
+  ]
+}

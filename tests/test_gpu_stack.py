@@ -33,10 +33,18 @@ def test_gpu_dependencies_are_pinned_to_the_torch_base_image():
     assert settings.regenerate_before_global_repair is True
     assert settings.latent_refinement_enabled is False
     assert settings.latent_refinement_iterations == 8
+    assert settings.latent_refinement_learning_rate == 0.02
+    assert settings.latent_refinement_preservation_weight == 1.0
+    assert settings.latent_refinement_max_latent_delta == 0.10
+    assert settings.latent_refinement_max_mean_absolute_change == 0.08
     assert request.strength == 0.9
     assert "PROOFTAG_QR_CONTROLNET_PIPELINE_MODE: img2img" in manifest
     assert 'PROOFTAG_QR_REGENERATE_BEFORE_GLOBAL_REPAIR: "true"' in manifest
     assert 'PROOFTAG_QR_LATENT_REFINEMENT_ENABLED: "false"' in manifest
+    assert 'PROOFTAG_QR_LATENT_REFINEMENT_MAX_LATENT_DELTA: "0.10"' in manifest
+    assert (
+        'PROOFTAG_QR_LATENT_REFINEMENT_MAX_MEAN_ABSOLUTE_CHANGE: "0.08"' in manifest
+    )
 
 
 def test_targeted_repairs_run_before_global_module_repairs():

@@ -180,13 +180,27 @@ class ControlNetBackend(GenerationBackend):
                         target_module_error_rate=(
                             self.settings.latent_refinement_target_module_error_rate
                         ),
+                        max_latent_delta=(
+                            self.settings.latent_refinement_max_latent_delta
+                        ),
+                        max_mean_absolute_change=(
+                            self.settings.latent_refinement_max_mean_absolute_change
+                        ),
                     ),
                 )
                 duration = time.perf_counter() - started
                 outcome = (
                     "converged"
                     if result.converged
-                    else ("improved" if result.improved else "no_improvement")
+                    else (
+                        "improved"
+                        if result.accepted
+                        else (
+                            "rejected_preservation"
+                            if result.improved
+                            else "no_improvement"
+                        )
+                    )
                 )
                 metrics.LATENT_REFINEMENTS.labels(outcome).inc()
                 metrics.LATENT_REFINEMENT_DURATION.observe(duration)
@@ -197,10 +211,19 @@ class ControlNetBackend(GenerationBackend):
                 metrics.LATENT_REFINEMENT_MODULE_ERROR_RATE.labels("after").set(
                     result.final_module_error_rate
                 )
+                metrics.LATENT_REFINEMENT_MODULE_ERROR_RATE.labels("best_observed").set(
+                    result.best_observed_module_error_rate
+                )
                 metrics.LATENT_REFINEMENT_LOSS.labels("srl").set(result.final_srl)
                 metrics.LATENT_REFINEMENT_LOSS.labels("preservation").set(
                     result.final_preservation_loss
                 )
+                metrics.LATENT_REFINEMENT_LOSS.labels("mean_absolute_change").set(
+                    result.final_mean_absolute_change
+                )
+                metrics.LATENT_REFINEMENT_LOSS.labels(
+                    "best_observed_mean_absolute_change"
+                ).set(result.best_observed_mean_absolute_change)
                 logger.info(
                     "latent_refinement_completed",
                     extra={
@@ -212,11 +235,21 @@ class ControlNetBackend(GenerationBackend):
                         "final_module_error_rate": result.final_module_error_rate,
                         "srl": result.final_srl,
                         "preservation_loss": result.final_preservation_loss,
+                        "mean_absolute_change": result.final_mean_absolute_change,
+                        "best_observed_module_error_rate": (
+                            result.best_observed_module_error_rate
+                        ),
+                        "best_observed_mean_absolute_change": (
+                            result.best_observed_mean_absolute_change
+                        ),
                         "improved": result.improved,
+                        "accepted": result.accepted,
                         "converged": result.converged,
+                        "rejection_reason": result.rejection_reason,
                     },
                 )
-                yield "latent_srl", result.image
+                if result.accepted:
+                    yield "latent_srl", result.image
             except Exception:
                 duration = time.perf_counter() - started
                 metrics.LATENT_REFINEMENTS.labels("error").inc()

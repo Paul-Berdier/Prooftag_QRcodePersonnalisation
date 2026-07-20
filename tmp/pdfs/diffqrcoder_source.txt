@@ -1,0 +1,897 @@
+                                           DiffQRCoder: Diffusion-based Aesthetic QR Code Generation with Scanning
+                                                           Robustness Guided Iterative Refinement
+
+                                              Jia-Wei Liao1,2               Winston Wang1 * Tzu-Sian Wang1∗ Li-Xuan Peng1∗                                  Ju-Hsuan Weng1,2
+                                                                                    Cheng-Fu Chou2      Jun-Cheng Chen1
+                                                           1
+                                                               Research Center for Information Technology Innovation, Academia Sinica,
+                                                                                    2
+arXiv:2409.06355v3 [cs.CV] 15 Feb 2025
+
+
+
+
+                                                                                      National Taiwan University
+
+
+
+
+                                            Original QR Code           Winter wonderland, fresh     Cherry blossom festival,      Majestic waterfall, lush      Abandoned amusement
+                                                                       snowfall, evergreen trees,   pink petals floating in the   rainforest, rainbow in the    park, overgrown rides,
+                                                                       cozy log cabin, smoke        air, traditional lanterns,    mist, exotic birds, vibrant   haunting beauty, sense of
+                                                                       rising from chimney,         peaceful river, people in     flowers, serene pool          nostalgia, sunset lighting.
+                                                                       aurora borealis in night     kimonos, sunny day.           below.
+                                                                       sky.
+                                         Figure 1. Aesthetic QR codes generated from DiffQRCoder. Our method takes a QR code and a text prompt as input to generate
+                                         an aesthetic QR code. We leverage the pre-trained ControlNet and guide the generation process using our proposed Scanning Robust
+                                         Perceptual Guidance (SRPG) to ensure the generated code is both scannable and attractive.
+
+                                                                     Abstract                                        ments, the results demonstrate that our approach not only
+                                                                                                                     outperforms other compared methods in Scanning Suc-
+                                            With the success of Diffusion Models for image genera-                   cess Rate (SSR) with better or comparable CLIP aesthetic
+                                         tion, the technologies also have revolutionized the aesthetic               score (CLIP-aes.) but also significantly improves the SSR
+                                         Quick Response (QR) code generation. Despite signifi-                       of the ControlNet-only approach from 60% to 99%. The
+                                         cant improvements in visual attractiveness for the beautified               subjective evaluation indicates that our approach achieves
+                                         codes, their scannabilities are usually sacrificed and thus                 promising visual attractiveness to users as well. Finally,
+                                         hinder their practical uses in real-world scenarios. To ad-                 even with different scanning angles and the most rigorous
+                                         dress this issue, we propose a novel training-free Diffusion-               error tolerance settings, our approach robustly achieves
+                                         based QR Code generator (DiffQRCoder) to effectively                        over 95% SSR, demonstrating its capability for real-world
+                                         craft both scannable and visually pleasing QR codes. The                    applications. Our project page is available at https:
+                                         proposed approach introduces Scanning-Robust Perceptual                     //jwliao1209.github.io/DiffQRCoder.
+                                         Guidance (SRPG), a new diffusion guidance for Diffusion
+                                         Models to guarantee the generated aesthetic codes to obey
+                                         the ground-truth QR codes while maintaining their attrac-                   1. Introduction
+                                         tiveness during the denoising process. Additionally, we
+                                                                                                                        Quick Response (QR) [8] codes are ubiquitous in daily
+                                         present another post-processing technique, Scanning Ro-
+                                                                                                                     transactions, information sharing, and marketing, driven by
+                                         bust Manifold Projected Gradient Descent (SR-MPGD),
+                                                                                                                     their quick readability and the widespread use of smart-
+                                         to further enhance their scanning robustness through it-
+                                                                                                                     phones. However, the standard black-and-white QR codes
+                                         erative latent space optimization. With extensive experi-
+                                                                                                                     lack visual appeal. Aesthetic QR codes offer a solution by
+                                            * denotes equal contribution.                                            not only capturing user attention but also seamlessly inte-
+                                                                  Code generator (DiffQRCoder), a training-free approach to
+                                                                  balance the scannability and aesthetics of QR codes. We in-
+                                                                  troduce Scanning Robust Loss (SRL), specifically designed
+                                                                  for evaluating the scannability of a beautified QR code with
+                                                                  respect to its reference code. Building on SRL, we develop
+                                                                  Scanning Robust Perceptual Guidance (SRPG), an exten-
+                                                                  sion of the Classifier Guidance concept [2, 6, 46], which
+         QR Code AI Art            QR Diffusion                   ensures generation fidelity to ground-truth QR codes while
+                                                                  preserving aesthetics during the denoising process.
+                                                                      Besides, we develop a post-processing technique called
+                                                                  Scanning Robust Manifold Projected Gradient Descent
+                                                                  (SR-MPGD) further to enhance the scanning robustness
+                                                                  through iterative latent space optimization utilizing a pre-
+                                                                  trained Variational Autoencoder (VAE) [18]. Specifically,
+                                                                  our framework features the following key designs: 1) The
+                                                                  proposed framework is training-free and compatible with
+              QRBTF             DiffQRCode (Ours)                 existing diffusion models. 2) Our approach exploits the er-
+                                                                  ror tolerance capability inherent in standard QR codes for
+Figure 2. Existing methods struggle to balance scannability       more flexible and precise manipulation over QR code im-
+and aesthetics. Although QRBTF [19] generate visually appeal-     age pixels.
+ing QR codes, they lack scanning robustness. Conversely, QR           Finally, extensive experiments demonstrate that our ap-
+Code AI Art [22] and QR Diffusion [16] produce better scanning
+                                                                  proach outperforms other compared models in Scanning
+robust QR codes but are visually less appealing. Our approach
+                                                                  Success Rate (SSR) with better or comparable CLIP aes-
+can generate both attractive and scannable QR codes. Red frames
+indicate unscannable codes, while green frames denote scannable   thetic scores (CLIP-aes.) [33]. Specifically, it achieves 99%
+codes. Zoom in for better viewing details.                        SSR while better preserving CLIP aesthetic scores.
+                                                                      Our main contributions are summarized as follows:
+grating with product designs, enhancing user experiences,
+                                                                   1. We propose a two-stage iterative refinement frame-
+and amplifying marketing effectiveness. By creating visu-
+                                                                      work with a novel Scanning Robust Perceptual Guid-
+ally appealing QR codes, businesses can elevate brand en-
+                                                                      ance (SRPG) tailored for QR code mechanisms to gen-
+gagement and improve advertising impact, making them a
+                                                                      erate scanning-robust and visually appealing aesthetic
+valuable tool for both functionality and design. Recogniz-
+                                                                      QR codes without training.
+ing the commercial value of aesthetic QR codes, numerous
+beautification techniques have been thus developed.                2. We propose Scanning Robust Manifold Projected Gra-
+   For this purpose, some previous works have attempted to            dient Descent (SR-MPGD) for post-processing, en-
+generate aesthetic QR codes via style-transfer-based tech-            abling Scanning Success Rate (SSR) of aesthetic QR
+niques [40] to blend style textures with the QR code pat-             code up to 100% through latent space optimization.
+terns. However, these methods often lack flexibility and can
+reduce scanning robustness.                                        3. Extensive quantitative and qualitative experiments
+   Instead, current prevailing commercial products [25]               demonstrate that our proposed framework significantly
+have adopted generative models to create stylized QR                  enhances the Scanning Success Rate (SSR) of the
+codes, primarily employing Diffusion Models (e.g., Con-               ControlNet-only approach from 60% to nearly 100%,
+trolNet [47]). The mainstream methodology is to adjust the            without compromising aesthetics. User subjective
+Classifier-Free Guidance (CFG) weights [6] in ControlNet              evaluations further confirm the visual appeal of our QR
+to create visually pleasing QR codes. However, selecting              codes.
+CFG weights presents a trade-off between scannability and
+visual quality (Fig. 2). In practical applications, manual        2. Related Works
+post-processing is often used to fix unscannable codes, but
+this process is time-consuming and labor-intensive. There-
+                                                                  2.1. Image Diffusion Models
+fore, it is still an open challenge to generate aesthetic QR          Recently, Diffusion Models [13, 34] have emerged as
+codes with a good balance between visual attractiveness and       powerful generative models, demonstrating superior uncon-
+scanning robustness.                                              ditional image generation capabilities compared to GAN-
+   To address the instability of scanability in previous          based models [6,10]. Dhariwal et al. [6] introduced the con-
+generative-based methods, we propose Diffusion-based QR           cept of Classifier Guidance to control the sampling process
+                           Stage-1                                                             Stage-2
+
+
+                        ×(T − 1)                          Add noise                                   ×(T − 1)
+                                          Unscannable                                                                           Scannable
+
+                                                                             z̃T
+                           !θ                                                                    !θ         Guidance
+
+   zT ∼ N (0, I)                                            Qart                                                                   x0
+                                               x̂
+                                                                                                         LLPIPS      LSR
+                                                                              ỹ
+   QR code   Prompt
+  Embedding Embedding
+
+
+
+                                                                       QR code   Prompt                x̂        x̃0|t     ỹ
+     !θ    ControlNet           Encoder    Decoder                    Embedding Embedding
+
+
+
+
+Figure 3. An overview of our two-stage pipeline with Scanning Robust Perceptual Guidance (SRPG). First, we encode target QR
+code y and prompt p to embeddings for ControlNet input. In Stage-1, we utilize the pre-trained ControlNet to generate an attractive yet
+unscannable QR code. In Stage-2, we convert the QR code from Stage-1 into a latent representation z̃T by adding Gaussian noise and
+transforming the y to ỹ, which has a more similar pattern as x̂, using Qart [5]. Finally, we feed the latent and the transformed code into
+ControlNet, guided by Scanning Robust Perceptual Guidance (SRPG), to create an aesthetic QR code with scannability.
+
+via gradients from pre-trained classifiers, which has since               tral saliency [20], and global gray values [44]. Xu et
+been further developed with more generalized conditional                  al. [44] proposed Stylized aEsthEtic (SEE) QR codes, pi-
+probability terms for more freely control [1, 17, 21, 46, 50].            oneering style-transfer-based techniques for aesthetic QR
+    However, Diffusion Models require substantial computa-                codes but encountered visual artifacts from pixel cluster-
+tional resources, especially for high-resolution images. To               ing. ArtCoder [40] reduced these artifacts by optimizing
+address this issue, Rombach et al. [31] proposed the Latent               style, content, and code losses jointly, although some arti-
+Diffusion Model (LDM), leveraging a pre-trained VAE to                    facts remain. Su et al. [39] further improved aesthetics with
+compress high-resolution images into a lower-dimensional                  the Module-based Deformable Convolutional Mechanism
+latent space. This approach enhances efficiency in the dif-               (MDCM). However, these techniques require reference im-
+fusion process while preserving visual quality. For more                  ages, which leads to a lack of flexibility and variation.
+fine-grained manipulations in downstream tasks, Zhang et
+al. [48], Qin et al. [28], and Zavadski et al. [47] proposed
+adaptation strategies that allow users to fine-tune only the
+extra output layer instead of the entire model.
+    These advancements have significantly impacted fields                 2.2.2         Generative-based Models
+including image editing [4, 6, 11, 12, 23, 24, 26, 45], text-
+to-image synthesis [30–32], and commercial product de-
+velopement, exemplified by DALL-E2 [27] and Midjour-                      With the rise of diffusion-based image manipulation and
+ney [15].                                                                 conditional control techniques, previous works such as QR
+                                                                          Diffusion [16], QR Code AI Art [22] and QRBTF [19]
+2.2. Aesthetic QR Codes                                                   have leveraged generative power of diffusion models to
+                                                                          create aesthetic QR codes, primarily relying on Control-
+2.2.1      Non-generative-based Models
+                                                                          Net [47] for guidance. However, more fine-grained guid-
+Previous works on aesthetic QR codes have focused                         ance that aligns with the inherent mechanisms of QR codes
+on three main techniques: module deformation, module                      remains unexplored. Another non-open-source method
+reshuffling, and style transfers. Module-deformation meth-                Text2QR [42], introduced a three-stage pipeline that first
+ods, such as Halftone QR codes [3], integrate reference                   generates an unscannable QR code using pre-trained Con-
+images by deforming and scaling code modules while                        trolNet, followed by their proposed SELR independent of
+maintaining scanning robustness. Module-reshuffling, in-                  the diffusion sampling process to ensure scannability. How-
+troduced by Qart [5], rearranges code modules using                       ever, the diffusion sampling process of Text2QR can not
+Gaussian-Jordan elimination to align pixel distributions                  guarantee scannability on its own; our approach aims to fill
+with reference images to ensure decoding accuracy. Im-                    this gap by designing a training-free, fine-grained guidance
+age processing techniques have also been developed to en-                 integrating scannability criteria into the diffusion sampling
+hance visual quality, such as region of interest [43], cen-               process.
+                                                                                    Compute
+                 Grayscale
+                                       x̄Mk            Check          ?           each module
+                 conversion                                              c
+                                                                 x̄Mk = yM
+                                                     scannable             k
+
+                               Binarized average
+                              value of submodule                                                                              φ(xMk , yMk )
+
+ Color image x                Grayscale image G(x)                                                                                                                                                                                                                Take mean
+                                                                                                                                                                                                                                               ⊙                                            LSR
+                                       c
+                                      yM k
+
+
+
+                                                     Compute                         Gσ
+                               Center value
+                                of module
+                                                      error
+
+                               Target QR code y
+                                                                                                                                      !
+                                                                                                                       Sampling error E
+                                                                 Error matrix E
+
+
+Figure 4. An illustration of Scanning Robust Loss (SRL). SRL is designed at the module level, tailored to the QR code mechanism.
+The process begins by constructing a pixel-wise error matrix that measures the differences between the pixel values of the target QR code
+and the grayscale image. Subsequently, the error for each module is re-weighted using a Gaussian kernel, and the central submodule is
+extracted to implement an early-stopping mechanism. The mechanism stops refining the module and evaluating its error once the average
+pixel value of the central submodule matches the center pixel value of the target module. Finally, SRL can be calculated as the average
+error across all modules in the code.
+
+
+3. Method                                                                 is re-weighted to account for varying scanning probabili-
+                                                                          ties across the code. Consequently, we extract the central
+   DiffQRCoder is designed to generate a scannable and at-                submodule within each module due to its importance in de-
+tractive QR code from a given text prompt p and a target                  coding. Additionally, an early-stopping is implemented to
+QR code y, which consists of m × m modules, each of size                  prevent over-optimization.
+s × s pixels.
+   Fig. 3 illustrates the overall architecture of DiffQRCoder,
+                                                                          Pixel-wise Error Matrix. Given a normalized image x,
+consisting of two stages. In Stage-1, ControlNet [47] with-
+                                                                          a target QR code y, and a grayscale conversion operator G
+out our proposed guidance is employed to create a visually
+                                                                          (cf., Appendix A). We formulate a pixel-wise error matrix
+pleasing yet unscannable QR code. In Stage-2, we convert
+                                                                          E that calculates the differences in pixel values between y
+the QR code into a latent representation by adding Gaussian
+                                                                          and G(x). E is calculated as follows:
+noise and transform the y to ỹ, which has a more similar
+pattern as x̂, using Qart [5]. We then feed the latent and                             \begin {aligned} \label {eq:sr_error} \mathbf {E}= & \max (1-2\mathcal {G}(\mathbf {x}), 0) \odot \mathbf {y} + \\ & \max (2\mathcal {G}(\mathbf {x})-1, 0) \odot (1-\mathbf {y}), \end {aligned} 
+the transformed code into ControlNet with Scanning Ro-                                                                                                                                                                                                                                      (1)
+bust Perceptual Guidance (SRPG). The guided loss function
+includes perceptual loss and our proposed Scanning Ro-                    where max(·, ·) operator is applied pixel-wisely, and ⊙ de-
+bust Loss (SRL), ensuring that the generated QR codes are                 notes the Hadamard product. The first term in the equation
+both scannable and attractive. Besides, we propose a post-                addresses the white squares of the QR code, while the sec-
+processing technique called Scanning Robust Manifold Per-                 ond term focuses on the black squares.
+ceptual Gradient Descent (SR-MPGD) to boost the scan-
+ning robustness. Detailed descriptions on SRL, the two-                   Error Re-weighting. Not all pixels are equally likely to
+stage pipeline, and SR-MPGD are provided in Sec. 3.1,                     be scanned. According to ART-UP [43], the scanning prob-
+Sec. 3.2, and Sec. 3.3, respectively.                                     abilities of pixels within each module follow a Gaussian
+                                                                          distribution. This implies that pixels closer to the center
+3.1. Scanning Robust Loss                                                 of each module are more important. Consequently, we re-
+   SRL (Fig. 4) is designed to assess the scannability of                 weight the module error Mk as
+a beautified QR code with respect to its target code, and                                   \widetilde {E}_{M_k} = \sum _{(i, j) \in M_k} \mathbf {G}_\sigma (i, j) \cdot \mathbf {E}(i, j),                                                                                                (2)
+aims to provide the guidance signal for image manipula-
+tion at the module level. It begins with an error matrix
+that evaluates the differences between the pixel values of                where (i, j) indicates the coordinate of a pixel in Mk , and
+the target code and the image in grayscale. Next, the matrix              Gσ is a Gaussian kernel function with standard deviation
+σ = ⌊ s−1
+       5 ⌋.                                                                                                                                                                                                                                                                                                                                                               Perceptual Guidance (SRPG). This guidance employs a loss
+                                                                                                                                                                                                                                                                                                                                                                          function that combines Learned Perceptual Image Path Sim-
+Central Submodule Filter. ZXing [38], a popular bar-                                                                                                                                                                                                                                                                                                                      ilarity (LPIPS) [49](cf. Appendix B.1), denote as LLPIPS ,
+code scanning library, notes that only the central pixels of                                                                                                                                                                                                                                                                                                              and LSR , ensuring a balance between aesthetics and scan-
+each module are essential for decoding QR codes. Accord-                                                                                                                                                                                                                                                                                                                  ning robustness.
+ing to Chu et al. [3], each module is divided into 3 × 3 sub-
+modules. They observed that a QR code remains scannable                                                                                                                                                                                                                                                                                                                   3.2.1                          Stage-1
+if the binarized average pixel value in the central submod-
+                                                                                                                                                                                                                                                                                                                                                                          In stage-1, we first encode p as the prompt embedding ep
+ule matches the center pixel value of the target module.This
+                                                                                                                                                                                                                                                                                                                                                                          and y as the QR code embedding ecode . And we sample a
+observation enables the creation of visual variations in the
+                                                                                                                                                                                                                                                                                                                                                                          noise latent zt from a standard normal distribution. Then
+peripheral submodules.
+                                                                                                                                                                                                                                                                                                                                                                          feed into ControlNet to generate an unscannable QR code
+    A central submodule filter F is applied to extract the cen-
+                                                                                                                                                                                                                                                                                                                                                                          x̂, which will be used in stage-2 for perceptual regularizing
+tral submodule:
+                                                                                                                                                                                                                                                                                                                                                                          reference.
+
+                  \label {eq:centralFilter} \mathbf {F} = \frac {1}{\lceil \frac {m}{3} \rceil ^2} \left [ \begin {array}{ccc} \mathbf {O} & \mathbf {O} & \mathbf {O} \\ \mathbf {O} & \mathbf {I}_{\lceil \frac {m}{3} \rceil \times \lceil \frac {m}{3} \rceil } & \mathbf {O} \\ \mathbf {O} & \mathbf {O} & \mathbf {O} \end {array} \right ]_{m \times m}.    (3)   3.2.2                          Stage-2
+                                                                                                                                                                                                                                                                                                                                                                          In stage-2 we adopt the unscannable QR code x̂ generated
+The binarized average pixel value of the center submodule                                                                                                                                                                                                                                                                                                                 in stage-1 as a starting point for enhancing scannability and
+xMk is calculated as:                                                                                                                                                                                                                                                                                                                                                     a regularizing reference for LPIPS to preserve aesthetics.
+                                                                                                                                                                                                                                                                                                                                                                          First, we convert image x̂ into a latent representation z̃t us-
+                                                                                                                                                                                                                                                                                                                                                                          ing the VAE encoder and by adding Gaussian noise. We also
+     \bar {\mathbf {x}}_{M_k} = \mathbb {I}_{[\frac {1}{2}, 1]} \left ( \sum _{(i, j) \in M_k} \mathbf {F}(i, j) \cdot \mathcal {G}(\mathbf {x}_{M_k}(i, j)) \right ),                                                                                                                                                                                              (4)   transform the target QR code y to be a more similar pattern
+                                                                                                                                                                                                                                                                                                                                                                          as x̂ for better conditioning. Both z̃t and ỹ are then fed into
+where IA is an indicator function of set A.                                                                                                                                                                                                                                                                                                                               ControlNet. The predicted clean latent at each timestep t
+   To determine whether xMk is correctly matched, we de-                                                                                                                                                                                                                                                                                                                  can be calculated as
+fine the function ϕ as:
+                                                                                                                                                                                                                                                                                                                                                                                           \Tilde {\mathbf {z}}_{0|t}=\frac {1}{\sqrt {\bar {\alpha }_t}}\left (\Tilde {\mathbf {z}}_t - \sqrt {1-\bar {\alpha }_t}\epsilon _\theta (\Tilde {\mathbf {z}}_t, t, \mathbf {e}_p, \mathbf {e}_\text {code})\right ),                                  (7)
+
+                                       \label {eq:phi} \phi (\mathbf {x}_{M_k}, \mathbf {y}_{M_k})= \begin {cases} 0, & \bar {\mathbf {x}}_{M_k} = \mathbf {y}_{M_k}^c, \\ 1, & \bar {\mathbf {x}}_{M_k} \neq \mathbf {y}_{M_k}^c, \end {cases},                                                                                                                    (5)   where ϵθ denotes the noise predictor of ControlNet.
+                                                                                                                                                                                                                                                                                                                                                                              Since LSR and LLPIPS operate in the pixel space, we use
+where yMc
+          k
+            represents the center pixel value of the target                                                                                                                                                                                                                                                                                                               the pre-trained image decoder of ControlNet, Dθ (·), to map
+module.                                                                                                                                                                                                                                                                                                                                                                   z̃0|t into the pixel space: x̃0|t = Dθ z̃0|t . As a result, the
+                                                                                                                                                                                                                                                                                                                                                                          guidance function FSRP can be formulated as:
+Early-stopping Mechanism. We employ an early-                                                                                                                                                                                                                                                                                                                                \label {eq:F_SRP} F_\text {SRP}(\Tilde {\mathbf {z}}_t, \Tilde {\mathbf {y}}, \hat {\mathbf {x}}) =\lambda _1 \mathcal {L}_\text {SR}(\Tilde {\mathbf {x}}_{0|t}, \Tilde {\mathbf {y}}) + \lambda _2 \mathcal {L}_\text {LPIPS}(\Tilde {\mathbf {x}}_{0|t}, \hat {\mathbf {x}}),  (8)
+stopping mechanism at the module level to prevent over-
+optimization. This mechanism stops refining a module once                                                                                                                                                                                                                                                                                                                 where λ1 and λ2 denote the guidance scales.
+it can be correctly decoded, i.e. ϕ(xMk , yMk ) = 0. ϕ acts                                                                                                                                                                                                                                                                                                                  Song et al. [36, 37] established a connection between the
+as a switch that determines whether to update xMk , hence                                                                                                                                                                                                                                                                                                                 score function and the estimated noise function, demon-
+its gradient will not be used to update xMk . Therefore, we                                                                                                                                                                                                                                                                                                               strating that
+use the stop gradient operator sg[·] to detach this term from                                                                                                                                                                                                                                                                                                                                         \epsilon _\theta (\mathbf {z}_t, t, \mathbf {e}_p, \mathbf {e}_\text {code}) = -{\sqrt {1-\bar {\alpha }_t}} \nabla _{\mathbf {z}_t} \log p(\mathbf {z}_{t}).                                                                                (9)
+the computation graph. The SRL can be expressed as:
+                                                                                                                                                                                                                                                                                                                                                                                   Inspired by [6], the guided noise prediction becomes:
+
+               \label {eq:srl} \mathcal {L}_\text {SR}(\mathbf {x}, \mathbf {y}) = \frac {1}{N}\sum _{k=1}^{N} \phi (\operatorname {sg}[\mathbf {x}_{M_k}], \mathbf {y}_{M_k}) \cdot \widetilde {E}_{M_k},                                                                                                                                                          (6)         \hat {\epsilon }_t = \epsilon _\theta (\Tilde {\mathbf {z}}_t, t, \mathbf {e}_p, \mathbf {e}_\text {code})+ \sqrt {1-\bar {\alpha }_t}\nabla _{\Tilde {\mathbf {z}}_t} F_\text {SRP}(\Tilde {\mathbf {z}}_t, \mathbf {y}).  (10)
+                                                                                                                                                                                                                                                                                                                                                                          Finally, we employ the DDIM sampling [35]:
+where N is the number of modules.
+                                                                                                                                                                                                                                                                                                                                                                             \Tilde {\mathbf {z}}_{t-1} = \sqrt {\frac {\bar {\alpha }_{t-1}}{\bar {\alpha }_t}} \left (\Tilde {\mathbf {z}}_t-\sqrt {1-\bar {\alpha }_t} \hat {\epsilon }_t \right ) + \sqrt {1-\bar {\alpha }_{t-1}} \hat {\epsilon }_t.  (11)
+3.2. Two-stage Pipeline with Scanning Robust Per-
+      ceptual Guidance
+                                                                                                                                                                                                                                                                                                                                                                          After T iterations, we decode z̃0 into the pixel space by
+   DiffQRCoder utilizes a two-stage pipeline. In Stage-1,                                                                                                                                                                                                                                                                                                                 Dθ (·) to obtain the generated aesthetic QR code x0 . The
+we use ControlNet, without our proposed guidance, to cre-                                                                                                                                                                                                                                                                                                                 complete algorithm for our two-stage generation pipeline
+ate a visually appealing yet unscannable QR code. In Stage-                                                                                                                                                                                                                                                                                                               is provided in Appendix C.2. Detailed derivations of the
+2, we refine the generation process with Scanning Robust                                                                                                                                                                                                                                                                                                                  formulas can be found in Appendix B.2 and B.3.
+3.3. Post-processing with Scanning-Robust Mani-                                                                                                                                                                      pattern 4. Each code includes an 80-pixel padding, and
+      fold Projected Gradient Descent (SR-MPGD)                                                                                                                                                                      each module is in the size of 20 × 20 pixels. Addition-
+                                                                                                                                                                                                                     ally, the text message Thanks reviewer! is encoded
+    SR-MPGD is a post-processing technique proposed to
+                                                                                                                                                                                                                     into our QR codes for most experiments in the paper. We
+enhance scanning robustness further. Our goal is to mini-
+                                                                                                                                                                                                                     also conduct quantitative and qualitative results in different
+mize LSR (x, y) while ensuring the refined QR code x still
+                                                                                                                                                                                                                     messages for QR code generation. We conduct our experi-
+lies on nature image manifold M. The optimization prob-
+                                                                                                                                                                                                                     ments using a single NVIDIA RTX 4090 GPU. Generating
+lem is defined as: minx∈M LSR (x, y). This constrained
+                                                                                                                                                                                                                     aesthetic QR codes takes approximately 14 to 18 seconds in
+optimization problem can be solved via the Projected Gra-
+                                                                                                                                                                                                                     our two-stage pipeline, each with 40 inference steps.
+dient Descent (PGD) algorithm. Inspired by the manifold-
+preserving nature proposed in [11], we use the pre-trained
+VAE encoder E(·) to project the image to its space and then                                                                                                                                                          Evaluation Metrics. We use qr-verify [9] to measure
+iteratively refine the latent by:                                                                                                                                                                                    Scanning Success Rate (SSR) of aesthetic QR codes. For
+                                                                                                                                                                                                                     the quantitative assessment of aesthetics, we use CLIP aes-
+                                  \mathbf {z}^{i}_0 = \mathbf {z}^{i-1}_0 - \gamma \nabla _\mathbf {z} \mathcal {L}_\text {SR}(\mathcal {D}(\mathbf {z}^{i-1}_0), \mathbf {y}).                               (12)   thetic score predictor [33] to reflect image quality and visual
+                                                                                                                                                                                                                     appeal. This score is referred to as the CLIP aesthetic score
+Note that zi0 indicates the clean image latent output from                                                                                                                                                           (CLIP-aes). We also adopt CLIP-score [29] to assess the
+Sec. 3.2 and in each iterative refinement step, the VAE de-                                                                                                                                                          text-image alignment of generated aesthetic QR codes.
+coder D(·) will project the latent back to image manifold.
+However, the VAE is imperfect and may introduce recon-                                                                                                                                                               4.2. Comparison with Other Generative-based
+struction errors in practice. To mitigate this, we incorporate                                                                                                                                                            Methods
+LPIPS loss as a regularization term with a weight λ > 0:
+                                                                                                                                                                                                                       Method                SSR ↑   CLIP-aes. ↑    CLIP-score ↑
+       \label {eq:mpgd_lambda} \mathcal {L}(\mathbf {x}, \mathbf {y}, \mathbf {x}_0) = \mathcal {L}_\text {SR}(\mathbf {x}, \mathbf {y}) + \lambda \mathcal {L}_\text {LPIPS}(\mathbf {x}, \mathbf {x}_0).    (13)     QR Code AI Art [14]   90%        5.7003         0.2341
+                                                                                                                                                                                                                       QR Diffusion [16]     96%        5.5150         0.2780
+The rationale for employing LPIPS loss is to facilitate LSR                                                                                                                                                            QRBTF [19]            56%        7.0156         0.3033
+to refine incorrect modules while preserving coarse-grained                                                                                                                                                            DiffQRCoder (Ours)    99%        6.8233         0.2992
+semantics. Finally, the update rule becomes:
+                                                                                                                                                                                                                     Table 1. Quantitative comparison with other generative-based
+                                                                                                                                                                                                                     methods. DiffQRCoder significantly outperforms other methods
+                            \label {eq:mpgd_gamma} \mathbf {z}^{i}_0 = \mathbf {z}^{i-1}_0 - \gamma \nabla _{\mathbf {z}_{0}} \mathcal {L}(\mathcal {D}(\mathbf {z}^{i-1}_0), \mathbf {y}, \mathbf {x}_0).    (14)   in SSR with only an insignificant decrease in CLIP-aes.
+By incorporating this latent optimization, it can converge to                                                                                                                                                        Quantitative Results. As shown in Tab. 1, we present
+local minima against LSR near initial latent z0 .                                                                                                                                                                    the quantitative results of our method compared to previous
+                                                                                                                                                                                                                     generative-based methods. Our method outperforms QR
+4. Experiments                                                                                                                                                                                                       Diffusion [16] and QR Code AI Art [14] in SSR, CLIP aes-
+                                                                                                                                                                                                                     thetic score, and CLIP-score. Compared with QRBTF [19],
+4.1. Experimental Settings
+                                                                                                                                                                                                                     our method significantly enhances the SSR, albeit with a
+Implementation Details. In our experiments, 100 text                                                                                                                                                                 little trade-off with CLIP aesthetic score [33]. Notably, the
+prompts are generated by GPT-4 as the conditions for Stable                                                                                                                                                          text-image alignment measured by CLIP-score shows that
+Diffusion, consistently using easynegative as the neg-                                                                                                                                                               our method is close to QRBTF, indicating our method ad-
+ative prompt. We employ Cetus-Mix Whalefall as                                                                                                                                                                       heres to prompts without distortion.
+the checkpoint for Stable Diffusion [31] and QR code Mon-                                                                                                                                                                Furthermore, we test the robustness of our QR codes un-
+ster v2 [25] as the checkpoint for ControlNet [48], with the                                                                                                                                                         der various scenarios, including different simulated scan-
+guidance scale set to 1.35 for the latter. We compare                                                                                                                                                                ning angles, error correction level configurations, and scan-
+with QR code AI Art [22], QR Diffusion [16], and QRBTF                                                                                                                                                               ners from multiple devices and open-source software. As
+[19]. The reason we don’t compare with non-generative-                                                                                                                                                               presented in Tab. 2, our approach achieves a 97% SSR even
+based methods is that they rely on reference aesthetic im-                                                                                                                                                           at a 45◦ tilt (Implementation details are provided in Ap-
+ages as input, here we only have prompts describing the aes-                                                                                                                                                         pendix D.1); As presented in Tab. 3 for different error cor-
+thetic scenes. And other previous works are unavailable for                                                                                                                                                          rection levels, our approach still achieves a 96% SSR un-
+fair comparison due to non-open-source. Compared mod-                                                                                                                                                                der the most rigorous setting (7% tolerance), we also pro-
+els are accessed through their web API using their recom-                                                                                                                                                            vide qualitative results in Appendix; As presented in Tab. 4,
+mended settings. Detailed parameter settings are provided                                                                                                                                                            for scanning with different scanners, results show that our
+in Appendix D.                                                                                                                                                                                                       method can still achieving over 88% SSR even in the worst
+   In our QR code setups, we use Version 3 QR codes con-                                                                                                                                                             case. Additionally, we generate QR codes with various en-
+figured with a medium (M) error correction level and mask                                                                                                                                                            coded messages and assess their SSR, the results are pro-
+                 Prompt                    QR Code AI Art           QR Diffusion            QRBTF         DiffQRCode (Ours)
+
+       Winter wonderland, fresh
+       snowfall, evergreen trees,
+       cozy log cabin, smoke rising
+       from chimney, aurora
+       borealis in night sky.
+
+                                                                   (a) Encoded message: Thanks reviews!
+
+       Old European town
+       square, cobblestone streets,
+       café terraces, flowering
+       balconies, gothic cathedral,
+       bustling morning.
+
+                                                                (b) Encoded message: I think, therefore I am!
+
+
+       Forest clearing at night,
+       fireflies, full moon, ancient
+       oak tree, soft grass,
+       mystical ambiance.
+
+
+                                                              (c) Encoded message: https://www.google.com.tw/
+
+       Mediterranean seaside town,
+       white-washed buildings,
+       blue-domed churches,
+       fishing boats, vibrant market,
+       sunny day.
+
+                                                              (d) Encoded message: https://www.wikipedia.org/
+Figure 5. Qualitative comparison with other generative-based methods. DiffQRCoder can generate attractive and scannable QR codes
+with different encoded messages and prompts.
+
+vided in Tab. 5, and their qualitative results are provided in                   Message                                    SSR ↑
+the Appendix.
+                                                                                 I think, therefore I am.                    97%
+                                                                                 You are the apple of my eye.               100%
+          Degree        0◦       15◦         30◦     45◦                         https://www.google.com.tw/                 100%
+          SSR ↑        100%      100%     100%      97%                          https://www.wikipedia.org/                  97%
+
+             Table 2. Scannability of different angles.                     Table 5. Scannability of different QR code encoded messages.
+                                                                           Art and QR Diffusion, our method exhibits a more harmo-
+     Level     L (7%)        M (15%)     Q (25%)      H (30%)              nized pattern blending with concepts in prompts; Compared
+     SSR ↑       96%          100%        100%         100%                to QRBTF, our method trades little aesthetics for scannabil-
+                                                                           ity, achieving more scanning-robust QR code generation
+Table 3. Scannability of different QR code error correction level.
+                                                                           than ControlNet-only methods. Fig. 6 illustrates the reduc-
+         Device      qr-verify       iPhone 13     Pixel 7                 tion of error modules during the iterative refinement process
+                                                                           using our SRPG method. The error modules, highlighted in
+          SSR ↑      100.00%           97%          88%
+                                                                           red, progressively diminish as the denoising step advances.
+        Table 4. Scannability results of different devices.                Once the error level falls below a tolerable threshold, the
+                                                                           QR code becomes scannable. Moreover, we present qual-
+Qualitative Results. We present qualitative comparisons                    itative results for a given QR code in different prompts in
+with previous methods in Fig. 5. Compared to QR Code AI                    Fig. 1. We provide more qualitative results in Appendix.
+       t = 40                                                                                                             t=0
+
+
+
+
+             Timestep 40 ~ 25 (Unscannable)                                Timestep 25 ~ 1 (Scannable)
+                              Figure 6. Visualization of x0|t and its error modules during sampling steps.
+
+Subjective Results. We conducted a user-subjective aes-                 Stage           λ1     λ2    SR-MPGD      CLIP-aes. ↑    SSR ↑
+thetic preference study with 387 participants, the result is            Stage-1-only     -      -                    7.0661      60%
+reported in Tab. 6. Although QRBTF [19] ranked first, our
+                                                                        Two-stage       400     0                    6.7860       86%
+method closely follows with little difference. Considering              Two-stage       500     0                    6.7259       88%
+the limited scannability of QRBTF, which achieved only                  Two-stage       600     0                    6.7183       94%
+56%, our approach is the leading method for effectively bal-            Two-stage      1000     0                    6.5667       93%
+ancing visual attractiveness with scannability. The details of          Two-stage       400     0        !           6.7567       98%
+                                                                        Two-stage       500     0        !           6.7097      100%
+the average rank calculation and questionnaire design are
+                                                                        Two-stage       600     0        !           6.7002       99%
+provided in the Appendix E.
+                                                                        Two-stage      1000     0        !           6.5629       99%
+                                                                        Two-stage       500     2                    6.8600       90%
+      Methods                 Average Rank ↓      SSR ↑                 Two-stage       500     3                    6.8744       89%
+                                                                        Two-stage       500     5                    6.8357       89%
+      QR Code AI Art [14]           2.71           90%                  Two-stage       500    10                    6.8409       88%
+      QR Diffusion [16]             3.18           96%                  Two-stage       500     2        !           6.8204       98%
+      QRBTF [19]                    1.86           56%                  Two-stage       500     3        !           6.8233       99%
+      DiffQRCoder (Ours)            2.25           99%                  Two-stage       500     5        !           6.7779      100%
+                                                                        Two-stage       500    10        !           6.8040       97%
+  Table 6. The weighted aesthetic ranks for different methods.
+                                                                                 Table 7. Ablations for our proposed pipeline.
+4.3. Ablation Studies                                                  5. Conclusion
+Effectiveness of Different SRPG Guidance Scales. In                       In this paper, we introduce a novel training-free
+this study, we investigate the effectiveness of our proposed           Diffusion-based QR Code generator (DiffQRCoder). We
+LSR and regularizing LLPIPS respectively (cf., Eq. 8). In Tab.         propose Scanning-Robust Loss (SRL) to enhance QR code
+7, Stage-1-only indicates only ControlNet is adopted to gen-           scannability and establish its connection with Scanning-
+erate aesthetic QR codes. First, we fix λ2 = 0, and only               Robust Perceptual Guidance (SRPG). Our two-stage gen-
+perform Stage-2 generation with SRPG. In the absence of                eration pipeline with iterative refinement integrates SRPG
+x̂, we use ControlNet with original y and text prompts to              to produce aesthetic QR codes. Additionally, we intro-
+generate images. As shown in upper half of Tab. 7, increas-            duce Scanning-Robust Manifold Projected Gradient De-
+ing λ1 significantly improves SSR while slightly decreasing            scent (SR-MPGD) to further ensure scannability. Compared
+CLIP aesthetic score. Second, we fix λ1 = 500 and perform              to existing methods, our approach significantly improves
+a full two-stage generation with SRPG. As shown in lower               SSR without compromising visual appeal and is competent
+half of Tab. 7, increasing λ2 improves CLIP aesthetic score            for real-world applications.
+while preserving SSR.
+                                                                       Acknowledgements
+Effectiveness of SR-MPGD. SR-MPGD is a post-                              This research is supported by National Science and Tech-
+processing technique designed to enhance scanning robust-              nology Council, Taiwan (R.O.C), under the grant num-
+ness further. In our experiments, we set step size γ = 1000            ber of NSTC-112-2634-F-002-006, NSTC-112-2222-E-
+(cf., Eq. 14), and LPIPS λ = 0.01(cf., Eq. 13). As reported            001-001-MY2, NSTC-113-2634-F-001-002-MBK, NSTC-
+in Tab. 7, it substantially improves SSR with only a negligi-          113-2221-E-002-201 and Academia Sinica under the grant
+ble decrease in CLIP aesthetic score. By implementing SR-              number of AS-CDA-110-M09. We sincerely thank Ernie
+MPGD, we can even achieve 100% SSR in certain cases.                   Chu for his inspiring discussions and valuable feedback.
+References                                                           [23] Chenlin Meng, Yutong He, Yang Song, Jiaming Song, Jia-
+                                                                          jun Wu, Jun-Yan Zhu, and Stefano Ermon. Sdedit: Guided
+ [1] Omri Avrahami, Dani Lischinski, and Ohad Fried. Blended              image synthesis and editing with stochastic differential equa-
+     diffusion for text-driven editing of natural images. In CVPR,        tions. In ICLR, 2021. 3
+     2022. 3                                                         [24] Ron Mokady, Amir Hertz, Kfir Aberman, Yael Pritch, and
+ [2] Arpit Bansal, Hong-Min Chu, Avi Schwarzschild,                       Daniel Cohen-Or. Null-text inversion for editing real images
+     Soumyadip Sengupta, Micah Goldblum, Jonas Geip-                      using guided diffusion models. In CVPR, 2023. 3
+     ing, and Tom Goldstein. Universal guidance for diffusion        [25] monster labs. Qr code monster, 2023. 2, 6
+     models. In ICLR, 2024. 2, 11                                    [26] Alexander Quinn Nichol, Prafulla Dhariwal, Aditya Ramesh,
+ [3] Hung-Kuo Chu, Chia-Sheng Chang, Ruen-Rone Lee, and                   Pranav Shyam, Pamela Mishkin, Bob Mcgrew, Ilya
+     Niloy J. Mitra. Halftone qr codes. ACM Trans. Graph. (Proc.          Sutskever, and Mark Chen. Glide: Towards photorealis-
+     SIGGRAPH Asia), 2013. 3, 5                                           tic image generation and editing with text-guided diffusion
+ [4] Guillaume Couairon, Jakob Verbeek, Holger Schwenk, and               models. In ICML, 2022. 3
+     Matthieu Cord. Diffedit: Diffusion-based semantic image         [27] OpenAI. Dall-e-2, 2023. 3
+     editing with mask guidance. In ICLR, 2022. 3                    [28] Can Qin, Shu Zhang, Ning Yu, Yihao Feng, Xinyi Yang,
+ [5] R. Cox. Qartcodes, 2012. 3, 4, 11                                    Yingbo Zhou, Huan Wang, Juan Carlos Niebles, Caiming
+ [6] Prafulla Dhariwal and Alexander Nichol. Diffusion models             Xiong, Silvio Savarese, Stefano Ermon, Yun Fu, and Ran
+     beat gans on image synthesis. NeurIPS, 2021. 2, 3, 5, 11             Xu. Unicontrol: A unified diffusion model for controllable
+ [7] Bradley Efron. Tweedie’s formula and selection bias. J. Am.          visual generation in the wild. In NeurIPS, 2023. 3
+     Stat. Assoc., 2011. 11                                          [29] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya
+                                                                          Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry,
+ [8] International Organization for Standardization. Information
+                                                                          Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learn-
+     technology automatic identification and data capture tech-
+                                                                          ing transferable visual models from natural language super-
+     niques code symbology QR Code, 2000. 1
+                                                                          vision. In ICML, 2021. 6
+ [9] Anthony Fu. qr-verify. https : / / github . com /
+                                                                     [30] Aditya Ramesh, Prafulla Dhariwal, Alex Nichol, Casey Chu,
+     antfu/qr-verify, 2023. 6
+                                                                          and Mark Chen. Hierarchical text-conditional image gen-
+[10] Ian Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing                eration with clip latents. arXiv preprint arXiv:2204.06125,
+     Xu, David Warde-Farley, Sherjil Ozair, Aaron Courville, and          2022. 3
+     Yoshua Bengio. Generative adversarial networks. Commun.         [31] Robin Rombach, Andreas Blattmann, Dominik Lorenz,
+     ACM, 2020. 2                                                         Patrick Esser, and Björn Ommer. High-resolution image syn-
+[11] Yutong He, Naoki Murata, Chieh-Hsin Lai, Yuhta Takida,               thesis with latent diffusion models. In CVPR, 2022. 3, 6
+     Toshimitsu Uesaka, Dongjun Kim, Wei-Hsiang Liao, Yuki           [32] Nataniel Ruiz, Yuanzhen Li, Varun Jampani, Yael Pritch,
+     Mitsufuji, J Zico Kolter, Ruslan Salakhutdinov, et al. Mani-         Michael Rubinstein, and Kfir Aberman. Dreambooth: Fine
+     fold preserving guided diffusion. In ICLR, 2023. 3, 6                tuning text-to-image diffusion models for subject-driven
+[12] Amir Hertz, Ron Mokady, Jay Tenenbaum, Kfir Aberman,                 generation. In CVPR, 2023. 3
+     Yael Pritch, and Daniel Cohen-or. Prompt-to-prompt image        [33] Christoph Schuhmann, Romain Beaumont, Richard Vencu,
+     editing with cross-attention control. In ICLR, 2022. 3               Cade Gordon, Ross Wightman, Mehdi Cherti, Theo
+[13] Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffu-          Coombes, Aarush Katta, Clayton Mullis, Mitchell Worts-
+     sion probabilistic models. NeurIPS, 2020. 2                          man, et al. Laion-5b: An open large-scale dataset for training
+[14] huggingface projects. Qr-code ai art, 2023. 6, 8, 13                 next generation image-text models. NeurIPS, 2022. 2, 6
+[15] Midjourney Inc. Midjourney, 2023. 3                             [34] Jascha Sohl-Dickstein, Eric Weiss, Niru Maheswaranathan,
+[16] QR Diffusion Inc. Qr diffusion, 2024. 2, 3, 6, 8, 13                 and Surya Ganguli. Deep unsupervised learning using
+                                                                          nonequilibrium thermodynamics. In ICML, pages 2256–
+[17] Gwanghyun Kim, Taesung Kwon, and Jong Chul Ye. Dif-
+                                                                          2265. PMLR, 2015. 2
+     fusionclip: Text-guided diffusion models for robust image
+                                                                     [35] Jiaming Song, Chenlin Meng, and Stefano Ermon. Denois-
+     manipulation. In CVPR, 2022. 3
+                                                                          ing diffusion implicit models. In ICLR, 2020. 5
+[18] Diederik P. Kingma and Max Welling. Auto-encoding vari-
+                                                                     [36] Yang Song and Stefano Ermon. Generative modeling by es-
+     ational bayes. In ICLR, 2014. 2
+                                                                          timating gradients of the data distribution. NeurIPS, 2019.
+[19] IoC Lab. Qrbtf, 2023. 2, 3, 6, 8, 13                                 5, 11
+[20] Shih-Syun Lin, Min-Chun Hu, Chien-Han Lee, and Tong-            [37] Yang Song, Jascha Sohl-Dickstein, Diederik P Kingma, Ab-
+     Yee Lee. Efficient qr code beautification with high quality          hishek Kumar, Stefano Ermon, and Ben Poole. Score-based
+     visual content. IEEE Transactions on Multimedia, 2015. 3             generative modeling through stochastic differential equa-
+[21] Xihui Liu, Dong Huk Park, Samaneh Azadi, Gong Zhang,                 tions. In ICLR, 2020. 5, 11
+     Arman Chopikyan, Yuxiao Hu, Humphrey Shi, Anna                  [38] Open Source. Zxing: zebra crossing, 2013. 5
+     Rohrbach, and Trevor Darrell. More control for free! im-        [39] Hao Su, Jianwei Niu, Xuefeng Liu, Qingfeng Li, Ji Wan,
+     age synthesis with semantic diffusion guidance. In WACV,             and Mingliang Xu. Q-art code: Generating scanning-robust
+     2023. 3                                                              art-style qr codes by deformable convolution. In ACMMM,
+[22] Thibaut Melen and Nicolas. Qr code ai, 2023. 2, 3, 6                 2021. 3
+[40] Hao Su, Jianwei Niu, Xuefeng Liu, Qingfeng Li, Ji Wan,
+     Mingliang Xu, and Tao Ren. Artcoder: an end-to-end
+     method for generating scanning-robust stylized qr codes. In
+     CVPR, 2021. 2, 3
+[41] Patrick von Platen, Suraj Patil, Anton Lozhkov, Pedro
+     Cuenca, Nathan Lambert, Kashif Rasul, Mishig Davaadorj,
+     Dhruv Nair, Sayak Paul, William Berman, Yiyi Xu, Steven
+     Liu, and Thomas Wolf. Diffusers: State-of-the-art diffu-
+     sion models. https://github.com/huggingface/
+     diffusers, 2022. 12
+[42] Guangyang Wu, Xiaohong Liu, Jun Jia, Xuehao Cui, and
+     Guangtao Zhai. Text2qr: Harmonizing aesthetic customiza-
+     tion and scanning robustness for text-guided qr code genera-
+     tion. arXiv preprint arXiv:2403.06452, 2024. 3
+[43] Mingliang Xu, Qingfeng Li, Jianwei Niu, Hao Su, Xiting
+     Liu, Weiwei Xu, Pei Lv, Bing Zhou, and Yi Yang. Art-up:
+     A novel method for generating scanning-robust aesthetic qr
+     codes. ACM TOMM, 2021. 3, 4
+[44] Mingliang Xu, Hao Su, Yafei Li, Xi Li, Jing Liao, Jianwei
+     Niu, Pei Lv, and Bing Zhou. Stylized aesthetic qr code. IEEE
+     Transactions on Multimedia, 2019. 3
+[45] Fei Yang, Shiqi Yang, Muhammad Atif Butt, Joost van de
+     Weijer, et al. Dynamic prompt learning: Addressing cross-
+     attention leakage for text-based image editing. NeurIPS,
+     2024. 3
+[46] Jiwen Yu, Yinhuai Wang, Chen Zhao, Bernard Ghanem, and
+     Jian Zhang. Freedom: Training-free energy-guided condi-
+     tional diffusion model. ICCV, 2023. 2, 3
+[47] Denis Zavadski, Johann-Friedrich Feiden, and Carsten
+     Rother. Controlnet-xs: Designing an efficient and effective
+     architecture for controlling text-to-image diffusion models.
+     arXiv preprint arXiv:2312.06573, 2023. 2, 3, 4
+[48] Lvmin Zhang, Anyi Rao, and Maneesh Agrawala. Adding
+     conditional control to text-to-image diffusion models. In
+     ICCV, 2023. 3, 6
+[49] Richard Zhang, Phillip Isola, Alexei A Efros, Eli Shechtman,
+     and Oliver Wang. The unreasonable effectiveness of deep
+     features as a perceptual metric. In CVPR, 2018. 5, 11
+[50] Min Zhao, Fan Bao, Chongxuan Li, and Jun Zhu. Egsde:
+     Unpaired image-to-image translation via energy-guided
+     stochastic differential equations. NeurIPS, 2022. 3
+                                                                                                                                                                                                             Appendix                                                                                                                                                                                                                                                                                                                                                                                                                     Following [2], we define F as the guidance function,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       thus the final updated estimated score becomes:
+A. Grayscale Conversion
+   We denote G(·) as the grayscale operator, which is de-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              \hat {\epsilon }_t = \epsilon _\theta (\mathbf {z}_t, t, \mathbf {e}_p, \mathbf {e}_\text {code}) + {\sqrt {1-\bar {\alpha }_t}} \nabla _{\mathbf {z}_t} F(\mathbf {z}_t, \mathbf {y}).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 (16)
+fined as:
+               \mathcal {G}(\mathbf {x}) = c_r \mathbf {x}^r + c_g \mathbf {x}^g + c_b \mathbf {x}^b, 
+where xr , xg and xb are R, G and B channels of the image                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              B.3. Derivation of SRPG Gradient
+x, respectively. The coefficients cr = 0.299, cg = 0.587,
+and cb = 0.114 are chosen according to the YCbCr color                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    In this section, we derive the gradient of the guidance
+space standards for grayscale conversion.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              function. Given the expression
+B. Scanning Robust Perceptual Guidance
+   (SRPG)
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                \Tilde {\mathbf {x}}_{0|t} = \mathcal {D}_{\theta } \left (\frac {1}{\sqrt {\bar {\alpha }_t}}\left (\Tilde {\mathbf {z}}_t - \sqrt {1-\bar {\alpha }_t} \epsilon _\theta (\Tilde {\mathbf {z}}_t, t, \mathbf {e}_p, \mathbf {e}_\text {code})\right )\right ), 
+B.1. Learned Perceptual Image Patch Similarity
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            (17)
+     (LPIPS)
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       which involves the VAE decoder calculation, we must apply
+   Traditional image-level similarity metrics, which typi-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             the Chain Rule to derive the gradient.
+cally compare pixels directly, often fail to align with hu-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          Consequently, the gradient of our proposed generalized
+man perception. To address this issue, Zhang et al. [49]
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       classifier guidance function FSRP can be derived as follows:
+employed the pre-trained NN-based feature extractors, such
+as VGG and AlexNet, to transform images into a feature
+space for comparison. Given our focus on assessing “aes-
+thetics,” a high-level and abstract semantic concept, we em-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         &\nabla _{\Tilde {\mathbf {z}}_t} F_\text {SRP}(\Tilde {\mathbf {z}}_t, \Tilde {\mathbf {y}}, \hat {\mathbf {x}}) =\lambda _1 \nabla _{\Tilde {\mathbf {z}}_t} \mathcal {L}_\text {SR}(\Tilde {\mathbf {x}}_{0|t}, \Tilde {\mathbf {y}}) + \lambda _2 \nabla _{\Tilde {\mathbf {z}}_t} \mathcal {L}_\text {LPIPS}(\Tilde {\mathbf {x}}_{0|t}, \hat {\mathbf {x}}) \\ &= \left (\lambda _1 \frac {\partial \mathcal {L}_\text {SR}(\Tilde {\mathbf {x}}_{0|t}, \Tilde {\mathbf {y}})}{\partial \Tilde {\mathbf {x}}_{0|t}} + \lambda _2 \frac {\partial \mathcal {L}_\text {LPIPS}(\Tilde {\mathbf {x}}_{0|t}, \hat {\mathbf {x}})}{\partial \Tilde {\mathbf {x}}_{0|t}} \right ) \cdot \frac {\partial \mathcal {D}_{\theta }(\Tilde {\mathbf {z}}_{0|t})}{\partial \Tilde {\mathbf {z}}_{0|t}} \cdot \\ & \hspace {50pt} \frac {1}{\sqrt {\bar {\alpha }_t}}\left (1 - \sqrt {1-\bar {\alpha }_t} \frac {\partial \epsilon _\theta (\Tilde {\mathbf {z}}_t, t, \mathbf {e}_p, \mathbf {e}_\text {code})}{\partial \Tilde {\mathbf {z}}_t}\right ).
+ploy LPIPS for a more appropriate evaluation. LPIPS loss
+LLPIPS (x, x̂) is defined as:
+
+    \mathcal {L}_\text {LPIPS}(\mathbf {x}, \hat {\mathbf {x}}) = \sum _{l, i, j} \frac {1}{h_l w_l} \| \omega ^l \odot (\psi ^l(\mathbf {x})_{i, j}-\psi ^l(\hat {\mathbf {x}})_{i, j}) \|_2^2, 
+
+
+where ψ l (·) denotes features extracted from the l-th layer,
+(hl , wl ) are the height and width of ψ l (x), and ω l is a                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           where x̂ indicates the reference image generated from
+channel-wise scaling vector.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           Stage-1.
+B.2. Derivation of Conditional Probability Term in                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        Finally, substitute the conditional score term with FSRP ,
+      Generalized Classifier Guidance                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  the estimated score at timestep t becomes:
+   Song et al. [36, 37] established a connection between the
+score function ∇zt log p(zt ) and the noise estimation func-
+tion ϵθ (zt , t, ep , ecode ) via Tweedie’s Formula [7]                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   \hat {\epsilon }_t = \epsilon _\theta ({\Tilde {\mathbf {z}}_t}, t, \mathbf {e}_p, \mathbf {e}_\text {code}) +{\sqrt {1-\bar {\alpha }_t}} \nabla _{{\Tilde {\mathbf {z}}}_t} F_\text {SRP}({\Tilde {\mathbf {z}}}_t, \Tilde {\mathbf {y}}, \hat {\mathbf {x}}).
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   (18)
+                   \epsilon _\theta (\mathbf {z}_t, t, \mathbf {e}_p, \mathbf {e}_\text {code}) = -{\sqrt {1-\bar {\alpha }_t}} \nabla _{\mathbf {z}_t} \log p(\mathbf {z}_{t}).                                                                                                                                                                                                                                                                                                                                                                                                                                                (15)
+
+Inspired by [6], to perform conditional sampling, we substi-
+tute the score function with a conditional probability term                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            C. Details of Our Proposed Two-stage QR
+p(zt |y). Then we rewrite the conditional probability term                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                Code Generation Pipeline
+using Bayes’ Theorem. Specifically, we define the updated
+score estimate ϵ̂t with condition y at timestep t as:                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  C.1. Qart
+             \hat {\epsilon }_t &:=-{\sqrt {1-\bar {\alpha }_t}} \nabla _{\mathbf {z}_t} \log p(\mathbf {z}_t | \mathbf {y}) \\ &= -{\sqrt {1-\bar {\alpha }_t}} \nabla _{\mathbf {z}_t} \log \left ( \frac {p(\mathbf {z}_t)p(\mathbf {y}|\mathbf {z}_{t})}{p(\mathbf {y})}\right ) \\ &= -{\sqrt {1-\bar {\alpha }_t}} \left (\nabla _{\mathbf {z}_t} \log p(\mathbf {z}_t) +\nabla _{\mathbf {z}_t} \log p(\mathbf {y}|\mathbf {z}_{t}) \right ) \\ & = \epsilon _\theta (\mathbf {z}_t, t, \mathbf {e}_p, \mathbf {e}_\text {code}) -{\sqrt {1-\bar {\alpha }_t}} \nabla _{\mathbf {z}_t} \log p(\mathbf {y}|\mathbf {z}_{t}).        Qart [5] transforms traditional QR codes with user-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       specified target patterns by exploiting the padding modules.
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       We leverage its capability to create similar patterns of the
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       reference image x̂ from Stage-1 and the target QR code y,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       forming a better target QR code ỹ for the Stage-2 Control-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       Net conditioning.
+ Method                        Parameters                                         D.1. Implementation Details of Simulating Scan-
+                                                                                        ning Angles
+ QRBTF                         Size: 1152px
+ (Test in June 2024)           Padding ratio: 0.2                                     The QR codes are randomly chosen from our generated
+                               Anchor style: square                               results. These codes are then rotated by 0, 15, 30, and 45
+                               Correct level: 15%                                 degrees using CSS (Fig. 7). A code is considered scannable
+                                                                                  if it can be scanned within 3 seconds.
+ QR Code AI Art                ControlNet conditioning scale: 1.1
+                               Strength: 0.9
+                               Guidance scale: 7.5
+                               Sampler: DPM++ Karras SDE
+                               Seed: 6745177115
+ QR Diffusion                  QR code weight: 1.65
+ QR Code Monster               ControlNet conditioning scale: 1.35
+                                                                                  Figure 7. Visualization in different scanning angles of QR code
+           Table 8. Parameter settings in our experiments.                        using CSS. Zoom in for better scannability.
+
+C.2. Two-stage QR Code Generation Algorithm
+                                                                                  D.2. Implementation Details of Scanning with Dif-
+                                                                                        ferent Scanners
+Algorithm 1 Two-stage QR Code Generation Pipeline with
+Iterative Refinement                                                                 We chose three widely used QR code scanners for
+ 1: Input:     QR code image y, prompt embedding ep , QR                          scannability assessment: the built-in scanners on the iPhone
+    code image embedding ecode , UNet ϵθ (·, ·, ·, ·), VAE encoder                13 and Pixel 7, and the QR Verify software scanner pow-
+    Eθ (·) VAE decoder Dθ (·), sequence {ᾱt }Tt=1 , guided weights               ered by the WeChat decoding algorithm. Our experiment
+    λ1 , λ2 > 0, error rate E(·, ·), and QR code error correction                 involves scanning 30 aesthetic QR codes ten times for each
+    capacity τ .                                                                  aesthetic QR code, then calculating the Scanning Success
+ 2: zT ∼ N (0, I).                                               ▷ Stage-1
+                                                                                  Rate (SSR).
+ 3: for t = T to 1 do
+ 4:    ϵ̂ ← ϵθ (zq t , t, ep , ecode ).                                           D.3. Visualization of QR Code Module Error
+                       ᾱt−1            √          √
+ 5:    zt−1 ←            ᾱt
+                                zt − 1 − ᾱt ϵ̂ + 1 − ᾱt−1 ϵ̂.
+                                                                                     We analyze the robustness of the generated results
+ 6: end for
+ 7: x̂ ← Dθ (z0 ).
+                                                                                  through error analysis. According to SRL, the scanning
+ 8: ỹ ← Qart(x̂, y).                                                             robustness can be maintained as long as the modules after
+             √                 √
+ 9: z̃T ← ᾱT E(x̂) + 1 − ᾱT ϵT , ϵT ∼ N (0, I). ▷ Stage-2                       sampling and binarization yield identical results as the tar-
+10: for t = T to 1 do                                                             get QR code, regardless of pixel color changes within these
+                                  √
+       z̃0|t ← √1ᾱt z̃t − 1 − ᾱt ϵθ (z̃t , t, ep , ecode ) .
+                                                               
+11:                                                                               modules. Fig. 8 indicates that our aesthetic QR codes dis-
+12:    x̃0|t ← Dθ (z̃0|t ).                                                       play irregular colors and shapes in their modules. Despite
+13:    if E(x̃0|t , ỹ) ≥ τ then                                                  undergoing sampling and binarization, the modules remain
+14:        FSRP (z̃t , ỹ, x̂) ← λ1 LSR (x̃√0|t , ỹ) + λ2 LLPIPS (x̃0|t , x̂).   consistent with the original QR code. This suggests that our
+15:        ϵ̂t ← ϵθ (z̃t , t, ep , ecode ) + 1 − ᾱt ∇z̃t FSRP (z̃t , y, x̂).     aesthetic QR codes are robust and readable by a standard
+16:    else                                                                       QR code scanner.
+17:        ϵ̂t ← ϵθ (z̃t , t, ep , ecode ).
+18:    end if q                                                                   D.4. Error Analysis
+                       ᾱt−1            √          √
+19:    z̃t−1 ←           ᾱt
+                                z̃t − 1 − ᾱt ϵ̂ + 1 − ᾱt−1 ϵ̂.
+20: end for
+                                                                                  D.4.1   Analysis of QR Code Error Rate
+21: x0 ← Dθ (z̃0 ).                                                               The QR error rate can be computed using the following for-
+22: return x0 .
+                                                                                  mula:
+
+                                                                                                  \mathcal {E}(\mathbf {x}, \mathbf {y}) = \frac {1}{N}\sum _{k=1}^{N} \phi (\mathbf {x}_{M_k}, \mathbf {y}_{M_k}),    (19)
+D. More Details of Experiments
+   Our implementation primarily utilizes the diffusers                            where y is the target QR code, x is our decoded code, N is
+library [41] from Hugging Face. Tab. 8 outlines the param-                        the number of modules. The function ϕ(xMk , yMk ) mea-
+eters for the various methods used in our experiments; pa-                        sures whether the module Mk can be correctly decoded , as
+rameters not specified here are set to their default values.                      defined in Eq. 5 in main paper.
+                                             Figure 8. Visual illustration of error analysis.
+
+
+
+
+                                                                         Log-scale of QR code error rate
+   As illustrated in Fig. 9a, we set the perceptual guidance                                                                                                           1=0
+                                                                                                                                                                       1=5
+scale, λ2 , to 0 and examine the error rates of a sample across                                                                                                        1=6
+                                                                                                                                                                       1 = 10
+various scanning robust guidance scales, λ1 , during itera-                                                10 1
+tive refinement steps. We observe a marked reduction in
+error within the first five iterations under our proposed guid-
+ance. In contrast, without our guidance, i.e., when λ1 = 0,                                                10 2
+the decrease in error occurs more gradually. Additionally,
+we visualize QR code errors at different timesteps to bet-                                                        0     5     10       15    20     25       30   35       40
+ter understand the progression of error reduction, the error                                                                           Timestep (T-t)
+modules are marked in red, see Fig. 6 in main paper. Ap-                                                                           (a) QR code error rate.
+pendix D.4 further demonstrates how we visualize the error                                                                                                             1=5
+                                                                         Log-scale of score magnitude
+
+
+
+
+                                                                                                           101                                                         1=6
+modules.                                                                                                                                                               1 = 10
+
+                                                                                                           100
+
+D.4.2   Analysis of the Score Magnitude                                                                    10 1
+
+                                                                                                           10 2
+Furthermore, we analyze the change in score magnitude
+∥∇z̃t FSRL (z̃t , y)∥F across different values of λ1 . We ob-                                              10 3
+serve that the score magnitudes decrease over the iterations,                                                     0     5     10       15    20     25       30   35       40
+                                                                                                                                       Timestep (T-t)
+suggesting that the effects of guidance diminish over time.                                                           (b) Score magnitude ∥∇z̃t FSRP (z̃t , y)∥F .
+This trend is illustrated in Fig. 9b.
+                                                                                                                             Figure 9. Error Analysis.
+E. User Study
+                                                                        E.2. Question Details
+   We conduct a user study with 387 participants. Our sub-
+jective test is authorized by the Academia Sinica IRB com-                 Fig. 10 presents a sample of the questions included in our
+mittee under the approval number AS-IRB-HS 24031.                       questionnaire, where participants will view four aesthetic
+                                                                        QR codes. These codes are generated by QR Diffusion [16],
+E.1. Privacy Issues                                                     QR Code AI Art [14], QRBTF [19], and our DiffQRCoder.
+                                                                        Participants are then asked to rank the options A, B, C, and
+    We obtain consent from all participants before they par-
+                                                                        D based on their perceived aesthetic appeal.
+ticipate in the survey. Additionally, we disclose our data
+processing policy, which includes the immediate destruc-                E.3. Average Ranking Calculation
+tion of data after compiling the statistical report, and clarify
+that no sensitive personal data is collected. Furthermore,                 To evaluate the results of the user study, we calculate the
+participants are informed that they can withdraw from the               weighted average rank for each QR code by summing the
+survey at any time.                                                     products of all ranks and their corresponding frequencies,
+                                                                              G. Societal Impacts
+                                                                                 Our proposed approach has potential vulnerabilities, in-
+                                                                              cluding the risk of being used for phishing, spamming, or
+                                                                              disseminating false or inappropriate content. To mitigate
+                                                                              these risks, we can implement preventive measures such as
+                                                                              URL filtering and prompt blacklisting.
+
+
+
+
+                     Figure 10. Sample question.
+
+
+then dividing by the total number of participants. For exam-
+ple, if 20 participants rank a QR code as 1, 10 participants
+rank it as 2, and 100 participants rank it as 3, the average
+rank of that QR code can be calculated as follows:
+             \frac {1 \times 20 + 2 \times 10 + 3 \times 100}{130} = 2.615.
+
+
+F. Limitation and Future Work
+    Our approach showcases the significant capability of cre-
+ating aesthetic QR codes, outperforming existing methods.
+However, it sometimes does not guarantee 100% scannabil-
+ity and requires hyperparameter adjustments to optimize re-
+sults. To address this, we apply post-processing to refine our
+outputs. Our future work aims at improving the approach
+into a hyperparameter-insensitive and end-to-end pipeline
+without post-processing. Additionally, we plan to enhance
+controllability using image-to-image methodologies to en-
+able more personalized aesthetic QR code generation.
+                                                                                                         Prompt
+                                                    Old European town          Mountain hot springs    Majestic waterfall,     Abandoned lighthouse   Forest clearing at
+                                                    square, cobblestone        in winter, snow         lush rainforest,        on a stormy night,     night, fireflies,
+                                     Original       streets, café terraces,    around, steam rising,   rainbow in the mist,    crashing waves,        full moon, ancient
+         Message                                    flowering balconies,       natural pool, serene    exotic birds, vibrant   mysterious allure,     oak tree, soft grass,
+                                     QR Code        gothic cathedral,          and warm retreat.       flowers, serene pool    rugged coastline.      mystical ambiance.
+                                                    bustling morning.                                  below.
+
+
+
+
+    I think, therefore I am.
+
+
+
+
+ You are the apple of my eye.
+
+
+
+
+https://www.google.com.tw/
+
+
+
+
+https://www.wikipedia.org/
+
+
+
+
+                                     Figure 11. Qualitative results for different QR code messages.
+
+
+                                                                                                        Prompt
+                                                   Majestic waterfall,        Old European town Enchanted forest path, Foggy London street, Secret garden behind
+                                                   lush rainforest,           square, cobblestone magical creatures,      vintage lampposts,    an old mansion,
+        Error Correction Original                  rainbow in the mist,       streets, café terraces, ancient trees,      double-decker bus,    hidden pathways,
+                                                   exotic birds, vibrant      flowering balconies, glowing lanterns,      historic buildings,   antique statues,
+             Level       QR Code                   flowers, serene pool       gothic cathedral,       fairy tale setting. cobblestone pavement, undiscovered beauty.
+                                                   below.                     bustling morning.                           early morning.
+
+
+
+                   L
+
+
+
+
+                   M
+
+
+
+
+                   H
+
+
+
+
+                   Q
+
+
+
+                               Figure 12. Qualitative results for different QR code error correction levels.
+Mountain hot springs in               Seaside cliff walk,                Luxury ski resort in the Alps,
+winter, snow around,                  panoramic ocean views,             snowy slopes, cozy chalet,
+steam rising, natural pool,           wildflowers, refreshing            après-ski atmosphere, winter
+serene and warm retreat.              breeze, peaceful hike.             sports.
+
+
+
+
+ Autumn harvest festival,            Japanese garden, cherry               Old Southern plantation,
+ pumpkin patch, hayrides,            blossom trees, koi pond,              blooming magnolias,
+ apple orchard, festive              wooden bridge, stone                  historic mansion, genteel
+ decorations, family fun.            lanterns, pagoda, serene              charm, sunny day.
+                                     water reflections, gentle
+                                     breeze, tranquil.
+
+
+
+
+Medieval village, stone            Parisian café street in spring,       Ancient city ruins at dawn,
+cottages, cobblestone streets,     outdoor tables, blooming              misty mountains in the
+market stalls, villagers in        flowers, Eiffel Tower in the          background, wildflowers,
+traditional attire, castle in      distance, lively atmosphere.          crumbling stone structures,
+the distance, noon, lively                                               first light of day.
+atmosphere.
+                     Figure 13. More qualitative results and corresponding prompts.
+

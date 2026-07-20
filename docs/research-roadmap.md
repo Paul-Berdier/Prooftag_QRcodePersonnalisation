@@ -56,11 +56,19 @@ Le mode est volontairement désactivé par défaut :
 ```bash
 PROOFTAG_QR_LATENT_REFINEMENT_ENABLED=true
 PROOFTAG_QR_LATENT_REFINEMENT_ITERATIONS=8
-PROOFTAG_QR_LATENT_REFINEMENT_LEARNING_RATE=0.20
+PROOFTAG_QR_LATENT_REFINEMENT_LEARNING_RATE=0.02
 PROOFTAG_QR_LATENT_REFINEMENT_QR_WEIGHT=1.0
-PROOFTAG_QR_LATENT_REFINEMENT_PRESERVATION_WEIGHT=0.15
+PROOFTAG_QR_LATENT_REFINEMENT_PRESERVATION_WEIGHT=1.0
 PROOFTAG_QR_LATENT_REFINEMENT_FUNCTIONAL_WEIGHT=4.0
+PROOFTAG_QR_LATENT_REFINEMENT_MAX_LATENT_DELTA=0.10
+PROOFTAG_QR_LATENT_REFINEMENT_MAX_MEAN_ABSOLUTE_CHANGE=0.08
 ```
+
+L'expérience E002 a invalidé la normalisation globale du gradient et les anciens paramètres
+`learning_rate=0.20`, `preservation_weight=0.15`. La v2 masque les mises à jour sur les modules
+incorrects, borne le déplacement du latent autour de son encodage et refuse toute variante
+dont le changement absolu moyen dépasse 0,08. Ces paramètres restent expérimentaux et le mode
+reste désactivé par défaut.
 
 La préservation actuelle est une distance L1 multi-échelle. Elle est légère et reproductible,
 mais ce n'est pas LPIPS. LPIPS ne sera ajouté qu'avec une comparaison montrant un bénéfice
@@ -144,4 +152,3 @@ robuste. Une accélération perdant plus de deux points de lecture est refusée.
 - [ControlNet, ICCV 2023](https://openaccess.thecvf.com/content/ICCV2023/html/Zhang_Adding_Conditional_Control_to_Text-to-Image_Diffusion_Models_ICCV_2023_paper.html)
 - [Exemple officiel d'entraînement ControlNet](https://github.com/huggingface/diffusers/tree/main/examples/controlnet)
 - [Latent Consistency Models](https://arxiv.org/abs/2310.04378)
-
