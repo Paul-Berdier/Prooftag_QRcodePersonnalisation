@@ -1,0 +1,72 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: prooftag-qr
+  namespace: monitoring
+  labels:
+    release: kube-prometheus
+    team: proofchat
+spec:
+  groups:
+    - name: prooftag.qr
+      interval: 30s
+      rules:
+        - alert: ProoftagQRServiceDown
+          expr: absent(up{namespace="qr-core",service="prooftag-qr-svc"}) or max(up{namespace="qr-core",service="prooftag-qr-svc"}) == 0
+          for: 5m
+          labels:
+            severity: critical
+            service: prooftag-qr
+            team: proofchat
+          annotations:
+            summary: Le générateur de QR Prooftag est indisponible
+            description: Prometheus ne collecte plus le service prooftag-qr depuis cinq minutes.
+        - alert: ProoftagQRHighRejectionRate
+          expr: |
+            sum(increase(prooftag_qr_runs_total{status="rejected"}[30m]))
+            / clamp_min(sum(increase(prooftag_qr_runs_total[30m])), 1) > 0.10
+            and sum(increase(prooftag_qr_runs_total[30m])) >= 5
+          for: 10m
+          labels:
+            severity: warning
+            service: prooftag-qr
+            team: proofchat
+          annotations:
+            summary: Taux de rejet QR supérieur à 10 %
+            description: Le pipeline rejette trop de générations après validation.
+        - alert: ProoftagQRValidationFailureRate
+          expr: |
+            sum(increase(prooftag_qr_validations_total{outcome!="exact"}[30m]))
+            / clamp_min(sum(increase(prooftag_qr_validations_total[30m])), 1) > 0.05
+            and sum(increase(prooftag_qr_validations_total[30m])) >= 20
+          for: 10m
+          labels:
+            severity: warning
+            service: prooftag-qr
+            team: proofchat
+          annotations:
+            summary: Échecs fréquents des scénarios de lecture QR
+            description: Plus de 5 % des validations ne retournent pas exactement le payload attendu.
+        - alert: ProoftagQRHighP95Latency
+          expr: |
+            histogram_quantile(0.95,
+              sum by (le) (rate(prooftag_qr_duration_seconds_bucket{stage="total"}[30m]))) > 45
+          for: 15m
+          labels:
+            severity: warning
+            service: prooftag-qr
+            team: proofchat
+          annotations:
+            summary: Latence P95 supérieure à 45 secondes
+            description: La génération et sa validation dépassent l'objectif de latence.
+        - alert: ProoftagQRError
+          expr: increase(prooftag_qr_runs_total{status="error"}[15m]) > 0
+          for: 1m
+          labels:
+            severity: critical
+            service: prooftag-qr
+            team: proofchat
+          annotations:
+            summary: Erreur dans le pipeline QR
+            description: Au moins une génération s'est terminée en erreur au cours des quinze dernières minutes.
+

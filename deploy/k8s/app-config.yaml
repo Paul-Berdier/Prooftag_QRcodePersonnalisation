@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prooftag-qr-config
+  namespace: qr-core
+  labels:
+    app: prooftag-qr
+data:
+  PROOFTAG_QR_ENVIRONMENT: production
+  PROOFTAG_QR_LOG_LEVEL: INFO
+  PROOFTAG_QR_DATA_DIR: /data
+  PROOFTAG_QR_MODEL_CACHE_DIR: /cache
+  PROOFTAG_QR_DEFAULT_BACKEND: controlnet
+  PROOFTAG_QR_BASE_MODEL_ID: stable-diffusion-v1-5/stable-diffusion-v1-5
+  PROOFTAG_QR_CONTROLNET_MODEL_ID: DionTimmer/controlnet_qrcode
+  PROOFTAG_QR_DEVICE: cuda
+  PROOFTAG_QR_VALIDATION_MIN_PASS_RATE: "1.0"
+  PROOFTAG_QR_MAX_ATTEMPTS: "3"
+  PROOFTAG_QR_ARTIFACT_STORE: local
+

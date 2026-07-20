@@ -1,0 +1,21 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: prooftag-qr
+  namespace: monitoring
+  labels:
+    release: kube-prometheus
+    team: proofchat
+spec:
+  namespaceSelector:
+    matchNames: [qr-core]
+  selector:
+    matchLabels:
+      app: prooftag-qr
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      honorLabels: true
+
