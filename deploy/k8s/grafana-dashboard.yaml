@@ -233,6 +233,24 @@ data:
           "targets": [{"expr": "prooftag_qr_repair_variant_image_quality{metric=\"mean_absolute_change\"}", "legendFormat": "{{variant}}", "refId": "A"}],
           "title": "Ecart visuel moyen par rapport a l'image brute",
           "type": "barchart"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "short"}},
+          "gridPos": {"h": 7, "w": 12, "x": 0, "y": 55},
+          "id": 24,
+          "targets": [{"expr": "sum by (reason) (increase(prooftag_qr_regenerations_total[$__range]))", "legendFormat": "{{reason}}", "refId": "A"}],
+          "title": "Regenerations avant fallback global",
+          "type": "barchart"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "short"}},
+          "gridPos": {"h": 7, "w": 12, "x": 12, "y": 55},
+          "id": 25,
+          "targets": [{"expr": "rate(prooftag_qr_attempts_sum[$__range]) / clamp_min(rate(prooftag_qr_attempts_count[$__range]), 0.000001)", "refId": "A"}],
+          "title": "Nombre moyen de tentatives",
+          "type": "stat"
         }
       ],
       "refresh": "30s",

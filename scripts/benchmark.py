@@ -72,11 +72,29 @@ DEBUG_VARIANTS = (
     "tonal_95",
 )
 
+GLOBAL_VARIANTS = frozenset(
+    {
+        "centers_45",
+        "centers_60",
+        "centers_72",
+        "centers_85",
+        "tonal_90",
+        "tonal_95",
+        "centers_90",
+        "centers_95",
+    }
+)
+
 SUMMARY_FIELDS = (
     "case",
     "run_id",
     "status",
     "selected_variant",
+    "selected_attempt",
+    "attempts",
+    "first_attempt_accepted",
+    "first_attempt_scan_pass_rate",
+    "global_fallback_used",
     "qr_version",
     "scan_pass_rate",
     "module_error_rate",
@@ -379,6 +397,8 @@ def render_report(
               <dl>
                 <dt>Résultat</dt><dd>{html.escape(str(row.get("status", "—")))}</dd>
                 <dt>Profil</dt><dd>{html.escape(str(row.get("selected_variant") or "—"))}</dd>
+                <dt>Tentatives</dt><dd>{html.escape(str(row.get("attempts") or "—"))}</dd>
+                <dt>Accepté au premier essai</dt><dd>{"oui" if row.get("first_attempt_accepted") else "non"}</dd>
                 <dt>Lecture</dt><dd>{format_percent(row.get("scan_pass_rate"))}</dd>
                 <dt>Pixels modifiés</dt><dd>{format_percent(row.get("changed_pixel_ratio"))}</dd>
                 <dt>Entropie</dt><dd>{format_number(row.get("entropy_bits"))}</dd>
@@ -417,7 +437,10 @@ def render_report(
   <h1>Benchmark Prooftag QR</h1>
   <p class="muted">Version {html.escape(summary["git_commit"])} · {html.escape(summary["created_at"])} · comparaison : {previous_label}</p>
   <div class="stats">
-    <div class="stat"><span>Acceptation</span><strong>{format_percent(summary["acceptance_rate"])}</strong><small>{summary["accepted_cases"]}/{summary["case_count"]} images</small></div>
+    <div class="stat"><span>Livraison finale</span><strong>{format_percent(summary["acceptance_rate"])}</strong><small>{summary["accepted_cases"]}/{summary["case_count"]} images</small></div>
+    <div class="stat"><span>Premier essai</span><strong>{format_percent(summary.get("first_attempt_acceptance_rate"))}</strong></div>
+    <div class="stat"><span>Tentatives moyennes</span><strong>{format_number(summary.get("mean_attempts"), 2)}</strong></div>
+    <div class="stat"><span>Fallback global</span><strong>{summary.get("global_fallback_cases", 0)}</strong></div>
     <div class="stat"><span>Lecture moyenne</span><strong>{format_percent(summary["mean_scan_pass_rate"])}</strong></div>
     <div class="stat"><span>Pixels modifiés</span><strong>{format_percent(summary["mean_changed_pixel_ratio"])}</strong></div>
     <div class="stat"><span>Temps moyen</span><strong>{format_number((summary["mean_total_ms"] or 0) / 1000, 2)} s</strong></div>
@@ -437,7 +460,12 @@ def benchmark_case(
     api_url: str,
     case: dict[str, Any],
     case_dir: Path,
-) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]]:
+) -> tuple[
+    dict[str, Any],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+]:
     request = {
         **case,
         "backend": "controlnet",
@@ -447,7 +475,7 @@ def benchmark_case(
         "guidance_scale": 12,
         "controlnet_scale": 1.5,
         "strength": 0.9,
-        "max_attempts": 1,
+        "max_attempts": 3,
     }
     request.pop("name")
     response = request_json(
@@ -462,15 +490,6 @@ def benchmark_case(
     )
     run_id = response["id"]
     download_optional(api_url, f"/v1/generations/{run_id}/image", case_dir / "final.png")
-    available_variants = []
-    for variant in DEBUG_VARIANTS:
-        destination = case_dir / f"{variant}.png"
-        if download_optional(
-            api_url,
-            f"/v1/generations/{run_id}/variants/{variant}",
-            destination,
-        ):
-            available_variants.append(variant)
 
     prometheus = request_bytes(api_url, "/metrics").decode("utf-8")
     (case_dir / "metrics.prom").write_text(prometheus, encoding="utf-8")
@@ -486,33 +505,88 @@ def benchmark_case(
         {},
     )
     selected_variant = completed.get("repair_variant")
+    selected_attempt = completed.get("attempt")
     if not selected_variant:
         accepted = next((event for event in evaluated if event.get("status") == "accepted"), None)
         selected_variant = accepted.get("repair_variant") if accepted else None
+        selected_attempt = accepted.get("attempt") if accepted else None
+
+    artifact_names = set(DEBUG_VARIANTS)
+    artifact_names.update(
+        f"attempt_{event['attempt']}_{event['repair_variant']}"
+        for event in evaluated
+        if event.get("attempt") and event.get("repair_variant") in DEBUG_VARIANTS
+    )
+    available_variants = set()
+    for artifact_name in sorted(artifact_names):
+        destination = case_dir / f"{artifact_name}.png"
+        if download_optional(
+            api_url,
+            f"/v1/generations/{run_id}/variants/{artifact_name}",
+            destination,
+        ):
+            available_variants.add(artifact_name)
 
     variant_rows = []
+    variant_failures = []
     for event in evaluated:
         variant = event["repair_variant"]
+        attempt = event.get("attempt")
+        artifact_name = f"attempt_{attempt}_{variant}" if attempt else variant
+        event_metrics = event.get("quality_metrics") or metrics_by_variant.get(variant, {})
+        failures = event.get("validation_failures") or []
         variant_rows.append(
             {
                 "case": case["name"],
                 "run_id": run_id,
+                "attempt": attempt,
+                "seed": event.get("seed"),
                 "variant": variant,
                 "status": event.get("status"),
                 "exact_payload_match": event.get("exact_payload_match"),
-                "artifact_available": variant in available_variants,
-                **metrics_by_variant.get(variant, {}),
+                "artifact_available": artifact_name in available_variants,
+                "failure_count": len(failures),
+                **event_metrics,
                 "scan_pass_rate": event.get("scan_pass_rate"),
                 "module_error_rate": event.get("module_error_rate"),
             }
         )
-    selected_metrics = metrics_by_variant.get(selected_variant, {})
+        variant_failures.extend(
+            {
+                "case": case["name"],
+                "run_id": run_id,
+                "attempt": attempt,
+                "seed": event.get("seed"),
+                "variant": variant,
+                **failure,
+            }
+            for failure in failures
+        )
+    selected_event = next(
+        (
+            event
+            for event in reversed(evaluated)
+            if event.get("repair_variant") == selected_variant
+            and (selected_attempt is None or event.get("attempt") == selected_attempt)
+        ),
+        {},
+    )
+    selected_metrics = selected_event.get("quality_metrics") or metrics_by_variant.get(
+        selected_variant, {}
+    )
     quality = response.get("quality_metrics") or {}
+    attempt_details = response.get("attempt_details") or []
+    first_attempt = attempt_details[0] if attempt_details else {}
     row = {
         "case": case["name"],
         "run_id": run_id,
         "status": response.get("status"),
         "selected_variant": selected_variant,
+        "selected_attempt": selected_attempt,
+        "attempts": response.get("attempts"),
+        "first_attempt_accepted": first_attempt.get("accepted"),
+        "first_attempt_scan_pass_rate": first_attempt.get("scan_pass_rate"),
+        "global_fallback_used": selected_variant in GLOBAL_VARIANTS,
         "qr_version": response.get("qr_version"),
         "scan_pass_rate": response.get("scan_pass_rate"),
         "module_error_rate": response.get("module_error_rate"),
@@ -528,7 +602,7 @@ def benchmark_case(
         {"case": case["name"], "run_id": run_id, **validation}
         for validation in response.get("validations", [])
     ]
-    return row, variant_rows, validations
+    return row, variant_rows, validations, variant_failures
 
 
 def main() -> int:
@@ -595,6 +669,7 @@ def main() -> int:
     results: list[dict[str, Any]] = []
     variants: list[dict[str, Any]] = []
     validations: list[dict[str, Any]] = []
+    variant_failures: list[dict[str, Any]] = []
     gpu_sampler = GPUSampler()
     gpu_sampler.start()
     try:
@@ -603,17 +678,19 @@ def main() -> int:
             case_dir = cases_dir / case["name"]
             case_dir.mkdir()
             try:
-                row, variant_rows, validation_rows = benchmark_case(
+                row, variant_rows, validation_rows, failure_rows = benchmark_case(
                     arguments.api_url, case, case_dir
                 )
             except Exception as exc:
                 row = {"case": case["name"], "status": "error", "error": str(exc)}
                 variant_rows = []
                 validation_rows = []
+                failure_rows = []
                 (case_dir / "benchmark-error.txt").write_text(str(exc), encoding="utf-8")
             results.append(row)
             variants.extend(variant_rows)
             validations.extend(validation_rows)
+            variant_failures.extend(failure_rows)
             print(
                 f"    {row.get('status')} · lecture={format_percent(row.get('scan_pass_rate'))}"
                 f" · profil={row.get('selected_variant') or '—'}",
@@ -624,6 +701,7 @@ def main() -> int:
     write_csv(run_dir / "gpu-samples.csv", gpu_sampler.samples, GPU_FIELDS)
 
     accepted_cases = sum(row.get("status") == "accepted" for row in results)
+    first_attempt_accepted_cases = sum(row.get("first_attempt_accepted") is True for row in results)
     summary = {
         "run_name": run_name,
         "created_at": created_at.isoformat(),
@@ -632,6 +710,10 @@ def main() -> int:
         "case_count": len(results),
         "accepted_cases": accepted_cases,
         "acceptance_rate": accepted_cases / len(results),
+        "first_attempt_accepted_cases": first_attempt_accepted_cases,
+        "first_attempt_acceptance_rate": first_attempt_accepted_cases / len(results),
+        "mean_attempts": average(results, "attempts"),
+        "global_fallback_cases": sum(row.get("global_fallback_used") is True for row in results),
         "mean_scan_pass_rate": average(results, "scan_pass_rate"),
         "mean_changed_pixel_ratio": average(results, "changed_pixel_ratio"),
         "mean_total_ms": average(results, "total_ms"),
@@ -678,10 +760,13 @@ def main() -> int:
     variant_fields = (
         "case",
         "run_id",
+        "attempt",
+        "seed",
         "variant",
         "status",
         "exact_payload_match",
         "artifact_available",
+        "failure_count",
         "scan_pass_rate",
         "module_error_rate",
         "changed_pixel_ratio",
@@ -703,6 +788,21 @@ def main() -> int:
         "latency_ms",
     )
     write_csv(run_dir / "validations.csv", validations, validation_fields)
+    failure_fields = (
+        "case",
+        "run_id",
+        "attempt",
+        "seed",
+        "variant",
+        "decoder",
+        "scenario",
+        "outcome",
+    )
+    write_csv(
+        run_dir / "variant-failures.csv",
+        variant_failures,
+        failure_fields,
+    )
     comparison_fields = (
         "case",
         "scan_pass_rate",

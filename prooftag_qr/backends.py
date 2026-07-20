@@ -15,6 +15,19 @@ from .schemas import GenerationRequest
 
 logger = logging.getLogger(__name__)
 
+GLOBAL_REPAIR_VARIANTS = frozenset(
+    {
+        "centers_45",
+        "centers_60",
+        "centers_72",
+        "centers_85",
+        "tonal_90",
+        "tonal_95",
+        "centers_90",
+        "centers_95",
+    }
+)
+
 
 class GenerationBackend(ABC):
     @abstractmethod

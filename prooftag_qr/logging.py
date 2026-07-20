@@ -16,10 +16,15 @@ class JsonFormatter(logging.Formatter):
             "backend",
             "status",
             "duration_ms",
+            "attempt",
+            "attempts",
+            "seed",
             "repair_variant",
             "scan_pass_rate",
             "module_error_rate",
             "exact_payload_match",
+            "quality_metrics",
+            "validation_failures",
         ):
             if hasattr(record, key):
                 payload[key] = getattr(record, key)

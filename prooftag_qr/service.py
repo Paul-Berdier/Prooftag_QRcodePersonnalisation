@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 
 from . import metrics
 from .artifacts import ArtifactStore
-from .backends import GenerationBackend
+from .backends import GLOBAL_REPAIR_VARIANTS, GenerationBackend
 from .config import Settings
 from .domain import AttemptRecord, RunRecord
 from .qr import generate_qr, module_error_rate
@@ -41,6 +41,7 @@ class GenerationService:
         started = time.perf_counter()
         backend_name = request.backend or self.settings.default_backend
         best_variant = "raw"
+        best_attempt = 1
         run = RunRecord(
             id=str(uuid.uuid4()),
             created_at=datetime.now(UTC),
@@ -63,6 +64,7 @@ class GenerationService:
             best = None
             best_records = []
             best_pass_rate = -1.0
+            best_changed_pixel_ratio = float("inf")
             generation_ms = 0.0
             validation_ms = 0.0
 
@@ -81,11 +83,19 @@ class GenerationService:
                     attempt_best_records = []
                     attempt_best_pass_rate = -1.0
                     attempt_best_module_error_rate = 1.0
+                    attempt_best_changed_pixel_ratio = float("inf")
                     attempt_best_variant = "raw"
                     attempt_validation_ms = 0.0
                     attempt_accepted = False
+                    allow_global_repair = (
+                        backend_name != "controlnet"
+                        or not self.settings.regenerate_before_global_repair
+                        or attempt + 1 == max_attempts
+                    )
 
                     for variant_name, candidate in backend.variants(raw_candidate, blueprint):
+                        if variant_name in GLOBAL_REPAIR_VARIANTS and not allow_global_repair:
+                            continue
                         validation_started = time.perf_counter()
                         records = self.validator.validate(candidate, request.payload)
                         variant_validation_ms = (time.perf_counter() - validation_started) * 1000
@@ -119,6 +129,19 @@ class GenerationService:
                         accepted = (
                             original_ok and pass_rate >= self.settings.validation_min_pass_rate
                         )
+                        validation_failures = [
+                            {
+                                "decoder": item.decoder,
+                                "scenario": item.scenario,
+                                "outcome": (
+                                    "wrong_payload"
+                                    if item.success and not item.exact_payload_match
+                                    else "not_detected"
+                                ),
+                            }
+                            for item in records
+                            if not item.exact_payload_match
+                        ]
                         if backend_name == "controlnet":
                             metrics.REPAIR_VARIANTS.labels(
                                 variant_name, "accepted" if accepted else "rejected"
@@ -145,6 +168,11 @@ class GenerationService:
                                 "tonal_95",
                             }:
                                 self.artifact_store.save_variant(run.id, variant_name, candidate)
+                                self.artifact_store.save_variant(
+                                    run.id,
+                                    f"attempt_{attempt + 1}_{variant_name}",
+                                    candidate,
+                                )
                             logger.info(
                                 "repair_variant_validated",
                                 extra={
@@ -152,26 +180,48 @@ class GenerationService:
                                     "backend": backend_name,
                                     "repair_variant": variant_name,
                                     "status": "accepted" if accepted else "rejected",
+                                    "attempt": attempt + 1,
+                                    "seed": request.seed + attempt,
                                     "scan_pass_rate": round(pass_rate, 6),
                                     "module_error_rate": round(variant_module_error_rate, 6),
                                     "exact_payload_match": original_ok,
+                                    "quality_metrics": variant_quality,
+                                    "validation_failures": validation_failures,
                                 },
                             )
-                        if accepted or pass_rate > attempt_best_pass_rate:
+                        variant_changed_pixel_ratio = variant_quality["changed_pixel_ratio"]
+                        if (
+                            accepted
+                            or pass_rate > attempt_best_pass_rate
+                            or (
+                                pass_rate == attempt_best_pass_rate
+                                and variant_changed_pixel_ratio < attempt_best_changed_pixel_ratio
+                            )
+                        ):
                             attempt_best = candidate
                             attempt_best_records = records
                             attempt_best_pass_rate = pass_rate
                             attempt_best_module_error_rate = variant_module_error_rate
+                            attempt_best_changed_pixel_ratio = variant_changed_pixel_ratio
                             attempt_best_variant = variant_name
                         if accepted:
                             attempt_accepted = True
                             break
 
-                    if attempt_accepted or attempt_best_pass_rate > best_pass_rate:
+                    if (
+                        attempt_accepted
+                        or attempt_best_pass_rate > best_pass_rate
+                        or (
+                            attempt_best_pass_rate == best_pass_rate
+                            and attempt_best_changed_pixel_ratio < best_changed_pixel_ratio
+                        )
+                    ):
                         best = attempt_best
                         best_records = attempt_best_records
                         best_pass_rate = attempt_best_pass_rate
+                        best_changed_pixel_ratio = attempt_best_changed_pixel_ratio
                         best_variant = attempt_best_variant
+                        best_attempt = attempt + 1
                     run.attempt_details.append(
                         AttemptRecord(
                             attempt=attempt + 1,
@@ -185,6 +235,23 @@ class GenerationService:
                     )
                     if attempt_accepted:
                         break
+                    if (
+                        backend_name == "controlnet"
+                        and not allow_global_repair
+                        and attempt + 1 < max_attempts
+                    ):
+                        metrics.REGENERATIONS.labels("targeted_repair_exhausted").inc()
+                        logger.info(
+                            "generation_retry_scheduled",
+                            extra={
+                                "run_id": run.id,
+                                "backend": backend_name,
+                                "attempt": attempt + 1,
+                                "seed": request.seed + attempt,
+                                "repair_variant": attempt_best_variant,
+                                "scan_pass_rate": round(attempt_best_pass_rate, 6),
+                            },
+                        )
 
             if best is None:
                 raise RuntimeError("The backend did not produce an image")
@@ -229,6 +296,8 @@ class GenerationService:
                     "backend": backend_name,
                     "status": run.status,
                     "duration_ms": round(run.total_ms, 2),
+                    "attempt": best_attempt,
+                    "attempts": run.attempts,
                     "repair_variant": best_variant if backend_name == "controlnet" else None,
                 },
             )

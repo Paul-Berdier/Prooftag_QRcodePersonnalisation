@@ -11,6 +11,11 @@ ATTEMPTS = Histogram(
     "Number of attempts per completed run",
     buckets=(1, 2, 3, 4, 5, 8, 12, 20),
 )
+REGENERATIONS = Counter(
+    "prooftag_qr_regenerations_total",
+    "New diffusion generations scheduled before global QR repair",
+    ["reason"],
+)
 DURATION = Histogram(
     "prooftag_qr_duration_seconds",
     "Pipeline duration by stage",

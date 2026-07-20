@@ -42,6 +42,7 @@ dimensions, iPhone, Pixel et lecteurs industriels.
 | `prooftag_qr_runs_total` | compteur | acceptés, rejetés et erreurs par backend |
 | `prooftag_qr_runs_active` | jauge | charge courante |
 | `prooftag_qr_attempts` | histogramme | coût en nouvelles générations |
+| `prooftag_qr_regenerations_total` | compteur | nouvelles diffusions déclenchées avant le fallback global |
 | `prooftag_qr_duration_seconds` | histogramme | latences génération, validation et totale |
 | `prooftag_qr_validations_total` | compteur | résultat exact, mauvais payload ou non-détecté |
 | `prooftag_qr_validation_duration_seconds` | histogramme | performance de chaque décodeur |
@@ -57,6 +58,10 @@ dimensions, iPhone, Pixel et lecteurs industriels.
 | `prooftag_qr_repair_variant_scan_pass_rate` | jauge | dernier taux de lecture de chaque variante |
 | `prooftag_qr_repair_variant_module_error_rate` | jauge | dernière erreur modules de chaque variante |
 | `prooftag_qr_repair_variant_image_quality` | jauge | qualité visuelle et écart à l'image brute de chaque variante (`changed_pixel_ratio`, `mean_absolute_change`, entropie, écrêtage, contraste, luminosité et netteté) |
+
+Les journaux `repair_variant_validated` contiennent aussi la tentative, la seed, toutes les
+métriques visuelles et la liste exacte des scénarios en échec. Le benchmark les exporte dans
+`variants.csv` et `variant-failures.csv`.
 
 Les métriques DCGM existantes complètent le dashboard avec VRAM, utilisation GPU,
 température et puissance.

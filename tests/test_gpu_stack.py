@@ -1,7 +1,7 @@
 import tomllib
 from pathlib import Path
 
-from prooftag_qr.backends import ControlNetBackend
+from prooftag_qr.backends import GLOBAL_REPAIR_VARIANTS, ControlNetBackend
 from prooftag_qr.config import Settings
 from prooftag_qr.qr import generate_qr
 from prooftag_qr.schemas import GenerationRequest
@@ -30,8 +30,10 @@ def test_gpu_dependencies_are_pinned_to_the_torch_base_image():
     request = GenerationRequest(payload="https://example.prooftag.test/t/img2img")
     manifest = Path("deploy/k8s/app-config.yaml").read_text()
     assert settings.controlnet_pipeline_mode == "img2img"
+    assert settings.regenerate_before_global_repair is True
     assert request.strength == 0.9
     assert "PROOFTAG_QR_CONTROLNET_PIPELINE_MODE: img2img" in manifest
+    assert 'PROOFTAG_QR_REGENERATE_BEFORE_GLOBAL_REPAIR: "true"' in manifest
 
 
 def test_targeted_repairs_run_before_global_module_repairs():
@@ -45,3 +47,7 @@ def test_targeted_repairs_run_before_global_module_repairs():
     assert names.index("uncertain_32") < names.index("centers_45")
     assert names.index("uncertain_48") < names.index("centers_45")
     assert names.index("uncertain_64") < names.index("centers_45")
+    assert GLOBAL_REPAIR_VARIANTS <= set(names)
+    assert all(
+        names.index("uncertain_64") < names.index(variant) for variant in GLOBAL_REPAIR_VARIANTS
+    )
