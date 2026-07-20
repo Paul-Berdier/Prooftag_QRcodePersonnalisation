@@ -10,6 +10,7 @@ from PIL import Image
 
 from . import metrics
 from .config import Settings
+from .guidance import LatentRefinementConfig, refine_candidate_latent
 from .qr import QRBlueprint, repair_qr_modules
 from .schemas import GenerationRequest
 
@@ -161,6 +162,73 @@ class ControlNetBackend(GenerationBackend):
         self, candidate: Image.Image, blueprint: QRBlueprint
     ) -> Iterable[tuple[str, Image.Image]]:
         yield "raw", candidate
+        if self.settings.latent_refinement_enabled:
+            started = time.perf_counter()
+            try:
+                result = refine_candidate_latent(
+                    self._load(),
+                    candidate,
+                    blueprint,
+                    LatentRefinementConfig(
+                        iterations=self.settings.latent_refinement_iterations,
+                        learning_rate=self.settings.latent_refinement_learning_rate,
+                        qr_weight=self.settings.latent_refinement_qr_weight,
+                        preservation_weight=(
+                            self.settings.latent_refinement_preservation_weight
+                        ),
+                        functional_weight=self.settings.latent_refinement_functional_weight,
+                        target_module_error_rate=(
+                            self.settings.latent_refinement_target_module_error_rate
+                        ),
+                    ),
+                )
+                duration = time.perf_counter() - started
+                outcome = (
+                    "converged"
+                    if result.converged
+                    else ("improved" if result.improved else "no_improvement")
+                )
+                metrics.LATENT_REFINEMENTS.labels(outcome).inc()
+                metrics.LATENT_REFINEMENT_DURATION.observe(duration)
+                metrics.LATENT_REFINEMENT_ITERATIONS.observe(result.iterations)
+                metrics.LATENT_REFINEMENT_MODULE_ERROR_RATE.labels("before").set(
+                    result.initial_module_error_rate
+                )
+                metrics.LATENT_REFINEMENT_MODULE_ERROR_RATE.labels("after").set(
+                    result.final_module_error_rate
+                )
+                metrics.LATENT_REFINEMENT_LOSS.labels("srl").set(result.final_srl)
+                metrics.LATENT_REFINEMENT_LOSS.labels("preservation").set(
+                    result.final_preservation_loss
+                )
+                logger.info(
+                    "latent_refinement_completed",
+                    extra={
+                        "backend": "controlnet",
+                        "status": outcome,
+                        "duration_ms": round(duration * 1000, 2),
+                        "iterations": result.iterations,
+                        "initial_module_error_rate": result.initial_module_error_rate,
+                        "final_module_error_rate": result.final_module_error_rate,
+                        "srl": result.final_srl,
+                        "preservation_loss": result.final_preservation_loss,
+                        "improved": result.improved,
+                        "converged": result.converged,
+                    },
+                )
+                yield "latent_srl", result.image
+            except Exception:
+                duration = time.perf_counter() - started
+                metrics.LATENT_REFINEMENTS.labels("error").inc()
+                metrics.LATENT_REFINEMENT_DURATION.observe(duration)
+                logger.exception(
+                    "latent_refinement_failed",
+                    extra={
+                        "backend": "controlnet",
+                        "status": "error",
+                        "duration_ms": round(duration * 1000, 2),
+                    },
+                )
         repair_profiles = (
             # Rounded profiles trade the visible QR grid for small, blended superellipses.
             ("rounded_16", 0.95, True, True, 16.0, 0.05, 0.18, True, True),

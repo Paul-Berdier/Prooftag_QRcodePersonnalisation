@@ -24,10 +24,15 @@ La version `0.1.0` fournit :
 - des métriques Prometheus, alertes et un dashboard Grafana ;
 - une image Docker CUDA et des ressources Kubernetes adaptées au cluster Prooftag.
 
-L'injection latente inspirée de FreeQR n'est pas encore implémentée. La réparation locale
-actuelle conserve teinte et texture, remplace les centres carrés visibles par des superellipses
-à bords progressifs et constitue le premier garde-fou structurel mesurable : chaque variante
-est validée et la première qui atteint le seuil strict est livrée.
+La réparation locale actuelle conserve teinte et texture, remplace les centres carrés visibles
+par des superellipses à bords progressifs et constitue le garde-fou structurel de secours :
+chaque variante est validée et la première qui atteint le seuil strict est livrée.
+
+Un premier raffinement latent SRL inspiré de DiffQRCoder est disponible derrière une option
+expérimentale désactivée par défaut. Il optimise le latent VAE, conserve le meilleur
+intermédiaire et ne remplace pas l'image brute si l'erreur des sous-modules centraux ne baisse
+pas. Voir [`docs/research-roadmap.md`](docs/research-roadmap.md) pour le programme complet et
+[`docs/experiment-log.md`](docs/experiment-log.md) pour les résultats, erreurs et décisions.
 
 ## API
 

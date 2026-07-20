@@ -158,6 +158,7 @@ class GenerationService:
                                 ).set(quality_value)
                             if self.settings.save_debug_artifacts and variant_name in {
                                 "raw",
+                                "latent_srl",
                                 "rounded_16",
                                 "rounded_32",
                                 "rounded_48",

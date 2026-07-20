@@ -107,7 +107,7 @@ def ready() -> dict:
 
 @app.get("/v1/runtime", tags=["operations"])
 def runtime() -> dict:
-    return runtime_info()
+    return runtime_info(settings)
 
 
 @app.get("/metrics", include_in_schema=False)

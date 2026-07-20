@@ -1,0 +1,25 @@
+{
+  "baseline_id": "2026-07-20-83641dff",
+  "source_archive": "20260720T122033Z-83641dff.tar.gz",
+  "git_commit": "83641dff89ef86d7365cb160e21c63fa36250986",
+  "created_at": "2026-07-20T12:20:33.072208+00:00",
+  "case_count": 6,
+  "accepted_cases": 5,
+  "acceptance_rate": 0.8333333333333334,
+  "mean_scan_pass_rate": 0.9935897435897436,
+  "mean_changed_pixel_ratio": 0.5880654652913412,
+  "mean_total_ms": 5042.859157081693,
+  "mean_entropy_bits": 3.9672479909740264,
+  "mean_clipped_pixel_ratio": 0.7014738718668619,
+  "max_gpu_memory_used_mib": 3866.0,
+  "gpu": "NVIDIA RTX 4000 SFF Ada Generation",
+  "gpu_memory_mib": 20475,
+  "torch": "2.4.1+cu121",
+  "diffusers": "0.31.0",
+  "known_anomalies": [
+    "geometric-packaging was rejected at 25/26 validations despite a module error rate of 0",
+    "the mean changed-pixel ratio was 58.81%",
+    "the mean clipped-pixel ratio was 70.15%",
+    "the six-case sample is too small for a production reliability claim"
+  ]
+}

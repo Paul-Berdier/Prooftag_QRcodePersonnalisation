@@ -93,3 +93,28 @@ REPAIR_VARIANT_IMAGE_QUALITY = Gauge(
     "Latest image quality measurement for each repair variant",
     ["variant", "metric"],
 )
+LATENT_REFINEMENTS = Counter(
+    "prooftag_qr_latent_refinements_total",
+    "Latent SRL refinement outcomes",
+    ["outcome"],
+)
+LATENT_REFINEMENT_DURATION = Histogram(
+    "prooftag_qr_latent_refinement_duration_seconds",
+    "Time spent optimizing a candidate in VAE latent space",
+    buckets=(0.1, 0.25, 0.5, 1, 2, 5, 10, 20, 30, 60),
+)
+LATENT_REFINEMENT_ITERATIONS = Histogram(
+    "prooftag_qr_latent_refinement_iterations",
+    "Number of SRL latent optimization iterations",
+    buckets=(1, 2, 3, 4, 6, 8, 12, 16, 24, 40, 100),
+)
+LATENT_REFINEMENT_MODULE_ERROR_RATE = Gauge(
+    "prooftag_qr_latent_refinement_module_error_rate",
+    "Latest central-submodule error before and after latent optimization",
+    ["stage"],
+)
+LATENT_REFINEMENT_LOSS = Gauge(
+    "prooftag_qr_latent_refinement_loss",
+    "Latest SRL and preservation objective components",
+    ["component"],
+)

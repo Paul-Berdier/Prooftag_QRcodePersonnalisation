@@ -22,6 +22,13 @@ class Settings(BaseSettings):
     validation_min_pass_rate: float = Field(default=1.0, ge=0.0, le=1.0)
     max_attempts: int = Field(default=3, ge=1, le=20)
     regenerate_before_global_repair: bool = True
+    latent_refinement_enabled: bool = False
+    latent_refinement_iterations: int = Field(default=8, ge=1, le=100)
+    latent_refinement_learning_rate: float = Field(default=0.20, gt=0.0, le=10.0)
+    latent_refinement_qr_weight: float = Field(default=1.0, gt=0.0, le=100.0)
+    latent_refinement_preservation_weight: float = Field(default=0.15, ge=0.0, le=100.0)
+    latent_refinement_functional_weight: float = Field(default=4.0, ge=1.0, le=100.0)
+    latent_refinement_target_module_error_rate: float = Field(default=0.0, ge=0.0, le=1.0)
     save_debug_artifacts: bool = False
     artifact_store: Literal["local", "s3"] = "local"
     database_backend: Literal["sqlite", "postgresql"] = "sqlite"

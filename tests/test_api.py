@@ -38,3 +38,4 @@ def test_api_generation_reports_and_physical_validation(tmp_path, monkeypatch):
     assert runtime.status_code == 200
     assert "torch" in runtime.json()["packages"]
     assert "cuda_available" in runtime.json()
+    assert runtime.json()["generation_config"]["latent_refinement_enabled"] is False

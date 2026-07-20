@@ -251,6 +251,51 @@ data:
           "targets": [{"expr": "rate(prooftag_qr_attempts_sum[$__range]) / clamp_min(rate(prooftag_qr_attempts_count[$__range]), 0.000001)", "refId": "A"}],
           "title": "Nombre moyen de tentatives",
           "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "short"}},
+          "gridPos": {"h": 7, "w": 8, "x": 0, "y": 62},
+          "id": 26,
+          "targets": [{"expr": "sum by (outcome) (increase(prooftag_qr_latent_refinements_total[$__range]))", "legendFormat": "{{outcome}}", "refId": "A"}],
+          "title": "Résultats du raffinement latent",
+          "type": "barchart"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}},
+          "gridPos": {"h": 7, "w": 8, "x": 8, "y": 62},
+          "id": 27,
+          "targets": [{"expr": "prooftag_qr_latent_refinement_module_error_rate", "legendFormat": "{{stage}}", "refId": "A"}],
+          "title": "Erreur modules avant / après latent",
+          "type": "barchart"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "s"}},
+          "gridPos": {"h": 7, "w": 8, "x": 16, "y": 62},
+          "id": 28,
+          "targets": [{"expr": "histogram_quantile(0.95, sum by (le) (rate(prooftag_qr_latent_refinement_duration_seconds_bucket[15m])))", "refId": "A"}],
+          "title": "Raffinement latent P95",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "short"}},
+          "gridPos": {"h": 7, "w": 12, "x": 0, "y": 69},
+          "id": 29,
+          "targets": [{"expr": "prooftag_qr_latent_refinement_loss", "legendFormat": "{{component}}", "refId": "A"}],
+          "title": "Composantes de la loss latente",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "short"}},
+          "gridPos": {"h": 7, "w": 12, "x": 12, "y": 69},
+          "id": 30,
+          "targets": [{"expr": "rate(prooftag_qr_latent_refinement_iterations_sum[$__range]) / clamp_min(rate(prooftag_qr_latent_refinement_iterations_count[$__range]), 0.000001)", "refId": "A"}],
+          "title": "Itérations latentes moyennes",
+          "type": "stat"
         }
       ],
       "refresh": "30s",

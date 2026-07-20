@@ -69,6 +69,29 @@ spec:
           annotations:
             summary: Erreur dans le pipeline QR
             description: Au moins une génération s'est terminée en erreur au cours des quinze dernières minutes.
+        - alert: ProoftagQRLatentRefinementError
+          expr: increase(prooftag_qr_latent_refinements_total{outcome="error"}[15m]) > 0
+          for: 1m
+          labels:
+            severity: warning
+            service: prooftag-qr
+            team: proofchat
+          annotations:
+            summary: Erreur du raffinement latent QR
+            description: Le mode expérimental SRL a échoué ; les replis de production restent disponibles.
+        - alert: ProoftagQRLatentRefinementIneffective
+          expr: |
+            sum(increase(prooftag_qr_latent_refinements_total{outcome="no_improvement"}[30m]))
+            / clamp_min(sum(increase(prooftag_qr_latent_refinements_total[30m])), 1) > 0.50
+            and sum(increase(prooftag_qr_latent_refinements_total[30m])) >= 10
+          for: 10m
+          labels:
+            severity: warning
+            service: prooftag-qr
+            team: proofchat
+          annotations:
+            summary: Raffinement latent inefficace
+            description: Plus de la moitié des raffinements SRL n'améliorent pas l'erreur des modules.
         - alert: ProoftagQRPostgresUnavailable
           expr: kube_statefulset_status_replicas_ready{namespace="qr-core",statefulset="prooftag-qr-postgres"} < 1
           for: 5m

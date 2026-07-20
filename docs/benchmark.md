@@ -5,6 +5,10 @@ payload et versions QR. Chaque cas autorise jusqu'à trois seeds déterministes.
 restent identiques entre deux versions du code afin que les écarts mesurés proviennent du
 pipeline et non du hasard.
 
+Le protocole 2.0 inscrit dans chaque rapport sa version, le hash SHA-256 des cas et les
+paramètres complets de génération. Une comparaison dont le hash ou la version diffère doit
+être présentée comme une nouvelle campagne, pas comme une régression directe.
+
 ## Depuis le serveur
 
 Après le déploiement d'une nouvelle image :
@@ -33,10 +37,19 @@ Le taux « premier essai » mesure la qualité intrinsèque d'une seed. Le taux 
 finale » mesure la capacité réelle du service après régénération et fallback. Le rapport
 indique séparément le nombre de cas ayant nécessité une correction globale.
 
+Le protocole 2.0 ajoute le taux strict de la variante `raw`, le taux après `raw + latent_srl`,
+le nombre de sauvetages obtenus par le latent et leurs taux moyens. Ces indicateurs ne doivent
+pas être remplacés par le taux final : ils mesurent le progrès réel du modèle avant fallback.
+
 Les variantes `rounded_*` sont essayées en premier : elles corrigent la luminance avec des
 formes arrondies à bords fondus pour réduire l'effet de grille. Les variantes `perceptual_*`
 puis binaires restent disponibles comme replis de robustesse. `selected_variant` et
 `variant-failures.csv` permettent de suivre le palier retenu pour chaque image.
+
+Quand le raffinement expérimental est activé, `latent_srl` est évalué juste après `raw`, avant
+toute réparation de pixels. Ses images, pertes, itérations et erreurs avant/après sont
+conservées. Le mode reste désactivé dans le manifeste de production tant qu'une campagne
+d'ablation n'a pas identifié des paramètres sûrs.
 
 ## Une commande depuis le PC Windows
 

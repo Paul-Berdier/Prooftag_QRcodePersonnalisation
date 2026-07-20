@@ -31,9 +31,12 @@ def test_gpu_dependencies_are_pinned_to_the_torch_base_image():
     manifest = Path("deploy/k8s/app-config.yaml").read_text()
     assert settings.controlnet_pipeline_mode == "img2img"
     assert settings.regenerate_before_global_repair is True
+    assert settings.latent_refinement_enabled is False
+    assert settings.latent_refinement_iterations == 8
     assert request.strength == 0.9
     assert "PROOFTAG_QR_CONTROLNET_PIPELINE_MODE: img2img" in manifest
     assert 'PROOFTAG_QR_REGENERATE_BEFORE_GLOBAL_REPAIR: "true"' in manifest
+    assert 'PROOFTAG_QR_LATENT_REFINEMENT_ENABLED: "false"' in manifest
 
 
 def test_targeted_repairs_run_before_global_module_repairs():

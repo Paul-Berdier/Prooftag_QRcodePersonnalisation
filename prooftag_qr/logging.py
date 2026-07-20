@@ -25,6 +25,13 @@ class JsonFormatter(logging.Formatter):
             "exact_payload_match",
             "quality_metrics",
             "validation_failures",
+            "iterations",
+            "initial_module_error_rate",
+            "final_module_error_rate",
+            "srl",
+            "preservation_loss",
+            "improved",
+            "converged",
         ):
             if hasattr(record, key):
                 payload[key] = getattr(record, key)

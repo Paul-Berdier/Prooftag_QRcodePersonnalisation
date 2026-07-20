@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import html
 import json
 import re
@@ -17,6 +18,8 @@ import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+BENCHMARK_PROTOCOL_VERSION = "2.0"
 
 CASES = (
     {
@@ -60,8 +63,20 @@ CASES = (
     },
 )
 
+GENERATION_PARAMETERS = {
+    "backend": "controlnet",
+    "negative_prompt": "blurry, low quality, text, watermark, unreadable QR",
+    "error_correction": "H",
+    "steps": 12,
+    "guidance_scale": 12,
+    "controlnet_scale": 1.5,
+    "strength": 0.9,
+    "max_attempts": 3,
+}
+
 DEBUG_VARIANTS = (
     "raw",
+    "latent_srl",
     "incorrect_80",
     "incorrect_85",
     "uncertain_16",
@@ -94,6 +109,8 @@ SUMMARY_FIELDS = (
     "attempts",
     "first_attempt_accepted",
     "first_attempt_scan_pass_rate",
+    "raw_scan_pass_rate",
+    "latent_scan_pass_rate",
     "global_fallback_used",
     "qr_version",
     "scan_pass_rate",
@@ -386,12 +403,19 @@ def render_report(
         case = html.escape(row["case"])
         raw_path = f"cases/{case}/raw.png"
         final_path = f"cases/{case}/final.png"
+        latent_figure = (
+            f'<figure><img src="cases/{case}/attempt_1_latent_srl.png" '
+            f'alt="Image raffinée {case}"><figcaption>Latent SRL</figcaption></figure>'
+            if row.get("latent_artifact_available")
+            else ""
+        )
         gallery.append(
             f"""
             <article>
               <h3>{case}</h3>
               <div class="images">
                 <figure><img src="{raw_path}" alt="Image brute {case}"><figcaption>Brute</figcaption></figure>
+                {latent_figure}
                 <figure><img src="{final_path}" alt="Image finale {case}"><figcaption>Finale</figcaption></figure>
               </div>
               <dl>
@@ -439,6 +463,9 @@ def render_report(
   <div class="stats">
     <div class="stat"><span>Livraison finale</span><strong>{format_percent(summary["acceptance_rate"])}</strong><small>{summary["accepted_cases"]}/{summary["case_count"]} images</small></div>
     <div class="stat"><span>Premier essai</span><strong>{format_percent(summary.get("first_attempt_acceptance_rate"))}</strong></div>
+    <div class="stat"><span>Brut strict, premier essai</span><strong>{format_percent(summary.get("raw_acceptance_rate"))}</strong></div>
+    <div class="stat"><span>Brut + latent, premier essai</span><strong>{format_percent(summary.get("post_latent_acceptance_rate"))}</strong></div>
+    <div class="stat"><span>Sauvetages latents</span><strong>{summary.get("latent_rescue_cases", 0)}</strong></div>
     <div class="stat"><span>Tentatives moyennes</span><strong>{format_number(summary.get("mean_attempts"), 2)}</strong></div>
     <div class="stat"><span>Fallback global</span><strong>{summary.get("global_fallback_cases", 0)}</strong></div>
     <div class="stat"><span>Lecture moyenne</span><strong>{format_percent(summary["mean_scan_pass_rate"])}</strong></div>
@@ -468,14 +495,7 @@ def benchmark_case(
 ]:
     request = {
         **case,
-        "backend": "controlnet",
-        "negative_prompt": "blurry, low quality, text, watermark, unreadable QR",
-        "error_correction": "H",
-        "steps": 12,
-        "guidance_scale": 12,
-        "controlnet_scale": 1.5,
-        "strength": 0.9,
-        "max_attempts": 3,
+        **GENERATION_PARAMETERS,
     }
     request.pop("name")
     response = request_json(
@@ -586,6 +606,23 @@ def benchmark_case(
         "attempts": response.get("attempts"),
         "first_attempt_accepted": first_attempt.get("accepted"),
         "first_attempt_scan_pass_rate": first_attempt.get("scan_pass_rate"),
+        "raw_scan_pass_rate": next(
+            (
+                item.get("scan_pass_rate")
+                for item in variant_rows
+                if item.get("attempt") == 1 and item.get("variant") == "raw"
+            ),
+            None,
+        ),
+        "latent_scan_pass_rate": next(
+            (
+                item.get("scan_pass_rate")
+                for item in variant_rows
+                if item.get("attempt") == 1 and item.get("variant") == "latent_srl"
+            ),
+            None,
+        ),
+        "latent_artifact_available": "attempt_1_latent_srl" in available_variants,
         "global_fallback_used": selected_variant in GLOBAL_VARIANTS,
         "qr_version": response.get("qr_version"),
         "scan_pass_rate": response.get("scan_pass_rate"),
@@ -629,6 +666,8 @@ def main() -> int:
     cases_dir.mkdir(parents=True)
 
     environment = {
+        "benchmark_protocol_version": BENCHMARK_PROTOCOL_VERSION,
+        "generation_parameters": GENERATION_PARAMETERS,
         "created_at": created_at.isoformat(),
         "api_url": arguments.api_url,
         "ready": ready,
@@ -702,7 +741,22 @@ def main() -> int:
 
     accepted_cases = sum(row.get("status") == "accepted" for row in results)
     first_attempt_accepted_cases = sum(row.get("first_attempt_accepted") is True for row in results)
+    first_raw = [
+        row for row in variants if row.get("attempt") == 1 and row.get("variant") == "raw"
+    ]
+    first_latent = [
+        row
+        for row in variants
+        if row.get("attempt") == 1 and row.get("variant") == "latent_srl"
+    ]
+    raw_accepted_cases = sum(row.get("status") == "accepted" for row in first_raw)
+    latent_rescue_cases = sum(row.get("status") == "accepted" for row in first_latent)
     summary = {
+        "benchmark_protocol_version": BENCHMARK_PROTOCOL_VERSION,
+        "case_definitions_sha256": hashlib.sha256(
+            json.dumps(CASES, sort_keys=True).encode("utf-8")
+        ).hexdigest(),
+        "generation_parameters": GENERATION_PARAMETERS,
         "run_name": run_name,
         "created_at": created_at.isoformat(),
         "git_commit": commit,
@@ -712,6 +766,19 @@ def main() -> int:
         "acceptance_rate": accepted_cases / len(results),
         "first_attempt_accepted_cases": first_attempt_accepted_cases,
         "first_attempt_acceptance_rate": first_attempt_accepted_cases / len(results),
+        "raw_evaluated_cases": len(first_raw),
+        "raw_accepted_cases": raw_accepted_cases,
+        "raw_acceptance_rate": raw_accepted_cases / len(first_raw) if first_raw else None,
+        "mean_raw_scan_pass_rate": average(first_raw, "scan_pass_rate"),
+        "latent_evaluated_cases": len(first_latent),
+        "latent_rescue_cases": latent_rescue_cases,
+        "latent_acceptance_rate": (
+            latent_rescue_cases / len(first_latent) if first_latent else None
+        ),
+        "mean_latent_scan_pass_rate": average(first_latent, "scan_pass_rate"),
+        "post_latent_acceptance_rate": (
+            (raw_accepted_cases + latent_rescue_cases) / len(results)
+        ),
         "mean_attempts": average(results, "attempts"),
         "global_fallback_cases": sum(row.get("global_fallback_used") is True for row in results),
         "mean_scan_pass_rate": average(results, "scan_pass_rate"),

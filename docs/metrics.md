@@ -58,6 +58,11 @@ dimensions, iPhone, Pixel et lecteurs industriels.
 | `prooftag_qr_repair_variant_scan_pass_rate` | jauge | dernier taux de lecture de chaque variante |
 | `prooftag_qr_repair_variant_module_error_rate` | jauge | dernière erreur modules de chaque variante |
 | `prooftag_qr_repair_variant_image_quality` | jauge | qualité visuelle et écart à l'image brute de chaque variante (`changed_pixel_ratio`, `mean_absolute_change`, entropie, écrêtage, contraste, luminosité et netteté) |
+| `prooftag_qr_latent_refinements_total` | compteur | convergence, amélioration, absence d'amélioration ou erreur du raffinement latent |
+| `prooftag_qr_latent_refinement_duration_seconds` | histogramme | coût du raffinement VAE/SRL |
+| `prooftag_qr_latent_refinement_iterations` | histogramme | nombre d'itérations réellement exécutées |
+| `prooftag_qr_latent_refinement_module_error_rate` | jauge | erreur des sous-modules centraux avant/après |
+| `prooftag_qr_latent_refinement_loss` | jauge | dernières composantes SRL et préservation |
 
 Les journaux `repair_variant_validated` contiennent aussi la tentative, la seed, toutes les
 métriques visuelles et la liste exacte des scénarios en échec. Le benchmark les exporte dans
@@ -66,9 +71,9 @@ métriques visuelles et la liste exacte des scénarios en échec. Le benchmark l
 Les métriques DCGM existantes complètent le dashboard avec VRAM, utilisation GPU,
 température et puissance.
 
-## Indicateurs à ajouter pendant la phase FreeQR
+## Indicateurs restant à ajouter pendant la phase d'entraînement
 
-- perte SRL globale et par type de module ;
+- perte SRL par type de module sur la durée d'une campagne ;
 - proportion exacte de modules modifiés par la réparation (la proportion de pixels est déjà suivie) ;
 - étape d'arrêt anticipé ;
 - CLIPScore prompt-image ;

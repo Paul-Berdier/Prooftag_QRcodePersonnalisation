@@ -35,6 +35,9 @@ def test_report_contains_comparison_and_gallery():
         "mean_scan_pass_rate": 1.0,
         "mean_changed_pixel_ratio": 0.45,
         "mean_total_ms": 7600,
+        "raw_acceptance_rate": 0.5,
+        "post_latent_acceptance_rate": 1.0,
+        "latent_rescue_cases": 1,
         "results": [row],
     }
 
@@ -43,4 +46,5 @@ def test_report_contains_comparison_and_gallery():
     assert "botanical-short" in report
     assert "uncertain_48" in report
     assert "cases/botanical-short/final.png" in report
+    assert "Brut strict" in report
     assert "Première référence" in report
