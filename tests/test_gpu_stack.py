@@ -1,6 +1,8 @@
 import tomllib
 from pathlib import Path
+from types import SimpleNamespace
 
+from prooftag_qr import backends
 from prooftag_qr.backends import GLOBAL_REPAIR_VARIANTS, ControlNetBackend
 from prooftag_qr.config import Settings
 from prooftag_qr.qr import generate_qr
@@ -69,3 +71,33 @@ def test_targeted_repairs_run_before_global_module_repairs():
     assert all(
         names.index("uncertain_64") < names.index(variant) for variant in GLOBAL_REPAIR_VARIANTS
     )
+
+
+def test_accepted_latent_becomes_the_base_for_targeted_repairs(monkeypatch):
+    blueprint = generate_qr("https://example.prooftag.test/t/latent-chain", "H")
+    backend = ControlNetBackend(Settings(latent_refinement_enabled=True))
+    result = SimpleNamespace(
+        image=blueprint.image.copy(),
+        iterations=1,
+        initial_module_error_rate=0.2,
+        final_module_error_rate=0.1,
+        final_srl=0.1,
+        final_preservation_loss=0.01,
+        final_mean_absolute_change=0.01,
+        best_observed_module_error_rate=0.1,
+        best_observed_mean_absolute_change=0.01,
+        improved=True,
+        accepted=True,
+        converged=False,
+        rejection_reason=None,
+    )
+    monkeypatch.setattr(backend, "_load", lambda: object())
+    monkeypatch.setattr(backends, "refine_candidate_latent", lambda *args: result)
+
+    names = [name for name, _ in backend.variants(blueprint.image, blueprint)]
+
+    assert names.index("latent_srl") < names.index("latent_rounded_16")
+    assert names.index("latent_rounded_16") < names.index("rounded_16")
+    assert names.index("latent_perceptual_64") < names.index("rounded_16")
+    assert not any(name.startswith("latent_centers_") for name in names)
+    assert GLOBAL_REPAIR_VARIANTS <= set(names)

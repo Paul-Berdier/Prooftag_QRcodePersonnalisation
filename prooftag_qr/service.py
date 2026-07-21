@@ -156,9 +156,10 @@ class GenerationService:
                                 metrics.REPAIR_VARIANT_IMAGE_QUALITY.labels(
                                     variant_name, quality_name
                                 ).set(quality_value)
-                            if self.settings.save_debug_artifacts and variant_name in {
+                            debug_variant = variant_name.removeprefix("latent_")
+                            if self.settings.save_debug_artifacts and debug_variant in {
                                 "raw",
-                                "latent_srl",
+                                "srl",
                                 "rounded_16",
                                 "rounded_32",
                                 "rounded_48",

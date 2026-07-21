@@ -178,3 +178,86 @@ servir de cibles au dataset Prooftag. Les résultats numériques complets sont v
 Ces valeurs sont des paramètres de départ prudents, pas encore des paramètres validés. La
 prochaine expérience E003 doit reprendre exactement les mêmes six cas, d'abord avec la v2 seule,
 puis élargir à 100 générations uniquement si la porte visuelle est franchie.
+
+## E003 — Ablation contrôlée du raffinement latent SRL v2
+
+- **Date :** 2026-07-20
+- **Commit :** `584bb0cb3a042421da067282c8fabd984919bab4`
+- **Image Docker :** `sha256:8f7d2049a0b4673d0e0c16d8d361ae6a57667645ea89c1c3062377228f32a99e`
+- **Contrôle :** `20260720T145422Z-584bb0cb.tar.gz`, raffinement désactivé
+- **Traitement :** `20260720T145508Z-584bb0cb.tar.gz`, raffinement activé
+- **Hash des six cas :** `7c15bd3ac05537fbd74c0458bea2a223158c6341d1024b00f8751c70c25e7f4e`
+- **GPU :** NVIDIA RTX 4000 SFF Ada Generation, 20 475 MiB
+
+Les campagnes partagent le commit, l'image Docker, les paramètres, les cas et les seeds. Les
+hashs des six images brutes et des six images finales sont identiques. La comparaison mesure donc
+uniquement le coût et l'effet du raffinement v2.
+
+### Configuration testée
+
+`iterations=8`, `learning_rate=0.02`, `qr_weight=1.0`,
+`preservation_weight=1.0`, `functional_weight=4.0`, `max_latent_delta=0.10`,
+`max_mean_absolute_change=0.08`.
+
+### Résultats
+
+| Mesure | Contrôle | SRL v2 | Écart |
+|---|---:|---:|---:|
+| Livraisons acceptées | 6/6 | 6/6 | aucune régression grâce au secours |
+| Images brutes/latentes strictement lisibles | 0/6 | 0/6 | aucun gain de lecture |
+| Scénarios de lecture réussis par le latent | — | 0/156 | aucun sauvetage |
+| Erreur module moyenne | 13,152 % | 12,306 % | -4,631 % relatif |
+| Durée totale moyenne | 5,210 s | 7,689 s | +2,479 s, soit +47,59 % |
+| Durée moyenne du raffinement | — | 1,908 s | huit itérations dans tous les cas |
+| Pic VRAM | 3 896 MiB | 6 228 MiB | +2 332 MiB |
+| Température maximale | 54 °C | 61 °C | +7 °C |
+| Puissance moyenne | 38,06 W | 46,26 W | +8,20 W |
+| Pixels modifiés par le latent | — | 28,259 % | -71,55 points face à la v1 |
+| Changement absolu moyen du latent | — | 0,02786 | -90,10 % face à la v1 |
+| Netteté moyenne | 3 278,26 | 3 239,12 | -1,19 % |
+
+La v2 supprime le défaut visuel catastrophique de E002. Les six images restent cohérentes,
+nettes et exploitables comme illustrations. Le cas `dense-payload` reste le plus affecté : 70,01 %
+des pixels changent, MAE 0,06128 et netteté en baisse de 13,07 %. Il reste sous la porte de 0,08,
+mais doit rester un cas sentinelle dans les prochaines ablations.
+
+### Résultats par cas
+
+| Cas | Erreur brute | Erreur latente | Réduction relative | MAE latente | Lecture |
+|---|---:|---:|---:|---:|---:|
+| botanical-short | 6,864 % | 6,815 % | 0,72 % | 0,02082 | 0/26 |
+| wine-label | 8,889 % | 8,346 % | 6,11 % | 0,01724 | 0/26 |
+| geometric-packaging | 14,202 % | 13,453 % | 5,28 % | 0,01923 | 0/26 |
+| cosmetics-organic | 8,372 % | 8,372 % | 0,00 % | 0,02340 | 0/26 |
+| industrial-technical | 13,703 % | 13,203 % | 3,65 % | 0,02517 | 0/26 |
+| dense-payload | 26,885 % | 23,651 % | 12,03 % | 0,06128 | 0/26 |
+
+### Décision
+
+**Conserver l'architecture et les garde-fous de la v2, mais rejeter ces paramètres comme réglage
+final.** La préservation visuelle est obtenue, mais le signal QR est trop faible pour provoquer un
+seul décodage. Ne pas lancer la campagne de 100 images et ne pas utiliser ces sorties comme cibles
+d'entraînement positives.
+
+### Anomalie de chaîne révélée par l'inspection des images finales
+
+Les six `final.png` sont identiques bit pour bit au contrôle. Ce résultat est d'abord normal parce
+que `latent_srl` échoue seul, mais l'inspection du code révèle une lacune supplémentaire : les
+profils `rounded`, `perceptual`, `incorrect` et `uncertain` étaient ensuite appliqués à l'image
+brute. L'amélioration latente était donc abandonnée au lieu de devenir la base de la réparation
+ciblée. Le latent n'aurait pu changer le final qu'en passant directement les 26 validations.
+
+La chaîne est corrigée après E003 : lorsqu'un latent franchit la porte visuelle, les réparations
+ciblées `latent_*` sont évaluées sur celui-ci en premier. La chaîne complète issue du brut reste
+ensuite disponible comme secours, et les réparations globales restent issues du brut. Cette
+structure permet de mesurer si le latent réduit réellement la quantité de pixels QR visibles sans
+sacrifier la fiabilité de livraison.
+
+La prochaine expérience E004 testera d'abord cette chaîne corrigée avec les paramètres v2 sur les
+six cas fixes. Une ablation de force ne sera lancée que si ce test confirme que les variantes
+`latent_*` apparaissent bien dans le rapport. Elle fera ensuite varier une dimension à la fois
+autour de `learning_rate=0.02`, `preservation_weight=1.0` et `max_latent_delta=0.10`, tout en
+conservant la porte MAE à 0,08. Le critère de passage exige au minimum une réparation `latent_*`
+sélectionnée avec un écart visuel inférieur à la réparation brute correspondante. Les données
+complètes sont versionnées dans
+`docs/baselines/2026-07-20-584bb0cb-latent-v2.json`.

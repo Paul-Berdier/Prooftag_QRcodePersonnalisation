@@ -68,6 +68,11 @@ Les journaux `repair_variant_validated` contiennent aussi la tentative, la seed,
 métriques visuelles et la liste exacte des scénarios en échec. Le benchmark les exporte dans
 `variants.csv` et `variant-failures.csv`.
 
+Les variantes préfixées `latent_` sont des réparations ciblées calculées depuis la sortie SRL,
+par exemple `latent_rounded_16`. Les variantes sans ce préfixe restent calculées depuis l'image
+brute et constituent la chaîne de secours. Le nom de la variante sélectionnée doit être contrôlé
+avant d'attribuer un changement de `final.png` au raffinement latent.
+
 Les métriques DCGM existantes complètent le dashboard avec VRAM, utilisation GPU,
 température et puissance.
 

@@ -23,8 +23,9 @@ depuis zéro :
 QR + prompt
   -> ControlNet QR Prooftag
   -> SRL pendant ou après la diffusion
+  -> réparations ciblées sur la sortie SRL
   -> validation exacte multi-décodeurs et multi-dégradations
-  -> secours local uniquement si nécessaire
+  -> secours issu du brut uniquement si nécessaire
   -> publication ou rejet
 ```
 
@@ -73,6 +74,16 @@ reste désactivé par défaut.
 La préservation actuelle est une distance L1 multi-échelle. Elle est légère et reproductible,
 mais ce n'est pas LPIPS. LPIPS ne sera ajouté qu'avec une comparaison montrant un bénéfice
 esthétique qui compense son coût GPU.
+
+E003 confirme que ces garde-fous préservent l'image (MAE moyenne 0,0279 et netteté moyenne
+-1,19 %), mais le réglage v2 ne gagne aucun des 156 scénarios de lecture et ne réduit l'erreur
+module que de 4,63 % en moyenne. Une ablation courte E004 doit trouver un point intermédiaire
+avant toute génération massive de dataset.
+
+E003 a aussi montré que les réparations ciblées repartaient du brut après le latent. La chaîne
+R1 impose désormais l'ordre `brut -> latent -> réparation ciblée latent_* -> secours brut`. Une
+expérience n'est pas valide si elle compare seulement `final.png` sans vérifier le nom de la
+variante sélectionnée et l'image intermédiaire correspondante.
 
 **Porte R1 :** conserver les paramètres uniquement si `latent_srl` réduit l'erreur des modules,
 améliore le taux de lecture et ne dégrade pas de plus de 5 % les mesures perceptuelles par

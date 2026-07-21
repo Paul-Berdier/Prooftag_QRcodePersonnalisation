@@ -162,6 +162,7 @@ class ControlNetBackend(GenerationBackend):
         self, candidate: Image.Image, blueprint: QRBlueprint
     ) -> Iterable[tuple[str, Image.Image]]:
         yield "raw", candidate
+        refined_candidate = None
         if self.settings.latent_refinement_enabled:
             started = time.perf_counter()
             try:
@@ -249,6 +250,7 @@ class ControlNetBackend(GenerationBackend):
                     },
                 )
                 if result.accepted:
+                    refined_candidate = result.image
                     yield "latent_srl", result.image
             except Exception:
                 duration = time.perf_counter() - started
@@ -294,6 +296,39 @@ class ControlNetBackend(GenerationBackend):
             ("centers_90", 0.90, False, False, 0.0, 0.25, 0.0, False, False),
             ("centers_95", 0.95, False, False, 0.0, 0.25, 0.0, False, False),
         )
+
+        # A latent refinement that does not scan on its own can still need fewer visible
+        # module repairs than the raw image. Try every targeted profile on that improved
+        # base first, then retain the complete raw repair chain as a reliability fallback.
+        if refined_candidate is not None:
+            for (
+                name,
+                center_scale,
+                incorrect_only,
+                preserve_tone,
+                confidence_margin,
+                tone_factor,
+                edge_feather,
+                preserve_functional_tone,
+                rounded_edges,
+            ) in repair_profiles:
+                if name in GLOBAL_REPAIR_VARIANTS:
+                    continue
+                yield (
+                    f"latent_{name}",
+                    repair_qr_modules(
+                        refined_candidate,
+                        blueprint,
+                        center_scale=center_scale,
+                        incorrect_only=incorrect_only,
+                        preserve_tone=preserve_tone,
+                        confidence_margin=confidence_margin,
+                        tone_factor=tone_factor,
+                        edge_feather=edge_feather,
+                        preserve_functional_tone=preserve_functional_tone,
+                        rounded_edges=rounded_edges,
+                    ),
+                )
         for (
             name,
             center_scale,
