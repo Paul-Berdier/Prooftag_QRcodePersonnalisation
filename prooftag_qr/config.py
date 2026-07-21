@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     srpg_qr_weight: float = Field(default=500.0, gt=0.0, le=5000.0)
     srpg_perceptual_weight: float = Field(default=3.0, ge=0.0, le=100.0)
     srpg_functional_weight: float = Field(default=4.0, ge=1.0, le=100.0)
+    srpg_dark_threshold: float = Field(default=0.5, gt=0.0, lt=1.0)
+    srpg_light_threshold: float = Field(default=0.5, gt=0.0, lt=1.0)
     srpg_target_module_error_rate: float = Field(default=0.0, ge=0.0, le=1.0)
     srpg_max_noise_delta_rms: float = Field(default=2.0, gt=0.0, le=100.0)
     srpg_max_mean_absolute_change: float = Field(default=0.20, gt=0.0, le=1.0)
@@ -83,6 +85,8 @@ class Settings(BaseSettings):
             raise ValueError("SRPG and legacy guided rediffusion cannot be enabled together")
         if self.srpg_enabled and self.controlnet_pipeline_mode != "img2img":
             raise ValueError("SRPG requires the img2img ControlNet pipeline")
+        if self.srpg_dark_threshold > self.srpg_light_threshold:
+            raise ValueError("SRPG dark threshold cannot exceed light threshold")
         return self
 
     @property

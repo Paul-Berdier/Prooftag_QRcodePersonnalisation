@@ -166,6 +166,8 @@ def scanning_robust_loss(
     *,
     functional_weight: float = 4.0,
     center_fraction: float = 1 / 3,
+    dark_threshold: float = 0.5,
+    light_threshold: float = 0.5,
     layout: TorchModuleLayout | None = None,
 ) -> tuple[Any, dict[str, Any]]:
     """Differentiable module-level Scanning Robust Loss (SRL).
@@ -180,6 +182,8 @@ def scanning_robust_loss(
         raise ValueError("images must be a BCHW tensor with 1 or 3 channels")
     if functional_weight < 1.0:
         raise ValueError("functional_weight must be at least 1")
+    if not 0.0 < dark_threshold <= light_threshold < 1.0:
+        raise ValueError("SRL thresholds must satisfy 0 < dark <= light < 1")
     if images.shape[1] == 3:
         coefficients = images.new_tensor((0.299, 0.587, 0.114)).view(1, 3, 1, 1)
         grayscale = (images * coefficients).sum(dim=1)
@@ -204,8 +208,8 @@ def scanning_robust_loss(
     target_dark_pixels = prepared.target_dark[prepared.module_ids].unsqueeze(0)
     pixel_error = torch.where(
         target_dark_pixels,
-        torch.relu(2 * flat - 1),
-        torch.relu(1 - 2 * flat),
+        2 * torch.relu(flat - dark_threshold),
+        2 * torch.relu(light_threshold - flat),
     )
     module_errors = torch.zeros(
         (batch, prepared.module_count), device=images.device, dtype=images.dtype
@@ -219,9 +223,12 @@ def scanning_robust_loss(
     center_sums = torch.zeros_like(module_errors)
     center_sums.scatter_add_(1, ids, flat * prepared.center_mask.unsqueeze(0))
     center_means = center_sums / prepared.center_counts.unsqueeze(0)
-    predicted_dark = center_means < 0.5
     targets = prepared.target_dark.unsqueeze(0).expand(batch, -1)
-    active = predicted_dark.ne(targets).detach()
+    active = torch.where(
+        targets,
+        center_means >= dark_threshold,
+        center_means < light_threshold,
+    ).detach()
     module_weights = torch.where(
         prepared.functional,
         images.new_tensor(functional_weight),
@@ -245,6 +252,8 @@ def scanning_robust_loss(
         "active_modules": active.sum(),
         "active_mask": active,
         "mean_module_error": module_errors.mean(),
+        "dark_threshold": images.new_tensor(dark_threshold),
+        "light_threshold": images.new_tensor(light_threshold),
     }
     return loss, diagnostics
 

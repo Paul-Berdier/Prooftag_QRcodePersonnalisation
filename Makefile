@@ -1,4 +1,4 @@
-.PHONY: install test lint run notebook build build-notebook deploy status benchmark benchmark-e004 benchmark-e005 notebook-start notebook-stop pause-vllm resume-vllm
+.PHONY: install test lint run notebook notebook-search build build-notebook deploy status benchmark benchmark-e004 benchmark-e005 notebook-start notebook-stop pause-vllm resume-vllm
 
 install:
 	python -m pip install -e '.[dev]'
@@ -14,6 +14,9 @@ run:
 
 notebook:
 	python -m jupyter lab notebooks/02_generate_live_on_gpu.ipynb
+
+notebook-search:
+	python -m jupyter lab notebooks/03_srpg_parameter_search.ipynb
 
 build:
 	docker build -t prooftag-qr:dev .

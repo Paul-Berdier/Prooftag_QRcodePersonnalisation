@@ -58,6 +58,8 @@ def test_gpu_dependencies_are_pinned_to_the_torch_base_image():
     assert settings.srpg_min_relative_module_improvement == 0.10
     assert settings.srpg_save_step_previews is False
     assert settings.srpg_preview_interval == 5
+    assert settings.srpg_dark_threshold == 0.5
+    assert settings.srpg_light_threshold == 0.5
     assert settings.latent_refinement_enabled is False
     assert settings.latent_refinement_iterations == 8
     assert settings.latent_refinement_learning_rate == 0.02

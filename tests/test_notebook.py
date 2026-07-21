@@ -49,15 +49,31 @@ def test_remote_gpu_notebook_has_an_isolated_kubernetes_runtime():
 
     assert "FROM ${BASE_IMAGE}" in dockerfile
     assert "02_generate_live_on_gpu.ipynb" in launcher
+    assert "03_srpg_parameter_search.ipynb" in launcher
+    assert "[ValidateSet(" in launcher
     assert "-WindowStyle Normal" in launcher
     assert '"-N"' not in launcher
     assert '"ExitOnForwardFailure=yes"' in launcher
-    assert '[int]$LocalPort = 18888' in launcher
+    assert "[int]$LocalPort = 18888" in launcher
     assert "Assert-LocalPortAvailable" in launcher
     assert "[System.IO.File]::Delete($pidFile)" in launcher
-    assert "nvidia.com/gpu: \"1\"" in manifest
+    assert 'nvidia.com/gpu: "1"' in manifest
     assert "replicas: 0" in manifest
     assert "prooftag-qr-model-cache" in manifest
     assert "--ServerApp.root_dir=/workspace" in manifest
     assert "mountPath: /workspace/results" in manifest
     assert "restore_previous_state" in server
+
+
+def test_parameter_search_notebook_has_reproducible_screen_and_confirmation():
+    source = Path("notebooks/03_srpg_parameter_search.ipynb").read_text(encoding="utf-8")
+
+    assert "screening_trials()" in source
+    assert "run_srpg_controlnet_img2img" in source
+    assert "validator.validate" in source
+    assert "aggregate_confirmation" in source
+    assert "results.jsonl" in source
+    assert "record_raw_baseline" in source
+    assert "validations.json" in source
+    assert "phone-validation.csv" in source
+    assert "trial_rank_key" in source

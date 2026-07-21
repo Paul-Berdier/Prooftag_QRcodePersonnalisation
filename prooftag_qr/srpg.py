@@ -19,6 +19,8 @@ class SRPGConfig:
     qr_weight: float = 500.0
     perceptual_weight: float = 3.0
     functional_weight: float = 4.0
+    dark_threshold: float = 0.5
+    light_threshold: float = 0.5
     target_module_error_rate: float = 0.0
     max_noise_delta_rms: float = 2.0
     max_mean_absolute_change: float = 0.20
@@ -118,6 +120,8 @@ def _validate_config(config: SRPGConfig) -> None:
         raise ValueError("invalid SRPG loss weights")
     if config.functional_weight < 1:
         raise ValueError("functional_weight must be at least 1")
+    if not 0 < config.dark_threshold <= config.light_threshold < 1:
+        raise ValueError("SRPG thresholds must satisfy 0 < dark <= light < 1")
     if not 0 <= config.target_module_error_rate <= 1:
         raise ValueError("target_module_error_rate must be between 0 and 1")
     if config.max_noise_delta_rms <= 0:
@@ -268,6 +272,8 @@ def run_srpg_controlnet_img2img(
                 decoded_unit,
                 blueprint,
                 functional_weight=config.functional_weight,
+                dark_threshold=config.dark_threshold,
+                light_threshold=config.light_threshold,
                 layout=layout,
             )
             perceptual_loss = perceptual_model(decoded.float(), reference_lpips).mean()

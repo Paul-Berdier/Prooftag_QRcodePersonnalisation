@@ -420,3 +420,20 @@ L'accès se fait depuis le navigateur Windows au travers d'un tunnel SSH authent
 mémorise les réplicas de l'API et de vLLM, les met à zéro avant d'attribuer la RTX au notebook, puis
 restaure exactement cet état à l'arrêt. Cette instrumentation n'est pas encore un résultat E005b :
 aucune amélioration n'est revendiquée avant une exécution complète sur la RTX.
+
+## E006 — recherche des paramètres SRPG
+
+- **Date :** 2026-07-21
+- **État :** protocole et notebook terminés ; campagne RTX à exécuter
+- **Observation initiale :** avec le même exemple, `SRPG_STEPS=100` est lisible sur un téléphone
+  alors que la configuration à 40 pas ne l'était pas.
+- **Interprétation :** observation encourageante sur un seul cas, pas un taux de réussite.
+- **Décision :** criblage causal de 17 profils, puis confirmation des trois meilleurs sur trois
+  autres cas et validation physique structurée.
+
+L'audit a ajouté les seuils SRL noir/blanc configurables afin de comparer le comportement Prooftag
+0,50/0,50 au comportement officiel 0,45/0,65. Le classement donne la priorité au 100 % strict,
+puis au pire cas, avant l'esthétique et le temps. Les paramètres, validations individuelles,
+métriques par pas, erreurs et résultats physiques sont persistés. Voir
+[`docs/e006-parameter-search.md`](e006-parameter-search.md). Aucun profil n'est promu en production
+avant résultats RTX et tests sur plusieurs téléphones.

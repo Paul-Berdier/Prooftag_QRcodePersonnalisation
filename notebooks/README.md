@@ -1,10 +1,12 @@
 # Notebooks Prooftag QR
 
-Les deux notebooks n'ont pas le même rôle :
+Les trois notebooks n'ont pas le même rôle :
 
 - `01_srpg_step_by_step.ipynb` analyse une archive de benchmark déjà produite. Il ne génère rien.
 - `02_generate_live_on_gpu.ipynb` exécute réellement le modèle sur la RTX du serveur et montre
   chaque étape au fur et à mesure.
+- `03_srpg_parameter_search.ipynb` compare 17 profils SRPG, reprend une campagne interrompue,
+  classe les sorties non réparées et confirme les trois meilleurs profils.
 
 ## Génération réelle depuis le PC Windows
 
@@ -41,11 +43,29 @@ Dans Jupyter, utiliser **Run > Run All Cells**. Le notebook fabrique alors, sans
 1. le QR de contrôle ;
 2. la diffusion artistique brute ;
 3. sa validation ;
-4. la seconde diffusion SRPG avec aperçu `x0` et carte d'erreur à chacun des 40 pas ;
+4. la seconde diffusion SRPG avec aperçu `x0` et carte d'erreur à chacun des 100 pas par défaut ;
 5. les courbes de loss et d'erreur de modules ;
 6. chaque réparation candidate ;
 7. la validation multi-décodeur et multi-dégradation de chaque candidate ;
 8. la sélection finale et les exports dans `results/notebook-runs/<date>-<seed>`.
+
+## Recherche des paramètres vers 100 % de lecture
+
+Le notebook 03 exécute le criblage réel sur la RTX. Depuis PowerShell :
+
+```powershell
+.\scripts\notebook-remote.ps1 -Notebook 03_srpg_parameter_search.ipynb
+```
+
+`Run > Run All Cells` lance 17 essais sur un brut fixe, puis 9 confirmations (trois profils sur
+trois autres cas). Chaque essai écrit immédiatement son image, ses validations individuelles,
+son CSV par timestep et sa ligne dans `/data/parameter-search/e006-srpg-search-v1/results.jsonl`.
+Une interruption ne détruit donc pas la campagne : la relance ignore les clés déjà terminées.
+
+Pour vérifier le pipeline avant la campagne complète, mettre temporairement `SCREEN_LIMIT = 4`
+et `RUN_CONFIRMATION = False`. Remettre ensuite `SCREEN_LIMIT = None`, changer
+`EXPERIMENT_NAME`, puis lancer la vraie campagne. Le protocole et les portes de décision sont dans
+[`../docs/e006-parameter-search.md`](../docs/e006-parameter-search.md).
 
 À la fin, arrêter Jupyter et restaurer exactement les nombres de réplicas précédents :
 
@@ -68,7 +88,7 @@ kubectl get deployment/prooftag-qr-notebook -n qr-core
 
 Le Deployment notebook reste à zéro réplique tant que la commande PowerShell ne le démarre pas.
 Les modèles réutilisent le PVC `prooftag-qr-model-cache` et les résultats persistent dans le PVC
-`prooftag-qr-data`, sous `/data/notebook-runs`.
+`prooftag-qr-data`, sous `/data/notebook-runs` et `/data/parameter-search`.
 
 ## Analyse d'une ancienne archive sur Windows
 

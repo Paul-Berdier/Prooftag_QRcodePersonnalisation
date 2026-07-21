@@ -112,6 +112,11 @@ prévisions `x0`, cartes d'erreurs et métriques pendant l'exécution réelle. D
 .\scripts\notebook-remote.ps1 -Stop
 ```
 
+La recherche multi-paramètre consécutive à l'observation des 100 pas est séparée dans
+[`e006-parameter-search.md`](e006-parameter-search.md) et dans
+`notebooks/03_srpg_parameter_search.ipynb`. Elle ne modifie pas rétrospectivement le protocole
+E005a à 40 pas.
+
 Le script restaure les trois options Kubernetes à leur valeur du ConfigMap même après une erreur.
 Après la campagne, reprendre vLLM explicitement avec `make resume-vllm` uniquement si le GPU ne
 doit plus rester attribué au service QR.

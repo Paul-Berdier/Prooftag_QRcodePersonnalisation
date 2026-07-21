@@ -58,3 +58,40 @@ def test_srl_is_zero_for_reference_and_differentiable_for_inverted_qr():
     assert inverted.grad is not None
     assert torch.isfinite(inverted.grad).all()
     assert inverted.grad.abs().sum().item() > 0
+
+
+def test_srl_supports_diffqrcoder_asymmetric_decode_thresholds():
+    torch = pytest.importorskip("torch")
+    from prooftag_qr.guidance import scanning_robust_loss
+
+    blueprint = generate_qr("https://example.prooftag.test/t/srl-thresholds", "H", size=128)
+    ambiguous = torch.full((1, 3, 128, 128), 0.55, requires_grad=True)
+
+    _, symmetric = scanning_robust_loss(ambiguous, blueprint)
+    official_loss, official = scanning_robust_loss(
+        ambiguous,
+        blueprint,
+        dark_threshold=0.45,
+        light_threshold=0.65,
+    )
+
+    assert official["active_modules"].item() == blueprint.matrix.size
+    assert official["active_modules"].item() > symmetric["active_modules"].item()
+    official_loss.backward()
+    assert ambiguous.grad is not None
+
+
+def test_srl_rejects_inverted_thresholds():
+    torch = pytest.importorskip("torch")
+    from prooftag_qr.guidance import scanning_robust_loss
+
+    blueprint = generate_qr("https://example.prooftag.test/t/srl-invalid-thresholds", "H")
+    image = torch.zeros((1, 3, 512, 512))
+
+    with pytest.raises(ValueError, match="thresholds"):
+        scanning_robust_loss(
+            image,
+            blueprint,
+            dark_threshold=0.70,
+            light_threshold=0.60,
+        )

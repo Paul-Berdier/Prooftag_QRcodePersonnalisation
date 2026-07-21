@@ -2,6 +2,8 @@ param(
     [string]$Server = "paul@pcIA",
     [string]$RemoteRepository = "~/apps/Prooftag_QRcodePersonnalisation",
     [int]$LocalPort = 18888,
+    [ValidateSet("02_generate_live_on_gpu.ipynb", "03_srpg_parameter_search.ipynb")]
+    [string]$Notebook = "02_generate_live_on_gpu.ipynb",
     [switch]$Stop
 )
 
@@ -79,7 +81,7 @@ try {
     $tunnel = Start-Process -FilePath "ssh" -ArgumentList $arguments -WindowStyle Normal -PassThru
     Set-Content -LiteralPath $pidFile -Value $tunnel.Id
 
-    $url = "http://127.0.0.1:${LocalPort}/lab/tree/notebooks/02_generate_live_on_gpu.ipynb?token=$token"
+    $url = "http://127.0.0.1:${LocalPort}/lab/tree/notebooks/${Notebook}?token=$token"
     $headers = @{ Authorization = "token $token" }
     for ($attempt = 0; $attempt -lt 240; $attempt++) {
         Start-Sleep -Milliseconds 500

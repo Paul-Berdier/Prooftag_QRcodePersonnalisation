@@ -324,6 +324,8 @@ class ControlNetBackend(GenerationBackend):
                         qr_weight=self.settings.srpg_qr_weight,
                         perceptual_weight=self.settings.srpg_perceptual_weight,
                         functional_weight=self.settings.srpg_functional_weight,
+                        dark_threshold=self.settings.srpg_dark_threshold,
+                        light_threshold=self.settings.srpg_light_threshold,
                         target_module_error_rate=(self.settings.srpg_target_module_error_rate),
                         max_noise_delta_rms=self.settings.srpg_max_noise_delta_rms,
                         max_mean_absolute_change=(self.settings.srpg_max_mean_absolute_change),

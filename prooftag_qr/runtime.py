@@ -58,6 +58,8 @@ def runtime_info(settings: Settings | None = None) -> dict:
             "srpg_qr_weight": settings.srpg_qr_weight,
             "srpg_perceptual_weight": settings.srpg_perceptual_weight,
             "srpg_functional_weight": settings.srpg_functional_weight,
+            "srpg_dark_threshold": settings.srpg_dark_threshold,
+            "srpg_light_threshold": settings.srpg_light_threshold,
             "srpg_target_module_error_rate": settings.srpg_target_module_error_rate,
             "srpg_max_noise_delta_rms": settings.srpg_max_noise_delta_rms,
             "srpg_max_mean_absolute_change": settings.srpg_max_mean_absolute_change,
