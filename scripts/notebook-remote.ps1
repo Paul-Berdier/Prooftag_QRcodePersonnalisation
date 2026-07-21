@@ -17,7 +17,7 @@ function Stop-LocalTunnel {
     if ($process -and $process.ProcessName -eq "ssh") {
         Stop-Process -Id $tunnelPid
     }
-    Remove-Item -LiteralPath $pidFile -Force
+    [System.IO.File]::Delete($pidFile)
 }
 
 function Stop-RemoteNotebook {
@@ -102,7 +102,7 @@ catch {
     if ($tunnel -and -not $tunnel.HasExited) {
         Stop-Process -Id $tunnel.Id -ErrorAction SilentlyContinue
     }
-    Remove-Item -LiteralPath $pidFile -Force -ErrorAction SilentlyContinue
+    [System.IO.File]::Delete($pidFile)
     if ($remoteStarted) {
         try {
             Stop-RemoteNotebook
