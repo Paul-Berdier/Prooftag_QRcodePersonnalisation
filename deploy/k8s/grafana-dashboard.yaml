@@ -332,6 +332,63 @@ data:
           "targets": [{"expr": "prooftag_qr_guided_rediffusion_image_change", "legendFormat": "{{metric}}", "refId": "A"}],
           "title": "Écart visuel seconde diffusion",
           "type": "barchart"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "short"}},
+          "gridPos": {"h": 7, "w": 6, "x": 0, "y": 83},
+          "id": 35,
+          "targets": [{"expr": "sum by (outcome) (increase(prooftag_qr_srpg_runs_total[$__range]))", "legendFormat": "{{outcome}}", "refId": "A"}],
+          "title": "Résultats SRPG",
+          "type": "barchart"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "s"}},
+          "gridPos": {"h": 7, "w": 6, "x": 6, "y": 83},
+          "id": 36,
+          "targets": [{"expr": "histogram_quantile(0.95, sum by (le) (rate(prooftag_qr_srpg_duration_seconds_bucket[30m])))", "refId": "A"}],
+          "title": "SRPG P95",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}},
+          "gridPos": {"h": 7, "w": 6, "x": 12, "y": 83},
+          "id": 37,
+          "targets": [{"expr": "prooftag_qr_srpg_module_error_rate", "legendFormat": "{{stage}}", "refId": "A"}],
+          "title": "Erreur modules SRPG réelle",
+          "type": "barchart"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "decmbytes"}},
+          "gridPos": {"h": 7, "w": 6, "x": 18, "y": 83},
+          "id": 38,
+          "targets": [{"expr": "prooftag_qr_srpg_peak_gpu_memory_allocated_mib", "refId": "A"}],
+          "title": "Pic VRAM SRPG",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "short"}},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 90},
+          "id": 39,
+          "targets": [{"expr": "prooftag_qr_srpg_step_diagnostic{metric=~\"module_error_rate|srl|lpips\"}", "instant": true, "legendFormat": "étape {{step}} / {{metric}}", "refId": "A"}],
+          "title": "Dernières losses par étape SRPG",
+          "type": "table"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "short"}},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 90},
+          "id": 40,
+          "targets": [
+            {"expr": "prooftag_qr_srpg_step_diagnostic{metric=~\"gradient_rms|noise_delta_rms\"}", "instant": true, "legendFormat": "étape {{step}} / {{metric}}", "refId": "A"},
+            {"expr": "increase(prooftag_qr_srpg_gradient_clips_total[$__range])", "instant": true, "legendFormat": "clips", "refId": "B"}
+          ],
+          "title": "Gradient et garde-fou SRPG",
+          "type": "table"
         }
       ],
       "refresh": "30s",

@@ -6,7 +6,7 @@ from typing import Any
 import numpy as np
 from PIL import Image
 
-from .qr import QRBlueprint, functional_pattern_mask
+from .qr import QRBlueprint, functional_pattern_mask, module_error_rate
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +43,7 @@ class LatentRefinementConfig:
     target_module_error_rate: float = 0.0
     max_latent_delta: float = 0.10
     max_mean_absolute_change: float = 0.08
+    min_relative_module_improvement: float = 0.01
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +57,8 @@ class LatentRefinementResult:
     final_mean_absolute_change: float
     best_observed_module_error_rate: float
     best_observed_mean_absolute_change: float
+    actual_initial_module_error_rate: float
+    actual_final_module_error_rate: float
     improved: bool
     accepted: bool
     converged: bool
@@ -107,10 +110,7 @@ def build_module_layout(
 
             yy, xx = np.mgrid[:module_height, :module_width]
             sigma = max(1.0, float((min(module_height, module_width) - 1) // 5))
-            distance = (
-                (yy + 0.5 - module_height / 2) ** 2
-                + (xx + 0.5 - module_width / 2) ** 2
-            )
+            distance = (yy + 0.5 - module_height / 2) ** 2 + (xx + 0.5 - module_width / 2) ** 2
             weights = np.exp(-distance / (2 * sigma**2)).astype(np.float32)
             weights /= float(weights.sum())
             gaussian_weights[y0:y1, x0:x1] = weights
@@ -240,9 +240,7 @@ def scanning_robust_loss(
             else images.new_tensor(0.0)
         ),
         "data_error_rate": (
-            data_active.to(images.dtype).mean()
-            if data_active.numel()
-            else images.new_tensor(0.0)
+            data_active.to(images.dtype).mean() if data_active.numel() else images.new_tensor(0.0)
         ),
         "active_modules": active.sum(),
         "active_mask": active,
@@ -275,15 +273,7 @@ def _pil_to_tensor(image: Image.Image, *, device: Any, dtype: Any) -> Any:
 
 
 def _tensor_to_pil(image: Any) -> Image.Image:
-    array = (
-        image.detach()
-        .float()
-        .clamp(0, 1)
-        .squeeze(0)
-        .permute(1, 2, 0)
-        .cpu()
-        .numpy()
-    )
+    array = image.detach().float().clamp(0, 1).squeeze(0).permute(1, 2, 0).cpu().numpy()
     return Image.fromarray(np.rint(array * 255).astype(np.uint8), mode="RGB")
 
 
@@ -313,6 +303,8 @@ def refine_candidate_latent(
         raise ValueError("max_latent_delta must be positive")
     if not 0 < config.max_mean_absolute_change <= 1:
         raise ValueError("max_mean_absolute_change must be between 0 (exclusive) and 1")
+    if not 0 <= config.min_relative_module_improvement <= 1:
+        raise ValueError("min_relative_module_improvement must be between 0 and 1")
 
     vae = pipeline.vae
     vae.requires_grad_(False)
@@ -417,14 +409,23 @@ def refine_candidate_latent(
             completed_iterations += 1
 
     improved = best_observed_error < initial_error
-    accepted = selected_error < initial_error
+    surrogate_accepted = selected_error < initial_error
+    selected_pil = _tensor_to_pil(selected_image)
+    actual_initial_error = module_error_rate(candidate, blueprint)
+    actual_final_error = module_error_rate(selected_pil, blueprint)
+    actual_improved = actual_final_error < actual_initial_error * (
+        1.0 - config.min_relative_module_improvement
+    )
+    accepted = surrogate_accepted and actual_improved
     rejection_reason = None
-    if improved and not accepted:
+    if surrogate_accepted and not actual_improved:
+        rejection_reason = "actual_module_error_not_improved"
+    elif improved and not surrogate_accepted:
         rejection_reason = "mean_absolute_change_limit"
     elif not improved:
         rejection_reason = "no_module_improvement"
     return LatentRefinementResult(
-        image=_tensor_to_pil(selected_image) if accepted else candidate,
+        image=selected_pil if accepted else candidate,
         iterations=completed_iterations,
         initial_module_error_rate=initial_error,
         final_module_error_rate=selected_error,
@@ -433,6 +434,8 @@ def refine_candidate_latent(
         final_mean_absolute_change=selected_mean_absolute_change,
         best_observed_module_error_rate=best_observed_error,
         best_observed_mean_absolute_change=best_observed_mean_absolute_change,
+        actual_initial_module_error_rate=actual_initial_error,
+        actual_final_module_error_rate=actual_final_error,
         improved=improved,
         accepted=accepted,
         converged=accepted and selected_error <= config.target_module_error_rate,

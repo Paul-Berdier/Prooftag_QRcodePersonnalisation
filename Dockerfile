@@ -3,7 +3,8 @@ FROM pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
-    HF_HOME=/cache/huggingface
+    HF_HOME=/cache/huggingface \
+    TORCH_HOME=/opt/torch-cache
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl libgl1 libglib2.0-0 libzbar0 \
@@ -15,11 +16,11 @@ COPY prooftag_qr ./prooftag_qr
 COPY migrations ./migrations
 RUN pip install --upgrade pip \
     && pip install '.[gpu]' \
-    && python -c "import torch; from diffusers import ControlNetModel, DDIMScheduler, DPMSolverMultistepScheduler, StableDiffusionControlNetImg2ImgPipeline, StableDiffusionControlNetPipeline; print('GPU stack import OK:', torch.__version__)"
+    && python -c "import lpips, torch, torchvision; from diffusers import ControlNetModel, DDIMScheduler, DPMSolverMultistepScheduler, StableDiffusionControlNetImg2ImgPipeline, StableDiffusionControlNetPipeline; lpips.LPIPS(net='alex', verbose=False); print('GPU stack and LPIPS weights OK:', torch.__version__, torchvision.__version__)"
 
 RUN useradd --create-home --uid 10001 app \
-    && mkdir -p /data /cache \
-    && chown -R app:app /app /data /cache
+    && mkdir -p /data /cache /opt/torch-cache \
+    && chown -R app:app /app /data /cache /opt/torch-cache
 USER 10001
 
 EXPOSE 8080

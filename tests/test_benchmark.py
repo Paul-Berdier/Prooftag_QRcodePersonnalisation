@@ -29,7 +29,15 @@ def test_report_contains_comparison_and_gallery():
         "guided_control_artifact_available": True,
         "guided_mask_artifact_available": True,
         "guided_unprojected_artifact_available": True,
-        "guided_candidate_artifact_available": True,
+        "guided_projected_artifact_available": True,
+        "srpg_artifact_available": True,
+        "srpg_stage_status": "accepted",
+        "srpg_scan_pass_rate": 1.0,
+        "srpg_module_error_rate": 0.01,
+        "srpg_step_metrics": [
+            {"module_error_rate": 0.2},
+            {"module_error_rate": 0.1},
+        ],
         "latent_artifact_variant": "guided_latent_srl",
     }
     summary = {
@@ -56,7 +64,9 @@ def test_report_contains_comparison_and_gallery():
     assert "attempt_1_guided_control.png" in report
     assert "attempt_1_guided_mask.png" in report
     assert "attempt_1_guided_unprojected.png" in report
-    assert "attempt_1_guided_candidate.png" in report
+    assert "attempt_1_guided_projected.png" in report
+    assert "attempt_1_srpg.png" in report
+    assert "Erreur de modules par étape SRPG" in report
     assert "attempt_1_guided_latent_srl.png" in report
     assert "Brut strict" in report
     assert "Première référence" in report
@@ -76,3 +86,5 @@ def test_refinement_csv_exports_unprojected_change_metrics():
 
     assert '"unprojected_changed_pixel_ratio",' in source
     assert '"unprojected_mean_absolute_change",' in source
+    assert 'run_dir / "srpg-steps.csv"' in source
+    assert '"noise_delta_rms",' in source

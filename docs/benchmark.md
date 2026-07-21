@@ -5,9 +5,13 @@ payload et versions QR. Chaque cas autorise jusqu'à trois seeds déterministes.
 restent identiques entre deux versions du code afin que les écarts mesurés proviennent du
 pipeline et non du hasard.
 
-Le protocole 2.1 inscrit dans chaque rapport sa version, le hash SHA-256 des cas et les
+Le protocole 3.0 inscrit dans chaque rapport sa version, le hash SHA-256 des cas et les
 paramètres complets de génération. Une comparaison dont le hash ou la version diffère doit
 être présentée comme une nouvelle campagne, pas comme une régression directe.
+
+`PROOFTAG_QR_BENCHMARK_MAX_ATTEMPTS` peut borner une campagne sentinelle ; sa valeur est inscrite
+dans `environment.json` et `summary.json`. E005a fixe cette valeur à 1 pour exécuter exactement
+six boucles SRPG avant d'autoriser une campagne trois fois plus coûteuse.
 
 ## Depuis le serveur
 
@@ -23,7 +27,7 @@ La commande ouvre elle-même un port-forward temporaire, génère les six images
 - les images finales, brutes et variantes disponibles pour chaque tentative ;
 - la réponse JSON et le snapshot Prometheus de chaque génération ;
 - `summary.csv`, `variants.csv`, `variant-failures.csv`, `validations.csv`,
-  `refinements.csv` et `comparison.csv` ;
+  `refinements.csv`, `srpg-steps.csv` et `comparison.csv` ;
 - les informations Git, GPU, runtime et Kubernetes ;
 - un échantillonnage GPU chaque seconde (`gpu-samples.csv`) avec utilisation, VRAM,
   température et puissance ;
@@ -37,7 +41,7 @@ Le taux « premier essai » mesure la qualité intrinsèque d'une seed. Le taux 
 finale » mesure la capacité réelle du service après régénération et fallback. Le rapport
 indique séparément le nombre de cas ayant nécessité une correction globale.
 
-Le protocole 2.1 ajoute le taux strict de `raw`, `guided` et de la variante SRL disponible,
+Le protocole 3.0 ajoute le taux strict de `raw`, `guided`, `srpg` et de la variante SRL disponible,
 le nombre de sauvetages obtenus par le latent et leurs taux moyens. Ces indicateurs ne doivent
 pas être remplacés par le taux final : ils mesurent le progrès réel du modèle avant fallback.
 
@@ -47,7 +51,7 @@ puis binaires restent disponibles comme replis de robustesse. `selected_variant`
 `variant-failures.csv` permettent de suivre le palier retenu pour chaque image.
 
 Quand E004 est activée, la galerie conserve `raw`, `guided_control`, `guided_mask`,
-`guided_unprojected`, `guided_candidate`, `guided`,
+`guided_unprojected`, `guided_projected`, `guided`,
 `guided_latent_srl` si elle existe, puis l'image finale. `refinements.csv` enregistre le statut,
 la durée, les paramètres, les erreurs modules et les écarts visuels de chaque étape. Les modes
 restent désactivés dans le manifeste de production tant qu'une campagne d'ablation n'a pas
@@ -58,6 +62,15 @@ valeurs désactivées même en cas d'erreur :
 
 ```bash
 make benchmark-e004
+```
+
+E005 compare de la même façon une baseline au vrai guidage SRPG seul. Chaque sortie SRPG est
+validée même si sa porte interne la rejette ; le rapport ne confond donc plus « loss améliorée »
+et « QR effectivement lu ». La galerie inclut `attempt_1_srpg.png`, une courbe des 40 pas et
+`srpg-steps.csv` contient les losses, gradients et clips :
+
+```bash
+make benchmark-e005
 ```
 
 ## Une commande depuis le PC Windows
@@ -77,6 +90,12 @@ et ouvre le rapport guidé, qui compare automatiquement la seconde campagne à l
 
 ```powershell
 .\scripts\benchmark-remote.ps1 -E004
+```
+
+Pour E005 :
+
+```powershell
+.\scripts\benchmark-remote.ps1 -E005
 ```
 
 Un serveur ou un chemin différent peut être indiqué explicitement :

@@ -19,6 +19,7 @@ class JsonFormatter(logging.Formatter):
             "attempt",
             "attempts",
             "seed",
+            "srpg_seed",
             "repair_variant",
             "scan_pass_rate",
             "module_error_rate",
@@ -34,9 +35,12 @@ class JsonFormatter(logging.Formatter):
             "control_module_error_rate",
             "final_module_error_rate",
             "best_observed_module_error_rate",
+            "actual_initial_module_error_rate",
+            "actual_final_module_error_rate",
             "changed_pixel_ratio",
             "mask_coverage",
             "mean_absolute_change",
+            "peak_gpu_memory_allocated_mib",
             "unprojected_changed_pixel_ratio",
             "unprojected_mean_absolute_change",
             "best_observed_mean_absolute_change",
@@ -46,6 +50,7 @@ class JsonFormatter(logging.Formatter):
             "accepted",
             "converged",
             "rejection_reason",
+            "step_metrics",
         ):
             if hasattr(record, key):
                 payload[key] = getattr(record, key)

@@ -9,7 +9,15 @@ if TYPE_CHECKING:
 
 def runtime_info(settings: Settings | None = None) -> dict:
     packages = {}
-    for package in ("torch", "diffusers", "transformers", "accelerate", "huggingface-hub"):
+    for package in (
+        "torch",
+        "torchvision",
+        "diffusers",
+        "transformers",
+        "accelerate",
+        "huggingface-hub",
+        "lpips",
+    ):
         try:
             packages[package] = version(package)
         except PackageNotFoundError:
@@ -27,25 +35,34 @@ def runtime_info(settings: Settings | None = None) -> dict:
             "guided_rediffusion_enabled": settings.guided_rediffusion_enabled,
             "guided_rediffusion_steps": settings.guided_rediffusion_steps,
             "guided_rediffusion_strength": settings.guided_rediffusion_strength,
-            "guided_rediffusion_controlnet_scale": (
-                settings.guided_rediffusion_controlnet_scale
-            ),
+            "guided_rediffusion_controlnet_scale": (settings.guided_rediffusion_controlnet_scale),
             "guided_rediffusion_guide_center_scale": (
                 settings.guided_rediffusion_guide_center_scale
             ),
             "guided_rediffusion_guide_confidence_margin": (
                 settings.guided_rediffusion_guide_confidence_margin
             ),
-            "guided_rediffusion_mask_dilation_px": (
-                settings.guided_rediffusion_mask_dilation_px
-            ),
-            "guided_rediffusion_mask_feather_px": (
-                settings.guided_rediffusion_mask_feather_px
-            ),
+            "guided_rediffusion_mask_dilation_px": (settings.guided_rediffusion_mask_dilation_px),
+            "guided_rediffusion_mask_feather_px": (settings.guided_rediffusion_mask_feather_px),
             "guided_rediffusion_max_mean_absolute_change": (
                 settings.guided_rediffusion_max_mean_absolute_change
             ),
+            "guided_rediffusion_min_relative_module_improvement": (
+                settings.guided_rediffusion_min_relative_module_improvement
+            ),
             "guided_rediffusion_seed_offset": settings.guided_rediffusion_seed_offset,
+            "srpg_enabled": settings.srpg_enabled,
+            "srpg_steps": settings.srpg_steps,
+            "srpg_strength": settings.srpg_strength,
+            "srpg_controlnet_scale": settings.srpg_controlnet_scale,
+            "srpg_qr_weight": settings.srpg_qr_weight,
+            "srpg_perceptual_weight": settings.srpg_perceptual_weight,
+            "srpg_functional_weight": settings.srpg_functional_weight,
+            "srpg_target_module_error_rate": settings.srpg_target_module_error_rate,
+            "srpg_max_noise_delta_rms": settings.srpg_max_noise_delta_rms,
+            "srpg_max_mean_absolute_change": settings.srpg_max_mean_absolute_change,
+            "srpg_min_relative_module_improvement": (settings.srpg_min_relative_module_improvement),
+            "srpg_seed_offset": settings.srpg_seed_offset,
             "latent_refinement_enabled": settings.latent_refinement_enabled,
             "latent_refinement_iterations": settings.latent_refinement_iterations,
             "latent_refinement_learning_rate": settings.latent_refinement_learning_rate,
@@ -53,17 +70,16 @@ def runtime_info(settings: Settings | None = None) -> dict:
             "latent_refinement_preservation_weight": (
                 settings.latent_refinement_preservation_weight
             ),
-            "latent_refinement_functional_weight": (
-                settings.latent_refinement_functional_weight
-            ),
+            "latent_refinement_functional_weight": (settings.latent_refinement_functional_weight),
             "latent_refinement_target_module_error_rate": (
                 settings.latent_refinement_target_module_error_rate
             ),
-            "latent_refinement_max_latent_delta": (
-                settings.latent_refinement_max_latent_delta
-            ),
+            "latent_refinement_max_latent_delta": (settings.latent_refinement_max_latent_delta),
             "latent_refinement_max_mean_absolute_change": (
                 settings.latent_refinement_max_mean_absolute_change
+            ),
+            "latent_refinement_min_relative_module_improvement": (
+                settings.latent_refinement_min_relative_module_improvement
             ),
         }
     try:

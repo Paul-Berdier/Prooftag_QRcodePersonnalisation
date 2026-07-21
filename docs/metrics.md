@@ -62,6 +62,13 @@ dimensions, iPhone, Pixel et lecteurs industriels.
 | `prooftag_qr_guided_rediffusion_duration_seconds` | histogramme | coût de la seconde passe img2img/ControlNet |
 | `prooftag_qr_guided_rediffusion_module_error_rate` | jauge | erreur module avant et après la seconde diffusion |
 | `prooftag_qr_guided_rediffusion_image_change` | jauge | pixels modifiés et changement absolu moyen de la seconde diffusion localisée |
+| `prooftag_qr_srpg_runs_total` | compteur | sortie SRPG acceptée par la porte réelle, rejetée avec motif ou erreur |
+| `prooftag_qr_srpg_duration_seconds` | histogramme | coût de la boucle DDIM différentiable complète |
+| `prooftag_qr_srpg_module_error_rate` | jauge | erreur module réelle de l'image avant/après SRPG |
+| `prooftag_qr_srpg_step_diagnostic` | jauge par pas/métrique | erreur centrale, SRL, LPIPS, gradient RMS et delta de bruit RMS des 40 pas |
+| `prooftag_qr_srpg_image_change` | jauge | pixels modifiés et MAE de la sortie SRPG |
+| `prooftag_qr_srpg_peak_gpu_memory_allocated_mib` | jauge | pic CUDA alloué par PyTorch pendant SRPG |
+| `prooftag_qr_srpg_gradient_clips_total` | compteur | pas dont le delta de bruit atteint sa borne de sécurité |
 | `prooftag_qr_latent_refinements_total` | compteur | convergence, amélioration acceptée, rejet par préservation, absence d'amélioration ou erreur du raffinement latent |
 | `prooftag_qr_latent_refinement_duration_seconds` | histogramme | coût du raffinement VAE/SRL |
 | `prooftag_qr_latent_refinement_iterations` | histogramme | nombre d'itérations réellement exécutées |
@@ -79,9 +86,14 @@ avant d'attribuer un changement de `final.png` au raffinement latent.
 
 Avec E004, `guided_*` désigne une sortie issue de la seconde diffusion et
 `guided_latent_*` une sortie ayant ensuite reçu SR-MPGD. Les artefacts `guided_control` et
-`guided_mask`, `guided_unprojected` et `guided_candidate` sont diagnostiques et ne sont jamais
+`guided_mask`, `guided_unprojected` et `guided_projected` sont diagnostiques et ne sont jamais
 sélectionnables comme résultat final. Ils permettent de distinguer l'effet global de la seconde
 diffusion de sa projection locale avant validation.
+
+Avec E005, `srpg` est toujours envoyé aux 26 validations, indépendamment de sa porte interne.
+La porte décide seulement si les réparations `srpg_*` peuvent repartir de cette image. Le journal
+`srpg_completed` conserve les 40 diagnostics, la décision, le motif de rejet et la VRAM ; le
+benchmark les normalise dans `srpg-steps.csv`.
 
 Les métriques DCGM existantes complètent le dashboard avec VRAM, utilisation GPU,
 température et puissance.

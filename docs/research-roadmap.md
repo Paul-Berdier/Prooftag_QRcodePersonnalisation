@@ -86,12 +86,18 @@ guided_latent_* -> secours brut`. Une
 expérience n'est pas valide si elle compare seulement `final.png` sans vérifier le nom de la
 variante sélectionnée et l'image intermédiaire correspondante.
 
-La première implémentation E004 utilise l'image brute comme source img2img, une carte locale de
+La première implémentation E004 utilisait l'image brute comme source img2img, une carte locale de
 modules incorrects comme condition ControlNet, huit étapes à `strength=0.30`, puis projette le
 résultat dans un masque dilaté et adouci. SR-MPGD travaille ensuite sur cette sortie. Cette
 version reproduit la structure en deux étapes de DiffQRCoder, mais n'implémente pas encore le
-gradient SRPG exact à travers l'UNet à chaque timestep ; cette différence doit rester explicite
-dans les comparaisons avec l'article.
+gradient SRPG exact à travers l'UNet à chaque timestep. La campagne E004 l'a rejetée : 0/26 scans
+avant réparation dans tous les cas, erreur module après rediffusion à 15,072 % contre 13,152 % au
+départ, masque couvrant 68,16 % de l'image et coût total +85,7 %.
+
+E005 implémente maintenant les équations 7–11 : prédiction `z0|t`, décodage VAE, SRL + LPIPS,
+gradient par rapport au latent courant, correction de la prédiction de bruit puis pas DDIM. Chaque
+sortie est réellement validée, même si la porte interne la rejette. QArt reste explicitement hors
+de E005a ; il ne sera ajouté qu'après preuve que la boucle SRPG converge sur la RTX.
 
 **Porte R1 :** conserver les paramètres uniquement si `latent_srl` réduit l'erreur des modules,
 améliore le taux de lecture et ne dégrade pas de plus de 5 % les mesures perceptuelles par

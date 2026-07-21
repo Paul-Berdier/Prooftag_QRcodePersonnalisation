@@ -102,6 +102,39 @@ spec:
           annotations:
             summary: Raffinement latent inefficace
             description: Plus de la moitié des raffinements SRL n'améliorent pas l'erreur des modules.
+        - alert: ProoftagQRSRPGError
+          expr: increase(prooftag_qr_srpg_runs_total{outcome="error"}[15m]) > 0
+          for: 1m
+          labels:
+            severity: warning
+            service: prooftag-qr
+            team: proofchat
+          annotations:
+            summary: Erreur de la boucle SRPG
+            description: La boucle DDIM différentiable a échoué ; ses sorties ne doivent pas être interprétées comme valides.
+        - alert: ProoftagQRSRPGIneffective
+          expr: |
+            sum(increase(prooftag_qr_srpg_runs_total{outcome=~"rejected_.*"}[2h]))
+            / clamp_min(sum(increase(prooftag_qr_srpg_runs_total[2h])), 1) > 0.75
+            and sum(increase(prooftag_qr_srpg_runs_total[2h])) >= 6
+          for: 10m
+          labels:
+            severity: warning
+            service: prooftag-qr
+            team: proofchat
+          annotations:
+            summary: SRPG n'améliore pas l'erreur QR réelle
+            description: Plus de 75 % des sorties SRPG échouent au garde-fou d'amélioration sur au moins six exécutions.
+        - alert: ProoftagQRSRPGMemoryPressure
+          expr: prooftag_qr_srpg_peak_gpu_memory_allocated_mib > 18432
+          for: 1m
+          labels:
+            severity: warning
+            service: prooftag-qr
+            team: proofchat
+          annotations:
+            summary: SRPG approche la limite VRAM de la RTX 4000 Ada
+            description: Le pic d'allocation PyTorch dépasse 18 Gio sur une carte de 20 Gio.
         - alert: ProoftagQRPostgresUnavailable
           expr: kube_statefulset_status_replicas_ready{namespace="qr-core",statefulset="prooftag-qr-postgres"} < 1
           for: 5m

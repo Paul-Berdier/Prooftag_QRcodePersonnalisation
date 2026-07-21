@@ -113,6 +113,39 @@ GUIDED_REDIFFUSION_IMAGE_CHANGE = Gauge(
     "Latest visual change caused by guided rediffusion",
     ["metric"],
 )
+SRPG_RUNS = Counter(
+    "prooftag_qr_srpg_runs_total",
+    "True in-denoising SRPG outcomes",
+    ["outcome"],
+)
+SRPG_DURATION = Histogram(
+    "prooftag_qr_srpg_duration_seconds",
+    "Time spent in the SRPG DDIM loop",
+    buckets=(1, 2, 5, 10, 15, 20, 30, 45, 60, 90, 120),
+)
+SRPG_MODULE_ERROR_RATE = Gauge(
+    "prooftag_qr_srpg_module_error_rate",
+    "Actual module error before and after SRPG",
+    ["stage"],
+)
+SRPG_STEP_DIAGNOSTIC = Gauge(
+    "prooftag_qr_srpg_step_diagnostic",
+    "Diagnostics retained for every step of the latest SRPG run",
+    ["step", "metric"],
+)
+SRPG_IMAGE_CHANGE = Gauge(
+    "prooftag_qr_srpg_image_change",
+    "Visual change caused by the latest SRPG run",
+    ["metric"],
+)
+SRPG_PEAK_GPU_MEMORY_MIB = Gauge(
+    "prooftag_qr_srpg_peak_gpu_memory_allocated_mib",
+    "Peak CUDA memory allocated by the latest SRPG run in MiB",
+)
+SRPG_GRADIENT_CLIPS = Counter(
+    "prooftag_qr_srpg_gradient_clips_total",
+    "SRPG steps whose noise delta reached its safety cap",
+)
 LATENT_REFINEMENTS = Counter(
     "prooftag_qr_latent_refinements_total",
     "Latent SRL refinement outcomes",

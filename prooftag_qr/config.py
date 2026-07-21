@@ -28,15 +28,24 @@ class Settings(BaseSettings):
     guided_rediffusion_strength: float = Field(default=0.30, ge=0.05, le=1.0)
     guided_rediffusion_controlnet_scale: float = Field(default=1.75, gt=0.0, le=3.0)
     guided_rediffusion_guide_center_scale: float = Field(default=0.45, ge=0.0, le=1.0)
-    guided_rediffusion_guide_confidence_margin: float = Field(
-        default=16.0, ge=0.0, lt=128.0
-    )
+    guided_rediffusion_guide_confidence_margin: float = Field(default=16.0, ge=0.0, lt=128.0)
     guided_rediffusion_mask_dilation_px: int = Field(default=4, ge=0, le=64)
     guided_rediffusion_mask_feather_px: int = Field(default=4, ge=0, le=64)
-    guided_rediffusion_max_mean_absolute_change: float = Field(
-        default=0.12, gt=0.0, le=1.0
-    )
+    guided_rediffusion_max_mean_absolute_change: float = Field(default=0.12, gt=0.0, le=1.0)
+    guided_rediffusion_min_relative_module_improvement: float = Field(default=0.01, ge=0.0, le=1.0)
     guided_rediffusion_seed_offset: int = Field(default=1_000_003, ge=0, le=2**32 - 1)
+    srpg_enabled: bool = False
+    srpg_steps: int = Field(default=40, ge=1, le=100)
+    srpg_strength: float = Field(default=1.0, gt=0.0, le=1.0)
+    srpg_controlnet_scale: float = Field(default=1.35, gt=0.0, le=3.0)
+    srpg_qr_weight: float = Field(default=500.0, gt=0.0, le=5000.0)
+    srpg_perceptual_weight: float = Field(default=3.0, ge=0.0, le=100.0)
+    srpg_functional_weight: float = Field(default=4.0, ge=1.0, le=100.0)
+    srpg_target_module_error_rate: float = Field(default=0.0, ge=0.0, le=1.0)
+    srpg_max_noise_delta_rms: float = Field(default=2.0, gt=0.0, le=100.0)
+    srpg_max_mean_absolute_change: float = Field(default=0.20, gt=0.0, le=1.0)
+    srpg_min_relative_module_improvement: float = Field(default=0.10, ge=0.0, le=1.0)
+    srpg_seed_offset: int = Field(default=2_000_003, ge=0, le=2**32 - 1)
     latent_refinement_enabled: bool = False
     latent_refinement_iterations: int = Field(default=8, ge=1, le=100)
     latent_refinement_learning_rate: float = Field(default=0.02, gt=0.0, le=10.0)
@@ -45,9 +54,8 @@ class Settings(BaseSettings):
     latent_refinement_functional_weight: float = Field(default=4.0, ge=1.0, le=100.0)
     latent_refinement_target_module_error_rate: float = Field(default=0.0, ge=0.0, le=1.0)
     latent_refinement_max_latent_delta: float = Field(default=0.10, gt=0.0, le=10.0)
-    latent_refinement_max_mean_absolute_change: float = Field(
-        default=0.08, gt=0.0, le=1.0
-    )
+    latent_refinement_max_mean_absolute_change: float = Field(default=0.08, gt=0.0, le=1.0)
+    latent_refinement_min_relative_module_improvement: float = Field(default=0.01, ge=0.0, le=1.0)
     save_debug_artifacts: bool = False
     artifact_store: Literal["local", "s3"] = "local"
     database_backend: Literal["sqlite", "postgresql"] = "sqlite"
@@ -64,13 +72,15 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_guided_rediffusion_schedule(self) -> "Settings":
-        scheduler_steps = ceil(
-            self.guided_rediffusion_steps / self.guided_rediffusion_strength
-        )
+        scheduler_steps = ceil(self.guided_rediffusion_steps / self.guided_rediffusion_strength)
         if scheduler_steps > 100:
             raise ValueError(
                 "guided rediffusion effective steps / strength cannot schedule over 100 steps"
             )
+        if self.srpg_enabled and self.guided_rediffusion_enabled:
+            raise ValueError("SRPG and legacy guided rediffusion cannot be enabled together")
+        if self.srpg_enabled and self.controlnet_pipeline_mode != "img2img":
+            raise ValueError("SRPG requires the img2img ControlNet pipeline")
         return self
 
     @property

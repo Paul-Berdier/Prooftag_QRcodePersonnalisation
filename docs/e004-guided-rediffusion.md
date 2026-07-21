@@ -54,10 +54,10 @@ qu'aurait produites naïvement `num_inference_steps=8` avec `strength=0,30`.
 - `attempt_1_guided_control.png` : image de contrôle contenant les corrections ;
 - `attempt_1_guided_mask.png` : zone dans laquelle la seconde diffusion peut remplacer le brut ;
 - `attempt_1_guided_unprojected.png` : sortie globale brute de la seconde diffusion ;
-- `attempt_1_guided_candidate.png` : cette sortie reprojetée uniquement sous le masque local ;
+- `attempt_1_guided_projected.png` : sortie reprojetée rejetée par la porte QR/MAE ;
 - `attempt_1_guided.png` : résultat localisé de la seconde diffusion ;
 - `attempt_1_guided_latent_srl.png` : résultat après SR-MPGD, lorsqu'il franchit sa porte ;
-- `final.png` : première variante ayant réussi toutes les validations ;
+- `final.png` : variante valide ayant le plus faible écart visuel mesuré ;
 - `refinements.csv` : paramètres et diagnostics internes des deux étages.
 
 ## Protocole serveur
@@ -106,3 +106,29 @@ pendant la seconde diffusion, puis SR-MPGD après diffusion. C'est une adaptatio
 la pile actuelle et la RTX 4000 Ada, mais pas encore une reproduction mathématique complète de
 SRPG. Cette limite est volontairement documentée afin de ne pas attribuer au projet les résultats
 de l'article avant validation locale.
+
+## Résultat mesuré — 21 juillet 2026
+
+Campagnes `20260721T074704Z-308953d2` (contrôle) et
+`20260721T074752Z-308953d2` (E004), mêmes six images brutes bit pour bit :
+
+| Mesure moyenne | Contrôle | E004 | Décision |
+|---|---:|---:|---|
+| Lecture brute | 0/26 | 0/26 | aucun progrès |
+| Lecture guidée / latent | — | 0/26 | aucun progrès |
+| Erreur module brute | 13,152 % | 13,152 % | identique |
+| Erreur du guide | — | 5,825 % | le guide porte bien le signal |
+| Erreur après rediffusion | — | 15,072 % | régression |
+| Couverture moyenne du masque | — | 68,16 % | pas réellement local |
+| Pixels modifiés du final | 58,75 % | 74,00 % | +25,95 % relatif |
+| Temps total | 5,18 s | 9,62 s | +85,7 % |
+| Pic VRAM observé | 3 860 MiB | 6 192 MiB | +2 332 MiB |
+
+Les six livraisons atteignent encore 26/26 uniquement grâce aux réparations déterministes. Le
+garde-fou E004 acceptait la rediffusion sur la seule MAE, sans exiger une amélioration QR réelle.
+De plus, `guided_candidate` et `guided` étaient dupliqués bit pour bit dans les six cas, ce qui
+donnait artificiellement l'impression de deux étapes différentes dans le rapport.
+
+**Décision : E004 est rejetée.** L'ancien mode reste désactivé. Le code postérieur renomme
+l'artefact rejeté `guided_projected`, supprime la duplication et exige une amélioration module
+réelle. La suite est E005, documentée dans `docs/e005-srpg.md`.

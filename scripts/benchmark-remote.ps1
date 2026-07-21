@@ -3,13 +3,18 @@ param(
     [string]$RemoteRepository = "~/apps/Prooftag_QRcodePersonnalisation",
     [string]$Destination = (Join-Path ([Environment]::GetFolderPath("UserProfile")) "Downloads\prooftag-benchmarks"),
     [switch]$E004,
+    [switch]$E005,
     [switch]$NoOpen
 )
 
 $ErrorActionPreference = "Stop"
 New-Item -ItemType Directory -Force -Path $Destination | Out-Null
 
-$makeTarget = if ($E004) { "benchmark-e004" } else { "benchmark" }
+if ($E004 -and $E005) {
+    throw "Les campagnes E004 et E005 sont mutuellement exclusives."
+}
+
+$makeTarget = if ($E004) { "benchmark-e004" } elseif ($E005) { "benchmark-e005" } else { "benchmark" }
 $remoteCommand = "cd $RemoteRepository && make $makeTarget"
 $remoteOutput = & ssh $Server $remoteCommand | Tee-Object -Variable capturedOutput
 if ($LASTEXITCODE -ne 0) {
@@ -18,6 +23,8 @@ if ($LASTEXITCODE -ne 0) {
 
 $archivePrefixes = if ($E004) {
     @("E004_BASELINE_ARCHIVE=", "E004_GUIDED_ARCHIVE=")
+} elseif ($E005) {
+    @("E005_BASELINE_ARCHIVE=", "E005_SRPG_ARCHIVE=")
 } else {
     @("BENCHMARK_ARCHIVE=")
 }

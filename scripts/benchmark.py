@@ -7,6 +7,7 @@ import csv
 import hashlib
 import html
 import json
+import os
 import re
 import shutil
 import statistics
@@ -19,7 +20,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-BENCHMARK_PROTOCOL_VERSION = "2.1"
+BENCHMARK_PROTOCOL_VERSION = "3.0"
 
 CASES = (
     {
@@ -63,6 +64,10 @@ CASES = (
     },
 )
 
+BENCHMARK_MAX_ATTEMPTS = int(os.environ.get("PROOFTAG_QR_BENCHMARK_MAX_ATTEMPTS", "3"))
+if not 1 <= BENCHMARK_MAX_ATTEMPTS <= 20:
+    raise ValueError("PROOFTAG_QR_BENCHMARK_MAX_ATTEMPTS must be between 1 and 20")
+
 GENERATION_PARAMETERS = {
     "backend": "controlnet",
     "negative_prompt": "blurry, low quality, text, watermark, unreadable QR",
@@ -71,7 +76,7 @@ GENERATION_PARAMETERS = {
     "guidance_scale": 12,
     "controlnet_scale": 1.5,
     "strength": 0.9,
-    "max_attempts": 3,
+    "max_attempts": BENCHMARK_MAX_ATTEMPTS,
 }
 
 DEBUG_VARIANTS = (
@@ -79,10 +84,12 @@ DEBUG_VARIANTS = (
     "guided_control",
     "guided_mask",
     "guided_unprojected",
-    "guided_candidate",
+    "guided_projected",
     "guided",
+    "srpg",
     "latent_srl",
     "guided_latent_srl",
+    "srpg_latent_srl",
     "incorrect_80",
     "incorrect_85",
     "uncertain_16",
@@ -98,9 +105,10 @@ def is_debug_variant(name: str) -> bool:
     if name in DEBUG_VARIANTS:
         return True
     base = name
-    for prefix in ("guided_latent_", "guided_", "latent_"):
+    for prefix in ("guided_latent_", "srpg_latent_", "guided_", "srpg_", "latent_"):
         base = base.removeprefix(prefix)
     return base in DEBUG_VARIANTS
+
 
 GLOBAL_VARIANTS = frozenset(
     {
@@ -126,6 +134,9 @@ SUMMARY_FIELDS = (
     "first_attempt_scan_pass_rate",
     "raw_scan_pass_rate",
     "guided_scan_pass_rate",
+    "srpg_scan_pass_rate",
+    "srpg_module_error_rate",
+    "srpg_stage_status",
     "latent_scan_pass_rate",
     "global_fallback_used",
     "qr_version",
@@ -371,6 +382,29 @@ def format_percent(value: Any) -> str:
     return f"{value * 100:.1f}%"
 
 
+def srpg_sparkline(step_metrics: list[dict[str, Any]]) -> str:
+    values = [
+        float(step["module_error_rate"])
+        for step in step_metrics
+        if isinstance(step.get("module_error_rate"), int | float)
+    ]
+    if len(values) < 2:
+        return ""
+    width, height, padding = 300, 72, 5
+    lower, upper = min(values), max(values)
+    span = max(upper - lower, 1e-9)
+    points = " ".join(
+        f"{padding + index * (width - 2 * padding) / (len(values) - 1):.1f},"
+        f"{padding + (upper - value) * (height - 2 * padding) / span:.1f}"
+        for index, value in enumerate(values)
+    )
+    return (
+        '<svg class="spark" viewBox="0 0 300 72" role="img" '
+        'aria-label="Erreur de modules par étape SRPG">'
+        f'<polyline points="{points}" /></svg>'
+    )
+
+
 def render_report(
     run_name: str,
     summary: dict[str, Any],
@@ -431,10 +465,21 @@ def render_report(
             if row.get("guided_unprojected_artifact_available")
             else ""
         )
-        guided_candidate_figure = (
-            f'<figure><img src="cases/{case}/attempt_1_guided_candidate.png" '
+        guided_projected_figure = (
+            f'<figure><img src="cases/{case}/attempt_1_guided_projected.png" '
             f'alt="Rediffusion projetée {case}"><figcaption>Projection locale</figcaption></figure>'
-            if row.get("guided_candidate_artifact_available")
+            if row.get("guided_projected_artifact_available")
+            else ""
+        )
+        srpg_figure = (
+            f'<figure><img src="cases/{case}/attempt_1_srpg.png" '
+            f'alt="SRPG {case}"><figcaption>SRPG - '
+            f"{html.escape(str(row.get('srpg_stage_status') or 'rejected'))}; "
+            f"scan {format_percent(row.get('srpg_scan_pass_rate'))}; "
+            f"module error {format_percent(row.get('srpg_module_error_rate'))}"
+            f"{srpg_sparkline(row.get('srpg_step_metrics') or [])}"
+            f"</figcaption></figure>"
+            if row.get("srpg_artifact_available")
             else ""
         )
         guided_control_figure = (
@@ -465,8 +510,9 @@ def render_report(
                 {guided_control_figure}
                 {guided_mask_figure}
                 {guided_unprojected_figure}
-                {guided_candidate_figure}
+                {guided_projected_figure}
                 {guided_figure}
+                {srpg_figure}
                 {latent_figure}
                 <figure><img src="{final_path}" alt="Image finale {case}"><figcaption>Finale</figcaption></figure>
               </div>
@@ -503,6 +549,7 @@ def render_report(
     .track {{ height:13px; background:var(--line); border-radius:7px; overflow:hidden; }} .track i {{ display:block; height:100%; }} .scan {{ background:var(--scan); }} .change {{ background:var(--change); }} .time {{ background:var(--time); }}
     .gallery {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(380px,1fr)); gap:16px; }} .images {{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }}
     figure {{ margin:0; }} img {{ display:block; width:100%; aspect-ratio:1; object-fit:contain; background:var(--bg); }} figcaption {{ color:var(--muted); text-align:center; }}
+    .spark {{ display:block; width:100%; height:72px; margin-top:6px; }} .spark polyline {{ fill:none; stroke:var(--scan); stroke-width:3; vector-effect:non-scaling-stroke; }}
     dl {{ display:grid; grid-template-columns:1fr 1fr; gap:5px 10px; }} dt {{ color:var(--muted); }} dd {{ margin:0; text-align:right; }}
     .table-wrap {{ overflow-x:auto; }} table {{ width:100%; border-collapse:collapse; }} th,td {{ padding:8px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; }} th:first-child,td:first-child {{ text-align:left; }}
     a {{ color:var(--time); }} section {{ margin-top:30px; }}
@@ -516,7 +563,8 @@ def render_report(
     <div class="stat"><span>Livraison finale</span><strong>{format_percent(summary["acceptance_rate"])}</strong><small>{summary["accepted_cases"]}/{summary["case_count"]} images</small></div>
     <div class="stat"><span>Premier essai</span><strong>{format_percent(summary.get("first_attempt_acceptance_rate"))}</strong></div>
     <div class="stat"><span>Brut strict, premier essai</span><strong>{format_percent(summary.get("raw_acceptance_rate"))}</strong></div>
-    <div class="stat"><span>Brut + diffusion guidée + latent</span><strong>{format_percent(summary.get("post_latent_acceptance_rate"))}</strong></div>
+    <div class="stat"><span>Avant réparation déterministe</span><strong>{format_percent(summary.get("post_latent_acceptance_rate"))}</strong></div>
+    <div class="stat"><span>Sauvetages SRPG</span><strong>{summary.get("srpg_rescue_cases", 0)}</strong></div>
     <div class="stat"><span>Sauvetages diffusion guidée</span><strong>{summary.get("guided_rescue_cases", 0)}</strong></div>
     <div class="stat"><span>Sauvetages latents</span><strong>{summary.get("latent_rescue_cases", 0)}</strong></div>
     <div class="stat"><span>Tentatives moyennes</span><strong>{format_number(summary.get("mean_attempts"), 2)}</strong></div>
@@ -591,29 +639,27 @@ def benchmark_case(
             "initial_module_error_rate": event.get("initial_module_error_rate"),
             "control_module_error_rate": event.get("control_module_error_rate"),
             "final_module_error_rate": event.get("final_module_error_rate"),
-            "best_observed_module_error_rate": event.get(
-                "best_observed_module_error_rate"
-            ),
+            "best_observed_module_error_rate": event.get("best_observed_module_error_rate"),
             "changed_pixel_ratio": event.get("changed_pixel_ratio"),
             "mask_coverage": event.get("mask_coverage"),
             "mean_absolute_change": event.get("mean_absolute_change"),
-            "unprojected_changed_pixel_ratio": event.get(
-                "unprojected_changed_pixel_ratio"
-            ),
-            "unprojected_mean_absolute_change": event.get(
-                "unprojected_mean_absolute_change"
-            ),
-            "best_observed_mean_absolute_change": event.get(
-                "best_observed_mean_absolute_change"
-            ),
+            "peak_gpu_memory_allocated_mib": event.get("peak_gpu_memory_allocated_mib"),
+            "unprojected_changed_pixel_ratio": event.get("unprojected_changed_pixel_ratio"),
+            "unprojected_mean_absolute_change": event.get("unprojected_mean_absolute_change"),
+            "best_observed_mean_absolute_change": event.get("best_observed_mean_absolute_change"),
+            "actual_initial_module_error_rate": event.get("actual_initial_module_error_rate"),
+            "actual_final_module_error_rate": event.get("actual_final_module_error_rate"),
             "accepted": event.get("accepted"),
             "rejection_reason": event.get("rejection_reason"),
+            "step_metrics": json.dumps(event.get("step_metrics") or [], separators=(",", ":")),
         }
         for event in events
         if event.get("message")
         in {
             "guided_rediffusion_completed",
             "guided_rediffusion_failed",
+            "srpg_completed",
+            "srpg_failed",
             "latent_refinement_completed",
             "latent_refinement_failed",
         }
@@ -635,7 +681,8 @@ def benchmark_case(
             "attempt_1_guided_control",
             "attempt_1_guided_mask",
             "attempt_1_guided_unprojected",
-            "attempt_1_guided_candidate",
+            "attempt_1_guided_projected",
+            "attempt_1_srpg",
         )
     )
     artifact_names.update(
@@ -708,6 +755,14 @@ def benchmark_case(
     quality = response.get("quality_metrics") or {}
     attempt_details = response.get("attempt_details") or []
     first_attempt = attempt_details[0] if attempt_details else {}
+    srpg_event = next(
+        (
+            event
+            for event in events
+            if event.get("message") == "srpg_completed" and event.get("attempt") == 1
+        ),
+        {},
+    )
     row = {
         "case": case["name"],
         "run_id": run_id,
@@ -733,26 +788,33 @@ def benchmark_case(
             ),
             None,
         ),
+        "srpg_scan_pass_rate": next(
+            (
+                item.get("scan_pass_rate")
+                for item in variant_rows
+                if item.get("attempt") == 1 and item.get("variant") == "srpg"
+            ),
+            0.0 if srpg_event else None,
+        ),
+        "srpg_module_error_rate": srpg_event.get("final_module_error_rate"),
+        "srpg_stage_status": srpg_event.get("status"),
+        "srpg_step_metrics": srpg_event.get("step_metrics") or [],
         "latent_scan_pass_rate": next(
             (
                 item.get("scan_pass_rate")
                 for item in variant_rows
-                if item.get("attempt") == 1
-                and str(item.get("variant", "")).endswith("latent_srl")
+                if item.get("attempt") == 1 and str(item.get("variant", "")).endswith("latent_srl")
             ),
             None,
         ),
         "guided_artifact_available": "attempt_1_guided" in available_variants,
-        "guided_control_artifact_available": (
-            "attempt_1_guided_control" in available_variants
-        ),
+        "guided_control_artifact_available": ("attempt_1_guided_control" in available_variants),
         "guided_mask_artifact_available": "attempt_1_guided_mask" in available_variants,
         "guided_unprojected_artifact_available": (
             "attempt_1_guided_unprojected" in available_variants
         ),
-        "guided_candidate_artifact_available": (
-            "attempt_1_guided_candidate" in available_variants
-        ),
+        "guided_projected_artifact_available": ("attempt_1_guided_projected" in available_variants),
+        "srpg_artifact_available": "attempt_1_srpg" in available_variants,
         "latent_artifact_variant": next(
             (
                 item.get("variant")
@@ -888,9 +950,7 @@ def main() -> int:
 
     accepted_cases = sum(row.get("status") == "accepted" for row in results)
     first_attempt_accepted_cases = sum(row.get("first_attempt_accepted") is True for row in results)
-    first_raw = [
-        row for row in variants if row.get("attempt") == 1 and row.get("variant") == "raw"
-    ]
+    first_raw = [row for row in variants if row.get("attempt") == 1 and row.get("variant") == "raw"]
     first_latent = [
         row
         for row in variants
@@ -899,9 +959,22 @@ def main() -> int:
     first_guided = [
         row for row in variants if row.get("attempt") == 1 and row.get("variant") == "guided"
     ]
-    raw_accepted_cases = sum(row.get("status") == "accepted" for row in first_raw)
-    guided_rescue_cases = sum(row.get("status") == "accepted" for row in first_guided)
-    latent_rescue_cases = sum(row.get("status") == "accepted" for row in first_latent)
+    first_srpg = [
+        row for row in variants if row.get("attempt") == 1 and row.get("variant") == "srpg"
+    ]
+    raw_accepted = {row.get("case") for row in first_raw if row.get("status") == "accepted"}
+    guided_accepted = {row.get("case") for row in first_guided if row.get("status") == "accepted"}
+    srpg_accepted = {row.get("case") for row in first_srpg if row.get("status") == "accepted"}
+    latent_accepted = {row.get("case") for row in first_latent if row.get("status") == "accepted"}
+    raw_accepted_cases = len(raw_accepted)
+    guided_rescue_cases = len(guided_accepted - raw_accepted)
+    srpg_rescue_cases = len(srpg_accepted - raw_accepted)
+    latent_rescue_cases = len(latent_accepted - raw_accepted - guided_accepted - srpg_accepted)
+    pre_repair_accepted_cases = {
+        row.get("case")
+        for row in (*first_raw, *first_guided, *first_srpg, *first_latent)
+        if row.get("status") == "accepted"
+    }
     summary = {
         "benchmark_protocol_version": BENCHMARK_PROTOCOL_VERSION,
         "case_definitions_sha256": hashlib.sha256(
@@ -924,18 +997,20 @@ def main() -> int:
         "guided_evaluated_cases": len(first_guided),
         "guided_rescue_cases": guided_rescue_cases,
         "guided_acceptance_rate": (
-            guided_rescue_cases / len(first_guided) if first_guided else None
+            len(guided_accepted) / len(first_guided) if first_guided else None
         ),
         "mean_guided_scan_pass_rate": average(first_guided, "scan_pass_rate"),
+        "srpg_evaluated_cases": len(first_srpg),
+        "srpg_rescue_cases": srpg_rescue_cases,
+        "srpg_acceptance_rate": (len(srpg_accepted) / len(first_srpg) if first_srpg else None),
+        "mean_srpg_scan_pass_rate": average(first_srpg, "scan_pass_rate"),
         "latent_evaluated_cases": len(first_latent),
         "latent_rescue_cases": latent_rescue_cases,
         "latent_acceptance_rate": (
-            latent_rescue_cases / len(first_latent) if first_latent else None
+            len(latent_accepted) / len(first_latent) if first_latent else None
         ),
         "mean_latent_scan_pass_rate": average(first_latent, "scan_pass_rate"),
-        "post_latent_acceptance_rate": (
-            (raw_accepted_cases + guided_rescue_cases + latent_rescue_cases) / len(results)
-        ),
+        "post_latent_acceptance_rate": (len(pre_repair_accepted_cases) / len(results)),
         "mean_attempts": average(results, "attempts"),
         "global_fallback_cases": sum(row.get("global_fallback_used") is True for row in results),
         "mean_scan_pass_rate": average(results, "scan_pass_rate"),
@@ -995,6 +1070,7 @@ def main() -> int:
         "module_error_rate",
         "changed_pixel_ratio",
         "mean_absolute_change",
+        "peak_gpu_memory_allocated_mib",
         "entropy_bits",
         "clipped_pixel_ratio",
         "brightness_mean",
@@ -1050,10 +1126,52 @@ def main() -> int:
         "unprojected_changed_pixel_ratio",
         "unprojected_mean_absolute_change",
         "best_observed_mean_absolute_change",
+        "actual_initial_module_error_rate",
+        "actual_final_module_error_rate",
         "accepted",
         "rejection_reason",
+        "step_metrics",
     )
     write_csv(run_dir / "refinements.csv", refinements, refinement_fields)
+    srpg_steps = []
+    for refinement in refinements:
+        if refinement.get("stage") != "srpg_completed":
+            continue
+        try:
+            step_metrics = json.loads(refinement.get("step_metrics") or "[]")
+        except json.JSONDecodeError:
+            step_metrics = []
+        for step in step_metrics:
+            srpg_steps.append(
+                {
+                    "case": refinement.get("case"),
+                    "run_id": refinement.get("run_id"),
+                    "attempt": refinement.get("attempt"),
+                    "seed": refinement.get("seed"),
+                    "status": refinement.get("status"),
+                    **step,
+                }
+            )
+    write_csv(
+        run_dir / "srpg-steps.csv",
+        srpg_steps,
+        (
+            "case",
+            "run_id",
+            "attempt",
+            "seed",
+            "status",
+            "index",
+            "timestep",
+            "module_error_rate",
+            "srl",
+            "lpips",
+            "gradient_rms",
+            "noise_delta_rms",
+            "gradient_clipped",
+            "guidance_applied",
+        ),
+    )
     comparison_fields = (
         "case",
         "scan_pass_rate",

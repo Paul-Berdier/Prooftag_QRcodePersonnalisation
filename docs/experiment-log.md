@@ -320,3 +320,65 @@ La campagne courte doit comparer une baseline et E004 sur le même commit et la 
 On n'élargit les paramètres que si la galerie contient les quatre étapes, que les six finals restent
 à 26/26, et qu'au moins une variante `guided_*` réduit la réparation visible. Le protocole et les
 commandes sont détaillés dans `docs/e004-guided-rediffusion.md`.
+
+### Résultat GPU E004 — échec confirmé
+
+- **Archives :** `20260721T074704Z-308953d2.tar.gz` et
+  `20260721T074752Z-308953d2.tar.gz` ;
+- **Contrôle d'identité :** 6/6 images brutes ont le même SHA-256 entre les campagnes ;
+- **Lecture :** `raw`, `guided` et `guided_latent_srl` restent à 0/26 pour chaque cas ;
+- **Signal :** le guide descend à 5,825 % d'erreur module moyenne, mais la rediffusion remonte à
+  15,072 % contre 13,152 % au départ ;
+- **Localité :** masque moyen 68,16 %, jusqu'à 83,68 % sur le cas dense ;
+- **Final :** toujours 26/26 par réparation déterministe, mais 74,00 % des pixels sont modifiés
+  contre 58,75 % au contrôle ;
+- **Coût :** 9,62 s contre 5,18 s (+85,7 %) et 6 192 MiB contre 3 860 MiB ;
+- **Anomalie rapport :** `guided_candidate` et `guided` sont identiques bit pour bit dans les six
+  cas.
+
+**Décision : E004 est rejetée, aucune ablation E004b.** L'acceptation fondée uniquement sur la
+MAE était incorrecte. Le code exige désormais une amélioration QR réelle et ne publie plus deux
+artefacts identiques. L'ancien mode reste désactivé.
+
+## E005 — SRPG dans chaque timestep DDIM
+
+- **Date :** 2026-07-21
+- **État :** implémentation et instrumentation locales terminées ; campagne RTX requise
+- **Question :** le gradient SRL + LPIPS injecté dans chaque prédiction de bruit produit-il une
+  amélioration QR effectivement mesurée par les décodeurs ?
+
+### Corrections méthodologiques
+
+- boucle DDIM explicite à 40 pas au lieu d'un appel img2img suivi d'une projection ;
+- calcul différentiable `z0|t -> VAE -> SRL + LPIPS -> gradient(z_t)` à chaque pas ;
+- poids gelés et gradient checkpointing UNet/ControlNet pour la carte 20 Go ;
+- cap RMS sur le delta de bruit, rejet des NaN/Inf et suivi du pic CUDA ;
+- image SRPG toujours soumise aux 26 validations, même quand sa porte interne la rejette ;
+- réutilisation comme base des réparations seulement avec baisse QR réelle et MAE sous la porte ;
+- sélection finale parmi toutes les variantes valides par MAE puis proportion de pixels changés,
+  au lieu de conserver la première réparation lisible ;
+- export sans duplication : `attempt_1_srpg.png`, `srpg-steps.csv`, courbe par cas et journal des
+  40 pas ;
+- campagne causale baseline/SRPG seul, les raffinements E004 et latent étant désactivés.
+
+### Limite déclarée avant résultat
+
+La cible ControlNet est encore le QR exact ; QArt n'est pas reproduit dans E005a. Le résultat ne
+pourra donc être comparé aux 99–100 % de DiffQRCoder que comme une adaptation partielle. Aucun taux
+de réussite E005 n'est inscrit ici avant réception des deux archives produites par
+`make benchmark-e005`.
+
+### Validation locale avant publication
+
+- Ruff : aucun défaut sur le package, les scripts, les tests et `main.py` ;
+- tests : 37 collectés, 34 réussis et 3 ignorés faute de PyTorch dans le venv Windows ;
+- couverture : 68 %, la boucle GPU restant volontairement non exécutée sur ce poste ;
+- compilation Python : réussie ;
+- Kubernetes : 14 documents YAML chargés, dashboard JSON valide et 40 panneaux uniques ;
+- PowerShell : analyse syntaxique AST réussie pour le lanceur distant ;
+- espaces/patch : `git diff --check` réussi.
+
+Les deux tests différentiables SRPG et un test latent nécessitent PyTorch. Le Dockerfile transforme
+cette absence locale en contrôle de build : il importe la pile GPU et instancie LPIPS/AlexNet afin
+de télécharger les poids dans l'image avant le déploiement. La syntaxe Bash et l'exécution CUDA
+restent des contrôles serveur obligatoires ; Windows ne possède aucune distribution WSL locale.

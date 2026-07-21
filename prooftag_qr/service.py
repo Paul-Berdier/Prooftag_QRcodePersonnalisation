@@ -84,7 +84,9 @@ class GenerationService:
                     attempt_best_pass_rate = -1.0
                     attempt_best_module_error_rate = 1.0
                     attempt_best_changed_pixel_ratio = float("inf")
+                    attempt_best_mean_absolute_change = float("inf")
                     attempt_best_variant = "raw"
+                    attempt_best_accepted = False
                     attempt_validation_ms = 0.0
                     attempt_accepted = False
                     allow_global_repair = (
@@ -164,11 +166,18 @@ class GenerationService:
                                     variant_name, quality_name
                                 ).set(quality_value)
                             debug_variant = variant_name
-                            for prefix in ("guided_latent_", "guided_", "latent_"):
+                            for prefix in (
+                                "guided_latent_",
+                                "srpg_latent_",
+                                "guided_",
+                                "srpg_",
+                                "latent_",
+                            ):
                                 debug_variant = debug_variant.removeprefix(prefix)
                             if self.settings.save_debug_artifacts and debug_variant in {
                                 "raw",
                                 "guided",
+                                "srpg",
                                 "srl",
                                 "rounded_16",
                                 "rounded_32",
@@ -212,23 +221,47 @@ class GenerationService:
                                 },
                             )
                         variant_changed_pixel_ratio = variant_quality["changed_pixel_ratio"]
-                        if (
-                            accepted
-                            or pass_rate > attempt_best_pass_rate
+                        variant_mean_absolute_change = variant_quality["mean_absolute_change"]
+                        accepted_is_better = accepted and (
+                            not attempt_best_accepted
                             or (
-                                pass_rate == attempt_best_pass_rate
-                                and variant_changed_pixel_ratio < attempt_best_changed_pixel_ratio
+                                variant_mean_absolute_change,
+                                variant_changed_pixel_ratio,
                             )
-                        ):
+                            < (
+                                attempt_best_mean_absolute_change,
+                                attempt_best_changed_pixel_ratio,
+                            )
+                        )
+                        rejected_is_better = (
+                            not accepted
+                            and not attempt_best_accepted
+                            and (
+                                pass_rate > attempt_best_pass_rate
+                                or (
+                                    pass_rate == attempt_best_pass_rate
+                                    and (
+                                        variant_module_error_rate,
+                                        variant_mean_absolute_change,
+                                    )
+                                    < (
+                                        attempt_best_module_error_rate,
+                                        attempt_best_mean_absolute_change,
+                                    )
+                                )
+                            )
+                        )
+                        if accepted_is_better or rejected_is_better:
                             attempt_best = candidate
                             attempt_best_records = records
                             attempt_best_pass_rate = pass_rate
                             attempt_best_module_error_rate = variant_module_error_rate
                             attempt_best_changed_pixel_ratio = variant_changed_pixel_ratio
+                            attempt_best_mean_absolute_change = variant_mean_absolute_change
                             attempt_best_variant = variant_name
+                            attempt_best_accepted = accepted
                         if accepted:
                             attempt_accepted = True
-                            break
 
                     if self.settings.save_debug_artifacts:
                         for artifact_name, artifact_image in backend.debug_artifacts().items():

@@ -12,6 +12,8 @@ La version `0.1.0` fournit :
 - une baseline artistique Stable Diffusion 1.5 + ControlNet (`backend=controlnet`) ;
 - une seconde diffusion img2img guidée par les modules QR incorrects, expérimentale et
   désactivée par défaut ;
+- une vraie boucle DDIM/SRPG différentiable à 40 pas, avec SRL + LPIPS et garde-fous VRAM/QR,
+  expérimentale et désactivée par défaut ;
 - un verrouillage des motifs fonctionnels et une réparation adaptative des modules incorrects
   ou peu contrastés, d'abord par luminance et formes arrondies fondues dans l'illustration,
   puis par profils binaires de secours ;
@@ -28,12 +30,14 @@ La version `0.1.0` fournit :
 
 La réparation locale actuelle conserve teinte et texture, remplace les centres carrés visibles
 par des superellipses à bords progressifs et constitue le garde-fou structurel de secours :
-chaque variante est validée et la première qui atteint le seuil strict est livrée.
+chaque variante est validée et, parmi celles qui atteignent le seuil strict, la moins modifiée
+par rapport à l'image artistique est livrée.
 
-Le pipeline de recherche inspiré de DiffQRCoder comporte maintenant une seconde diffusion
-ControlNet localisée, suivie du raffinement latent SRL. Il conserve le meilleur intermédiaire,
-applique des portes de préservation et garde la chaîne brute comme secours. Les deux étages sont
-désactivés par défaut. Voir [`docs/research-roadmap.md`](docs/research-roadmap.md) pour le programme complet et
+La campagne E004 a rejeté la seconde diffusion localisée : elle augmentait l'erreur QR et le
+nombre de pixels réparés. E005 implémente désormais le gradient SRPG dans chaque timestep DDIM,
+teste sa sortie avec tous les décodeurs et garde la chaîne brute comme secours. Tous les modes de
+recherche sont désactivés par défaut. Voir [`docs/e005-srpg.md`](docs/e005-srpg.md),
+[`docs/research-roadmap.md`](docs/research-roadmap.md) pour le programme complet et
 [`docs/experiment-log.md`](docs/experiment-log.md) pour les résultats, erreurs et décisions.
 
 ## API
@@ -100,6 +104,9 @@ une commande.
 Depuis le serveur, `make benchmark` génère six cas reproductibles, toutes les images et les
 mesures comparatives. Depuis le PC Windows, `.\scripts\benchmark-remote.ps1` lance le même
 benchmark à distance, copie l'archive, l'extrait et ouvre le rapport HTML.
+
+La campagne causale E005 (baseline puis SRPG seul) s'exécute avec `make benchmark-e005` sur le
+serveur ou `.\scripts\benchmark-remote.ps1 -E005` depuis Windows.
 
 ## Tests
 
