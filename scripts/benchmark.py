@@ -1047,6 +1047,8 @@ def main() -> int:
         "changed_pixel_ratio",
         "mask_coverage",
         "mean_absolute_change",
+        "unprojected_changed_pixel_ratio",
+        "unprojected_mean_absolute_change",
         "best_observed_mean_absolute_change",
         "accepted",
         "rejection_reason",

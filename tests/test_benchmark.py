@@ -69,3 +69,10 @@ def test_guided_prefixed_variants_are_kept_as_debug_artifacts():
     assert is_debug_variant("guided_latent_srl")
     assert is_debug_variant("guided_latent_uncertain_48")
     assert not is_debug_variant("guided_centers_95")
+
+
+def test_refinement_csv_exports_unprojected_change_metrics():
+    source = Path("scripts/benchmark.py").read_text(encoding="utf-8")
+
+    assert '"unprojected_changed_pixel_ratio",' in source
+    assert '"unprojected_mean_absolute_change",' in source
