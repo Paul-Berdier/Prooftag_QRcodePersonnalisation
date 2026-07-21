@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -139,6 +140,7 @@ def run_srpg_controlnet_img2img(
     guidance_scale: float,
     generator: Any,
     config: SRPGConfig,
+    preview_callback: Callable[[SRPGPreview, SRPGStep], None] | None = None,
 ) -> SRPGResult:
     """Run Stage-2 ControlNet with SRPG inside every DDIM denoising step.
 
@@ -270,6 +272,7 @@ def run_srpg_controlnet_img2img(
             )
             perceptual_loss = perceptual_model(decoded.float(), reference_lpips).mean()
             module_error = float(diagnostics["module_error_rate"].detach().float().item())
+            preview = None
             if index in preview_indices:
                 preview_image = pipeline.image_processor.postprocess(
                     decoded.detach(),
@@ -289,14 +292,13 @@ def run_srpg_controlnet_img2img(
                     blueprint.image.size,
                     Image.Resampling.NEAREST,
                 )
-                previews.append(
-                    SRPGPreview(
-                        index=index,
-                        timestep=int(timestep.item()),
-                        predicted_clean_image=preview_image,
-                        active_module_map=active_map,
-                    )
+                preview = SRPGPreview(
+                    index=index,
+                    timestep=int(timestep.item()),
+                    predicted_clean_image=preview_image,
+                    active_module_map=active_map,
                 )
+                previews.append(preview)
             guidance_applied = module_error > config.target_module_error_rate
             gradient_rms = 0.0
             noise_delta_rms = 0.0
@@ -325,19 +327,20 @@ def run_srpg_controlnet_img2img(
                 noise_delta_rms = float(noise_delta_rms_tensor.item())
                 guided_noise_prediction = noise_prediction + noise_delta.to(noise_prediction.dtype)
 
-            traces.append(
-                SRPGStep(
-                    index=index,
-                    timestep=int(timestep.item()),
-                    module_error_rate=module_error,
-                    scanning_robust_loss=float(scanning_loss.detach().float().item()),
-                    perceptual_loss=float(perceptual_loss.detach().float().item()),
-                    gradient_rms=gradient_rms,
-                    noise_delta_rms=noise_delta_rms,
-                    gradient_clipped=gradient_clipped,
-                    guidance_applied=guidance_applied,
-                )
+            step = SRPGStep(
+                index=index,
+                timestep=int(timestep.item()),
+                module_error_rate=module_error,
+                scanning_robust_loss=float(scanning_loss.detach().float().item()),
+                perceptual_loss=float(perceptual_loss.detach().float().item()),
+                gradient_rms=gradient_rms,
+                noise_delta_rms=noise_delta_rms,
+                gradient_clipped=gradient_clipped,
+                guidance_applied=guidance_applied,
             )
+            traces.append(step)
+            if preview is not None and preview_callback is not None:
+                preview_callback(preview, step)
             latents = pipeline.scheduler.step(
                 guided_noise_prediction.detach(),
                 timestep,

@@ -119,6 +119,7 @@ def test_srpg_loop_runs_guidance_inside_each_fake_ddim_step(monkeypatch):
     monkeypatch.setattr(srpg, "_load_lpips", lambda pipeline, device: FakeLPIPS())
     blueprint = generate_qr("https://example.prooftag.test/t/srpg-fake-loop", "H", size=128)
 
+    callback_steps = []
     result = srpg.run_srpg_controlnet_img2img(
         FakePipeline(),
         blueprint.image,
@@ -135,12 +136,16 @@ def test_srpg_loop_runs_guidance_inside_each_fake_ddim_step(monkeypatch):
             save_step_previews=True,
             preview_interval=1,
         ),
+        preview_callback=lambda preview, step: callback_steps.append(
+            (preview.index, step.index)
+        ),
     )
 
     assert len(result.steps) == 2
     assert [preview.index for preview in result.previews] == [0, 1]
     assert all(preview.predicted_clean_image.size == (128, 128) for preview in result.previews)
     assert all(preview.active_module_map.size == (128, 128) for preview in result.previews)
+    assert callback_steps == [(0, 0), (1, 1)]
     assert all(step.guidance_applied for step in result.steps)
     assert all(np.isfinite(step.gradient_rms) for step in result.steps)
     assert result.image.size == (128, 128)

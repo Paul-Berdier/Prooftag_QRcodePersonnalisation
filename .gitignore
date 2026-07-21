@@ -5,6 +5,7 @@
 .ruff_cache/
 .venv/
 .notebook-cache/
+.ipynb_checkpoints/
 __pycache__/
 *.py[cod]
 *.egg-info/

@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prooftag-qr-notebook
+  namespace: qr-core
+  labels:
+    app: prooftag-qr-notebook
+    app.kubernetes.io/name: prooftag-qr-notebook
+    app.kubernetes.io/part-of: prooftag-qr
+spec:
+  replicas: 0
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: prooftag-qr-notebook
+  template:
+    metadata:
+      labels:
+        app: prooftag-qr-notebook
+        app.kubernetes.io/name: prooftag-qr-notebook
+        app.kubernetes.io/part-of: prooftag-qr
+    spec:
+      runtimeClassName: nvidia
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: notebook
+          image: prooftag-qr-notebook:dev
+          imagePullPolicy: IfNotPresent
+          command: [sh, -c]
+          args:
+            - >-
+              exec python -m jupyterlab
+              --ip=0.0.0.0
+              --port=8888
+              --no-browser
+              --ServerApp.root_dir=/workspace
+              --ServerApp.allow_remote_access=true
+              --IdentityProvider.token="$JUPYTER_TOKEN"
+          ports:
+            - name: jupyter
+              containerPort: 8888
+          envFrom:
+            - configMapRef:
+                name: prooftag-qr-config
+          env:
+            - name: JUPYTER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: prooftag-qr-notebook
+                  key: token
+          resources:
+            requests:
+              cpu: "2"
+              memory: 8Gi
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "12"
+              memory: 32Gi
+              nvidia.com/gpu: "1"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: data
+              mountPath: /workspace/results
+            - name: model-cache
+              mountPath: /cache
+          readinessProbe:
+            tcpSocket:
+              port: jupyter
+            periodSeconds: 5
+            timeoutSeconds: 2
+          livenessProbe:
+            tcpSocket:
+              port: jupyter
+            periodSeconds: 30
+            timeoutSeconds: 3
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: prooftag-qr-data
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: prooftag-qr-model-cache
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prooftag-qr-notebook
+  namespace: qr-core
+  labels:
+    app: prooftag-qr-notebook
+spec:
+  selector:
+    app: prooftag-qr-notebook
+  ports:
+    - name: jupyter
+      port: 8888
+      targetPort: jupyter

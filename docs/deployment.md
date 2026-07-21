@@ -34,6 +34,37 @@ sudo k3s ctr images list | grep prooftag-qr
 Docker et K3s utilisent des magasins d'images distincts ; l'import est donc obligatoire en
 l'absence de registre privé.
 
+## Notebook GPU piloté depuis Windows
+
+Le notebook de génération possède une image dérivée de l'API. Après une modification du code,
+construire et importer les deux images puis appliquer les manifests :
+
+```bash
+cd ~/apps/Prooftag_QRcodePersonnalisation
+docker build -t prooftag-qr:dev .
+docker build -f Dockerfile.notebook -t prooftag-qr-notebook:dev .
+docker save prooftag-qr:dev prooftag-qr-notebook:dev | sudo k3s ctr images import -
+kubectl apply -k deploy/k8s
+```
+
+Le Deployment `prooftag-qr-notebook` est volontairement créé avec zéro réplique. Depuis le PC,
+la commande suivante libère le GPU, démarre Jupyter sur le serveur, établit le tunnel et ouvre le
+notebook de génération réelle :
+
+```powershell
+.\scripts\notebook-remote.ps1
+```
+
+L'arrêt restaure les nombres de réplicas mémorisés avant le démarrage, y compris vLLM :
+
+```powershell
+.\scripts\notebook-remote.ps1 -Stop
+```
+
+Le tunnel n'expose Jupyter que sur `127.0.0.1` du PC et l'accès exige un jeton Kubernetes. Les
+résultats sont conservés dans `/data/notebook-runs` sur le PVC de données. Un second appel à la
+commande de démarrage est idempotent et ne remplace pas l'état de restauration enregistré.
+
 ## Validation des manifests sans mutation
 
 ```bash

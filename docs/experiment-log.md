@@ -402,3 +402,21 @@ contrôle, des `x0` et des cartes d'erreurs aux pas 0/5/10/.../39, puis lecture 
 `notebooks/01_srpg_step_by_step.ipynb`. Une ablation de force ou de loss ne sera définie qu'après
 avoir localisé précisément la rupture. Le benchmark retourne maintenant un échec si une campagne
 est incomplète, ce qui empêche de répéter la fausse comparaison de cette première baseline.
+
+### Correction de l'outil d'observation
+
+Le premier notebook livré pour cette autopsie ne recalculait aucune image : il ne faisait que
+relire les artefacts d'une archive E005. C'était utile pour comparer une campagne, mais insuffisant
+pour observer et modifier l'expérience. Cette confusion d'objectif est enregistrée comme une
+erreur d'outillage.
+
+Le notebook `02_generate_live_on_gpu.ipynb` corrige ce problème. Son kernel s'exécute dans un pod
+Kubernetes qui possède le GPU. Il produit réellement le QR de contrôle, la diffusion brute, les
+prédictions `x0` et cartes d'erreurs pendant la boucle DDIM/SRPG, les métriques par pas, toutes les
+réparations et leurs validations. Le notebook 01 reste volontairement un lecteur d'archives et ne
+doit plus être présenté comme un générateur.
+
+L'accès se fait depuis le navigateur Windows au travers d'un tunnel SSH authentifié. Le lanceur
+mémorise les réplicas de l'API et de vLLM, les met à zéro avant d'attribuer la RTX au notebook, puis
+restaure exactement cet état à l'arrêt. Cette instrumentation n'est pas encore un résultat E005b :
+aucune amélioration n'est revendiquée avant une exécution complète sur la RTX.

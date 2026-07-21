@@ -102,6 +102,16 @@ chaîne dans l'ordre causal : brut, SRPG, courbes des 40 pas, `x0`, cartes d'err
 candidates et finale sélectionnée. Il signale explicitement lorsqu'une finale provient d'un
 fallback déterministe et non de SRPG.
 
+Pour recalculer au lieu de relire une archive, utiliser
+`notebooks/02_generate_live_on_gpu.ipynb`. Il tourne dans le pod GPU du serveur et affiche les
+prévisions `x0`, cartes d'erreurs et métriques pendant l'exécution réelle. Depuis Windows :
+
+```powershell
+.\scripts\notebook-remote.ps1
+# puis Run > Run All Cells dans Jupyter
+.\scripts\notebook-remote.ps1 -Stop
+```
+
 Le script restaure les trois options Kubernetes à leur valeur du ConfigMap même après une erreur.
 Après la campagne, reprendre vLLM explicitement avec `make resume-vllm` uniquement si le GPU ne
 doit plus rester attribué au service QR.

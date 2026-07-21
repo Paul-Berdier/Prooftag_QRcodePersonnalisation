@@ -1,4 +1,4 @@
-.PHONY: install test lint run notebook build deploy status benchmark benchmark-e004 benchmark-e005 pause-vllm resume-vllm
+.PHONY: install test lint run notebook build build-notebook deploy status benchmark benchmark-e004 benchmark-e005 notebook-start notebook-stop pause-vllm resume-vllm
 
 install:
 	python -m pip install -e '.[dev]'
@@ -13,10 +13,13 @@ run:
 	uvicorn prooftag_qr.api:app --reload --port 8080
 
 notebook:
-	python -m jupyter lab notebooks/01_srpg_step_by_step.ipynb
+	python -m jupyter lab notebooks/02_generate_live_on_gpu.ipynb
 
 build:
 	docker build -t prooftag-qr:dev .
+
+build-notebook: build
+	docker build -f Dockerfile.notebook -t prooftag-qr-notebook:dev .
 
 deploy:
 	bash scripts/create-database-secret.sh
@@ -33,6 +36,12 @@ benchmark-e004:
 
 benchmark-e005:
 	bash scripts/e005-srpg-benchmark.sh
+
+notebook-start:
+	bash scripts/notebook-server.sh start
+
+notebook-stop:
+	bash scripts/notebook-server.sh stop
 
 pause-vllm:
 	bash scripts/gpu-workload.sh pause-vllm
