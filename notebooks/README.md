@@ -1,12 +1,14 @@
 # Notebooks Prooftag QR
 
-Les trois notebooks n'ont pas le même rôle :
+Les quatre notebooks n'ont pas le même rôle :
 
 - `01_srpg_step_by_step.ipynb` analyse une archive de benchmark déjà produite. Il ne génère rien.
 - `02_generate_live_on_gpu.ipynb` exécute réellement le modèle sur la RTX du serveur et montre
   chaque étape au fur et à mesure.
 - `03_srpg_parameter_search.ipynb` compare 17 profils SRPG, reprend une campagne interrompue,
   classe les sorties non réparées et confirme les trois meilleurs profils.
+- `04_e007_contextual_optimizer.ipynb` optimise toutes les dimensions utiles sur un plan factoriel,
+  mesure CLIP-aesthetic/CLIPScore et entraîne le mini-modèle de recommandation.
 
 ## Génération réelle depuis le PC Windows
 
@@ -71,6 +73,20 @@ Pour vérifier le pipeline avant la campagne complète, mettre temporairement `S
 et `RUN_CONFIRMATION = False`. Remettre ensuite `SCREEN_LIMIT = None`, changer
 `EXPERIMENT_NAME`, puis lancer la vraie campagne. Le protocole et les portes de décision sont dans
 [`../docs/e006-parameter-search.md`](../docs/e006-parameter-search.md).
+
+## Optimisation contextuelle E007
+
+Après E006, le notebook 04 devient la campagne principale :
+
+```powershell
+.\scripts\notebook-remote.ps1 -Notebook 04_e007_contextual_optimizer.ipynb
+```
+
+Il refuse de démarrer si un autre processus utilise la RTX. Par défaut, il exécute 72 essais TPE,
+96 recalculs de calibration factorielle, 20 confirmations holdout, entraîne l'advisor puis simule
+jusqu'à six tentatives adaptatives. Cette campagne est nettement plus longue qu'E006 mais chaque
+essai est persisté. Voir
+[`../docs/e007-contextual-optimizer.md`](../docs/e007-contextual-optimizer.md).
 
 À la fin, arrêter Jupyter et restaurer exactement les nombres de réplicas précédents :
 

@@ -18,6 +18,7 @@ from prooftag_qr.schemas import GenerationRequest
 def test_gpu_dependencies_are_pinned_to_the_torch_base_image():
     project = tomllib.loads(Path("pyproject.toml").read_text())
     dependencies = set(project["project"]["optional-dependencies"]["gpu"])
+    optimizer_dependencies = set(project["project"]["optional-dependencies"]["optimizer"])
 
     assert {
         "accelerate==0.34.2",
@@ -28,6 +29,9 @@ def test_gpu_dependencies_are_pinned_to_the_torch_base_image():
         "transformers==4.44.2",
         "torchvision==0.19.1",
     } <= dependencies
+    assert {"optuna>=4.4,<5", "scikit-learn>=1.5,<2", "joblib>=1.4,<2"} <= (
+        optimizer_dependencies
+    )
 
     dockerfile = Path("Dockerfile").read_text()
     assert "pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime" in dockerfile
@@ -60,6 +64,17 @@ def test_gpu_dependencies_are_pinned_to_the_torch_base_image():
     assert settings.srpg_preview_interval == 5
     assert settings.srpg_dark_threshold == 0.5
     assert settings.srpg_light_threshold == 0.5
+    assert settings.srpg_center_fraction == pytest.approx(1 / 3)
+    assert settings.srpg_robust_blur_weight == 0
+    assert settings.srpg_robust_blur_kernel == 3
+    assert settings.srpg_robust_downscale_weight == 0
+    assert settings.srpg_robust_downscale_factor == pytest.approx(0.75)
+    assert settings.srpg_robust_brightness_weight == 0
+    assert settings.srpg_robust_brightness_low == pytest.approx(0.75)
+    assert settings.srpg_robust_brightness_high == pytest.approx(1.25)
+    assert settings.srpg_robust_contrast_weight == 0
+    assert settings.srpg_robust_contrast_factor == pytest.approx(0.70)
+    assert settings.srpg_eta == 0
     assert settings.latent_refinement_enabled is False
     assert settings.latent_refinement_iterations == 8
     assert settings.latent_refinement_learning_rate == 0.02

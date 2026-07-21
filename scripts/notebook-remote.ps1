@@ -2,7 +2,11 @@ param(
     [string]$Server = "paul@pcIA",
     [string]$RemoteRepository = "~/apps/Prooftag_QRcodePersonnalisation",
     [int]$LocalPort = 18888,
-    [ValidateSet("02_generate_live_on_gpu.ipynb", "03_srpg_parameter_search.ipynb")]
+    [ValidateSet(
+        "02_generate_live_on_gpu.ipynb",
+        "03_srpg_parameter_search.ipynb",
+        "04_e007_contextual_optimizer.ipynb"
+    )]
     [string]$Notebook = "02_generate_live_on_gpu.ipynb",
     [switch]$Stop
 )

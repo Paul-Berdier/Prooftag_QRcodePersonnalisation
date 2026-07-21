@@ -98,13 +98,23 @@ benchmark les normalise dans `srpg-steps.csv`.
 Les métriques DCGM existantes complètent le dashboard avec VRAM, utilisation GPU,
 température et puissance.
 
+## Indicateurs ajoutés par la campagne E007
+
+- CLIPScore prompt-image et similarité CLIP brute ;
+- CLIP-aesthetic LAION ;
+- résultat par axe prompt, seed et payload ;
+- risque du brut : erreur fonctionnelle/data, marge module, entropie et densité de contours ;
+- paramètres TPE complets et importance par rapport à l'objectif de scan ;
+- prédiction et incertitude du mini-modèle ;
+- MAE de validation croisée groupée par contexte.
+
+Ces mesures sont persistées dans les artefacts E007 avant leur éventuelle exposition Prometheus.
+
 ## Indicateurs restant à ajouter pendant la phase d'entraînement
 
 - perte SRL par type de module sur la durée d'une campagne ;
 - proportion exacte de modules modifiés par la réparation (la proportion de pixels est déjà suivie) ;
 - étape d'arrêt anticipé ;
-- CLIPScore prompt-image ;
-- score esthétique calibré ;
 - LPIPS entre pré-réparation et image finale ;
 - FID/KID sur les campagnes de comparaison, pas par requête ;
 - succès par version QR, densité, niveau ECC, taille imprimée et terminal physique.

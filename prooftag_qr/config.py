@@ -41,10 +41,21 @@ class Settings(BaseSettings):
     srpg_qr_weight: float = Field(default=500.0, gt=0.0, le=5000.0)
     srpg_perceptual_weight: float = Field(default=3.0, ge=0.0, le=100.0)
     srpg_functional_weight: float = Field(default=4.0, ge=1.0, le=100.0)
+    srpg_center_fraction: float = Field(default=1 / 3, gt=0.0, le=1.0)
     srpg_dark_threshold: float = Field(default=0.5, gt=0.0, lt=1.0)
     srpg_light_threshold: float = Field(default=0.5, gt=0.0, lt=1.0)
+    srpg_robust_blur_weight: float = Field(default=0.0, ge=0.0, le=10.0)
+    srpg_robust_blur_kernel: int = Field(default=3, ge=1, le=15)
+    srpg_robust_downscale_weight: float = Field(default=0.0, ge=0.0, le=10.0)
+    srpg_robust_downscale_factor: float = Field(default=0.75, gt=0.0, le=1.0)
+    srpg_robust_brightness_weight: float = Field(default=0.0, ge=0.0, le=10.0)
+    srpg_robust_brightness_low: float = Field(default=0.75, gt=0.0, le=1.0)
+    srpg_robust_brightness_high: float = Field(default=1.25, ge=1.0, le=2.0)
+    srpg_robust_contrast_weight: float = Field(default=0.0, ge=0.0, le=10.0)
+    srpg_robust_contrast_factor: float = Field(default=0.70, gt=0.0, le=1.0)
     srpg_target_module_error_rate: float = Field(default=0.0, ge=0.0, le=1.0)
     srpg_max_noise_delta_rms: float = Field(default=2.0, gt=0.0, le=100.0)
+    srpg_eta: float = Field(default=0.0, ge=0.0, le=1.0)
     srpg_max_mean_absolute_change: float = Field(default=0.20, gt=0.0, le=1.0)
     srpg_min_relative_module_improvement: float = Field(default=0.10, ge=0.0, le=1.0)
     srpg_seed_offset: int = Field(default=2_000_003, ge=0, le=2**32 - 1)
@@ -87,6 +98,8 @@ class Settings(BaseSettings):
             raise ValueError("SRPG requires the img2img ControlNet pipeline")
         if self.srpg_dark_threshold > self.srpg_light_threshold:
             raise ValueError("SRPG dark threshold cannot exceed light threshold")
+        if self.srpg_robust_blur_kernel % 2 == 0:
+            raise ValueError("SRPG robust blur kernel must be odd")
         return self
 
     @property

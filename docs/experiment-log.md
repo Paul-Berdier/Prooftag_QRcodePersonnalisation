@@ -437,3 +437,23 @@ puis au pire cas, avant l'esthétique et le temps. Les paramètres, validations 
 métriques par pas, erreurs et résultats physiques sont persistés. Voir
 [`docs/e006-parameter-search.md`](e006-parameter-search.md). Aucun profil n'est promu en production
 avant résultats RTX et tests sur plusieurs téléphones.
+
+## E007 - optimiseur contextuel et qualité sous contrainte
+
+- **Date :** 2026-07-21
+- **État :** implémentation locale ; campagne RTX requise
+- **Déclencheur :** E006 varie de 1/26 à 23/26 selon les contextes et ne produit aucun profil
+  universel strict.
+- **Décision :** abandon du réglage statique au profit d'une recherche TPE factorielle et d'un
+  surrogate contextuel.
+
+La sélection est désormais lexicographique : 26/26 obligatoire, puis CLIP-aesthetic et CLIPScore.
+La SRL intègre des vues floues, réduites, éclaircies/assombries et à contraste réduit. Les axes
+prompt, seed et payload sont isolés, quatre contextes holdout sont obligatoires, et un groupe
+incomplet ne peut pas être déclaré strict. Un garde-fou `nvidia-smi` empêche de répéter la
+contamination GPU d'E006. Détails :
+[`docs/e007-contextual-optimizer.md`](e007-contextual-optimizer.md).
+
+Avant les holdouts, les huit meilleurs essais sont maintenant recalculés sur les douze contextes
+factoriels. Cette promotion à 96 exécutions empêche qu'un résultat chanceux sur un prompt unique
+devienne la configuration globale du conseiller.

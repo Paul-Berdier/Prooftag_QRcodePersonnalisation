@@ -19,10 +19,21 @@ class SRPGConfig:
     qr_weight: float = 500.0
     perceptual_weight: float = 3.0
     functional_weight: float = 4.0
+    center_fraction: float = 1 / 3
     dark_threshold: float = 0.5
     light_threshold: float = 0.5
+    robust_blur_weight: float = 0.0
+    robust_blur_kernel: int = 3
+    robust_downscale_weight: float = 0.0
+    robust_downscale_factor: float = 0.75
+    robust_brightness_weight: float = 0.0
+    robust_brightness_low: float = 0.75
+    robust_brightness_high: float = 1.25
+    robust_contrast_weight: float = 0.0
+    robust_contrast_factor: float = 0.70
     target_module_error_rate: float = 0.0
     max_noise_delta_rms: float = 2.0
+    eta: float = 0.0
     max_mean_absolute_change: float = 0.20
     min_relative_module_improvement: float = 0.10
     save_step_previews: bool = False
@@ -120,12 +131,36 @@ def _validate_config(config: SRPGConfig) -> None:
         raise ValueError("invalid SRPG loss weights")
     if config.functional_weight < 1:
         raise ValueError("functional_weight must be at least 1")
+    if not 0 < config.center_fraction <= 1:
+        raise ValueError("center_fraction must be between 0 (exclusive) and 1")
     if not 0 < config.dark_threshold <= config.light_threshold < 1:
         raise ValueError("SRPG thresholds must satisfy 0 < dark <= light < 1")
+    if (
+        min(
+            config.robust_blur_weight,
+            config.robust_downscale_weight,
+            config.robust_brightness_weight,
+            config.robust_contrast_weight,
+        )
+        < 0
+    ):
+        raise ValueError("SRPG robustness weights cannot be negative")
+    if config.robust_blur_kernel < 1 or config.robust_blur_kernel % 2 == 0:
+        raise ValueError("robust_blur_kernel must be a positive odd integer")
+    if not 0 < config.robust_downscale_factor <= 1:
+        raise ValueError("robust_downscale_factor must be between 0 and 1")
+    if not 0 < config.robust_brightness_low <= 1:
+        raise ValueError("robust_brightness_low must be between 0 and 1")
+    if not 1 <= config.robust_brightness_high <= 2:
+        raise ValueError("robust_brightness_high must be between 1 and 2")
+    if not 0 < config.robust_contrast_factor <= 1:
+        raise ValueError("robust_contrast_factor must be between 0 and 1")
     if not 0 <= config.target_module_error_rate <= 1:
         raise ValueError("target_module_error_rate must be between 0 and 1")
     if config.max_noise_delta_rms <= 0:
         raise ValueError("max_noise_delta_rms must be positive")
+    if not 0 <= config.eta <= 1:
+        raise ValueError("eta must be between 0 and 1")
     if not 0 < config.max_mean_absolute_change <= 1:
         raise ValueError("max_mean_absolute_change must be between 0 (exclusive) and 1")
     if not 0 <= config.min_relative_module_improvement <= 1:
@@ -210,13 +245,14 @@ def run_srpg_controlnet_img2img(
         device,
         generator,
     )
-    extra_step_kwargs = pipeline.prepare_extra_step_kwargs(generator, 0.0)
+    extra_step_kwargs = pipeline.prepare_extra_step_kwargs(generator, config.eta)
     layout = prepare_torch_layout(
         blueprint,
         blueprint.image.height,
         blueprint.image.width,
         device=device,
         dtype=dtype,
+        center_fraction=config.center_fraction,
     )
     perceptual_model = _load_lpips(pipeline, device)
     scaling_factor = pipeline.vae.config.scaling_factor
@@ -272,10 +308,90 @@ def run_srpg_controlnet_img2img(
                 decoded_unit,
                 blueprint,
                 functional_weight=config.functional_weight,
+                center_fraction=config.center_fraction,
                 dark_threshold=config.dark_threshold,
                 light_threshold=config.light_threshold,
                 layout=layout,
             )
+            robust_weight = 1.0
+            if config.robust_blur_weight:
+                import torch.nn.functional as functional
+
+                blurred = functional.avg_pool2d(
+                    decoded_unit,
+                    kernel_size=config.robust_blur_kernel,
+                    stride=1,
+                    padding=config.robust_blur_kernel // 2,
+                )
+                loss, _ = scanning_robust_loss(
+                    blurred,
+                    blueprint,
+                    functional_weight=config.functional_weight,
+                    dark_threshold=config.dark_threshold,
+                    light_threshold=config.light_threshold,
+                    layout=layout,
+                )
+                scanning_loss = scanning_loss + config.robust_blur_weight * loss
+                robust_weight += config.robust_blur_weight
+            if config.robust_downscale_weight:
+                import torch.nn.functional as functional
+
+                reduced = functional.interpolate(
+                    decoded_unit,
+                    scale_factor=config.robust_downscale_factor,
+                    mode="bilinear",
+                    align_corners=False,
+                    recompute_scale_factor=False,
+                )
+                restored = functional.interpolate(
+                    reduced,
+                    size=decoded_unit.shape[-2:],
+                    mode="bilinear",
+                    align_corners=False,
+                )
+                loss, _ = scanning_robust_loss(
+                    restored,
+                    blueprint,
+                    functional_weight=config.functional_weight,
+                    dark_threshold=config.dark_threshold,
+                    light_threshold=config.light_threshold,
+                    layout=layout,
+                )
+                scanning_loss = scanning_loss + config.robust_downscale_weight * loss
+                robust_weight += config.robust_downscale_weight
+            if config.robust_brightness_weight:
+                brightness_loss = decoded_unit.new_tensor(0.0)
+                for factor in (
+                    config.robust_brightness_low,
+                    config.robust_brightness_high,
+                ):
+                    transformed = (decoded_unit * factor).clamp(0, 1)
+                    loss, _ = scanning_robust_loss(
+                        transformed,
+                        blueprint,
+                        functional_weight=config.functional_weight,
+                        dark_threshold=config.dark_threshold,
+                        light_threshold=config.light_threshold,
+                        layout=layout,
+                    )
+                    brightness_loss = brightness_loss + loss / 2
+                scanning_loss = scanning_loss + config.robust_brightness_weight * brightness_loss
+                robust_weight += config.robust_brightness_weight
+            if config.robust_contrast_weight:
+                contrasted = (
+                    (decoded_unit - 0.5) * config.robust_contrast_factor + 0.5
+                ).clamp(0, 1)
+                loss, _ = scanning_robust_loss(
+                    contrasted,
+                    blueprint,
+                    functional_weight=config.functional_weight,
+                    dark_threshold=config.dark_threshold,
+                    light_threshold=config.light_threshold,
+                    layout=layout,
+                )
+                scanning_loss = scanning_loss + config.robust_contrast_weight * loss
+                robust_weight += config.robust_contrast_weight
+            scanning_loss = scanning_loss / robust_weight
             perceptual_loss = perceptual_model(decoded.float(), reference_lpips).mean()
             module_error = float(diagnostics["module_error_rate"].detach().float().item())
             preview = None

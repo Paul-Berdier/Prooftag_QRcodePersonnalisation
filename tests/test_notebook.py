@@ -50,6 +50,7 @@ def test_remote_gpu_notebook_has_an_isolated_kubernetes_runtime():
     assert "FROM ${BASE_IMAGE}" in dockerfile
     assert "02_generate_live_on_gpu.ipynb" in launcher
     assert "03_srpg_parameter_search.ipynb" in launcher
+    assert "04_e007_contextual_optimizer.ipynb" in launcher
     assert "[ValidateSet(" in launcher
     assert "-WindowStyle Normal" in launcher
     assert '"-N"' in launcher
@@ -80,3 +81,18 @@ def test_parameter_search_notebook_has_reproducible_screen_and_confirmation():
     assert "validations.json" in source
     assert "phone-validation.csv" in source
     assert "trial_rank_key" in source
+
+
+def test_e007_notebook_is_scannability_first_and_context_adaptive():
+    source = Path("notebooks/04_e007_contextual_optimizer.ipynb").read_text(encoding="utf-8")
+
+    assert "require_exclusive_gpu" in source
+    assert "factorial_contexts" in source
+    assert "TPESampler" in source
+    assert "sample_e007_trial" in source
+    assert "clip_aesthetic" in source
+    assert "clip_score" in source
+    assert "ContextualParameterAdvisor" in source
+    assert "select_delivery_candidate" in source
+    assert "expected_cases=len(holdouts)" in source
+    assert "aucune image 26/26" in source

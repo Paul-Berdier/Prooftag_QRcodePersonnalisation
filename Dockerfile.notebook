@@ -2,11 +2,13 @@ ARG BASE_IMAGE=prooftag-qr:dev
 FROM ${BASE_IMAGE}
 
 USER root
+WORKDIR /app
+RUN pip install --no-cache-dir '.[notebook,optimizer]'
+
 WORKDIR /workspace
 COPY notebooks /workspace/notebooks
-RUN pip install --no-cache-dir "jupyterlab>=4.2,<5" "matplotlib>=3.9,<4" \
-    && mkdir -p /workspace/results /data/notebook-runs \
-    && chown -R app:app /workspace /data/notebook-runs
+RUN mkdir -p /workspace/results /data/notebook-runs /data/parameter-search \
+    && chown -R app:app /workspace /data/notebook-runs /data/parameter-search
 
 USER app
 EXPOSE 8888
