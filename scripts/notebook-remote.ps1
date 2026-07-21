@@ -9,6 +9,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $pidFile = Join-Path $env:TEMP "prooftag-qr-notebook-tunnel.pid"
+$tunnelLogFile = Join-Path $env:TEMP "prooftag-qr-notebook-ssh.log"
 
 function Stop-LocalTunnel {
     if (-not (Test-Path $pidFile)) {
@@ -52,6 +53,7 @@ if ($Stop) {
     exit 0
 }
 
+Stop-LocalTunnel
 Assert-LocalPortAvailable
 $remoteStarted = $false
 $tunnel = $null
@@ -67,15 +69,25 @@ try {
         throw "Le serveur n'a pas retourne le jeton Jupyter."
     }
     $token = $tokenLine.Substring("JUPYTER_TOKEN=".Length)
+    $targetLine = $remoteOutput | Where-Object { $_ -like "JUPYTER_TARGET=*" } |
+        Select-Object -Last 1
+    if (-not $targetLine) {
+        throw "Le serveur n'a pas retourne la cible reseau de Jupyter."
+    }
+    $target = $targetLine.Substring("JUPYTER_TARGET=".Length)
+    if ($target -notmatch '^\d{1,3}(\.\d{1,3}){3}:\d+$') {
+        throw "Cible reseau Jupyter invalide : $target"
+    }
 
-    Stop-LocalTunnel
-    $forwardCommand = "kubectl port-forward -n qr-core service/prooftag-qr-notebook 18888:8888"
+    [System.IO.File]::Delete($tunnelLogFile)
     $arguments = @(
+        "-N",
+        "-v",
+        "-E", $tunnelLogFile,
         "-o", "ExitOnForwardFailure=yes",
         "-o", "ServerAliveInterval=30",
-        "-L", "${LocalPort}:127.0.0.1:18888",
-        $Server,
-        $forwardCommand
+        "-L", "${LocalPort}:${target}",
+        $Server
     )
     Write-Host "Une fenetre SSH va s'ouvrir : saisir le mot de passe de $Server."
     $tunnel = Start-Process -FilePath "ssh" -ArgumentList $arguments -WindowStyle Normal -PassThru
@@ -95,7 +107,7 @@ try {
         }
         catch {
             if ($tunnel.HasExited) {
-                throw "Le tunnel SSH s'est arrete avant l'ouverture de Jupyter."
+                throw "Le tunnel SSH s'est arrete avant l'ouverture de Jupyter. Journal : $tunnelLogFile"
             }
         }
     }

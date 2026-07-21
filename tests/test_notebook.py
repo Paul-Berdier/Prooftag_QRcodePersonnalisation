@@ -52,8 +52,10 @@ def test_remote_gpu_notebook_has_an_isolated_kubernetes_runtime():
     assert "03_srpg_parameter_search.ipynb" in launcher
     assert "[ValidateSet(" in launcher
     assert "-WindowStyle Normal" in launcher
-    assert '"-N"' not in launcher
+    assert '"-N"' in launcher
     assert '"ExitOnForwardFailure=yes"' in launcher
+    assert "JUPYTER_TARGET" in launcher
+    assert "kubectl port-forward" not in launcher
     assert "[int]$LocalPort = 18888" in launcher
     assert "Assert-LocalPortAvailable" in launcher
     assert "[System.IO.File]::Delete($pidFile)" in launcher
@@ -63,6 +65,7 @@ def test_remote_gpu_notebook_has_an_isolated_kubernetes_runtime():
     assert "--ServerApp.root_dir=/workspace" in manifest
     assert "mountPath: /workspace/results" in manifest
     assert "restore_previous_state" in server
+    assert "JUPYTER_TARGET" in server
 
 
 def test_parameter_search_notebook_has_reproducible_screen_and_confirmation():

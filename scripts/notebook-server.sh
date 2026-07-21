@@ -26,8 +26,15 @@ ensure_token() {
 
 print_token() {
   local encoded
+  local service_ip
+  local service_port
   encoded="$(kubectl get secret prooftag-qr-notebook -n "$namespace" -o jsonpath='{.data.token}')"
+  service_ip="$(kubectl get service "$notebook_deployment" -n "$namespace" \
+    -o jsonpath='{.spec.clusterIP}')"
+  service_port="$(kubectl get service "$notebook_deployment" -n "$namespace" \
+    -o jsonpath='{.spec.ports[0].port}')"
   printf 'JUPYTER_TOKEN=%s\n' "$(printf '%s' "$encoded" | base64 --decode)"
+  printf 'JUPYTER_TARGET=%s:%s\n' "$service_ip" "$service_port"
 }
 
 restore_previous_state() {

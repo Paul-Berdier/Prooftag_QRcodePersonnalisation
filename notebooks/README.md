@@ -26,6 +26,11 @@ Le tunnel utilise `http://127.0.0.1:18888` par défaut afin de ne pas entrer en 
 Jupyter Windows déjà lancé sur le port 8888. Si 18888 est occupé, choisir explicitement un autre
 port : `./scripts/notebook-remote.ps1 -LocalPort 18889`.
 
+Le tunnel SSH joint directement l'adresse ClusterIP du service Jupyter. Il ne lance plus un
+second `kubectl port-forward` sur le serveur : une tentative interrompue ne peut donc plus laisser
+le port distant 18888 occupé. En cas d'échec SSH, le diagnostic est conservé dans
+`$env:TEMP\prooftag-qr-notebook-ssh.log` sur le PC.
+
 Cette commande :
 
 1. mémorise l'état de l'API QR et de vLLM ;
