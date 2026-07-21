@@ -28,6 +28,8 @@ def runtime_info(settings: Settings | None = None) -> dict:
         result["generation_config"] = {
             "base_model_id": settings.base_model_id,
             "controlnet_model_id": settings.controlnet_model_id,
+            "controlnet_model_subfolder": settings.controlnet_model_subfolder,
+            "controlnet_conditioning_profile": settings.controlnet_conditioning_profile,
             "controlnet_pipeline_mode": settings.controlnet_pipeline_mode,
             "validation_min_pass_rate": settings.validation_min_pass_rate,
             "max_attempts": settings.max_attempts,

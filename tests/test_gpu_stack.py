@@ -46,6 +46,8 @@ def test_gpu_dependencies_are_pinned_to_the_torch_base_image():
     request = GenerationRequest(payload="https://example.prooftag.test/t/img2img")
     manifest = Path("deploy/k8s/app-config.yaml").read_text()
     assert settings.controlnet_pipeline_mode == "img2img"
+    assert settings.controlnet_model_subfolder == ""
+    assert settings.controlnet_conditioning_profile == "binary"
     assert settings.regenerate_before_global_repair is True
     assert settings.guided_rediffusion_enabled is False
     assert settings.guided_rediffusion_steps == 8
@@ -84,6 +86,8 @@ def test_gpu_dependencies_are_pinned_to_the_torch_base_image():
     assert settings.latent_refinement_min_relative_module_improvement == 0.01
     assert request.strength == 0.9
     assert "PROOFTAG_QR_CONTROLNET_PIPELINE_MODE: img2img" in manifest
+    assert 'PROOFTAG_QR_CONTROLNET_MODEL_SUBFOLDER: ""' in manifest
+    assert "PROOFTAG_QR_CONTROLNET_CONDITIONING_PROFILE: binary" in manifest
     assert 'PROOFTAG_QR_REGENERATE_BEFORE_GLOBAL_REPAIR: "true"' in manifest
     assert 'PROOFTAG_QR_GUIDED_REDIFFUSION_ENABLED: "false"' in manifest
     assert 'PROOFTAG_QR_GUIDED_REDIFFUSION_STRENGTH: "0.30"' in manifest

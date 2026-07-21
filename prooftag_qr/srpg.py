@@ -179,6 +179,7 @@ def run_srpg_controlnet_img2img(
     guidance_scale: float,
     generator: Any,
     config: SRPGConfig,
+    control_image: Image.Image | None = None,
     preview_callback: Callable[[SRPGPreview, SRPGStep], None] | None = None,
 ) -> SRPGResult:
     """Run Stage-2 ControlNet with SRPG inside every DDIM denoising step.
@@ -222,8 +223,8 @@ def run_srpg_controlnet_img2img(
         candidate.convert("RGB"), height=blueprint.image.height, width=blueprint.image.width
     ).to(device=device, dtype=torch.float32)
     reference_lpips = source_image.to(device=device, dtype=torch.float32)
-    control_image = pipeline.prepare_control_image(
-        image=blueprint.image,
+    prepared_control_image = pipeline.prepare_control_image(
+        image=control_image if control_image is not None else blueprint.image,
         width=blueprint.image.width,
         height=blueprint.image.height,
         batch_size=1,
@@ -275,7 +276,7 @@ def run_srpg_controlnet_img2img(
                 latent_model_input,
                 timestep,
                 encoder_hidden_states=prompt_embeds,
-                controlnet_cond=control_image,
+                controlnet_cond=prepared_control_image,
                 conditioning_scale=config.controlnet_scale,
                 guess_mode=False,
                 return_dict=False,

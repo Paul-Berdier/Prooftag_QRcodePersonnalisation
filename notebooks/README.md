@@ -1,6 +1,6 @@
 # Notebooks Prooftag QR
 
-Les quatre notebooks n'ont pas le même rôle :
+Les cinq notebooks n'ont pas le même rôle :
 
 - `01_srpg_step_by_step.ipynb` analyse une archive de benchmark déjà produite. Il ne génère rien.
 - `02_generate_live_on_gpu.ipynb` exécute réellement le modèle sur la RTX du serveur et montre
@@ -9,6 +9,8 @@ Les quatre notebooks n'ont pas le même rôle :
   classe les sorties non réparées et confirme les trois meilleurs profils.
 - `04_e007_contextual_optimizer.ipynb` optimise toutes les dimensions utiles sur un plan factoriel,
   mesure CLIP-aesthetic/CLIPScore et entraîne le mini-modèle de recommandation.
+- `05_controlnet_model_bakeoff.ipynb` choisit le ControlNet SD1.5 sur une comparaison appariée avant
+  de relancer l'optimisation E007.
 
 ## Génération réelle depuis le PC Windows
 
@@ -87,6 +89,17 @@ Il refuse de démarrer si un autre processus utilise la RTX. Par défaut, il ex�
 jusqu'à six tentatives adaptatives. Cette campagne est nettement plus longue qu'E006 mais chaque
 essai est persisté. Voir
 [`../docs/e007-contextual-optimizer.md`](../docs/e007-contextual-optimizer.md).
+
+## Comparaison des ControlNet E008
+
+```powershell
+.\scripts\notebook-remote.ps1 -Notebook 05_controlnet_model_bakeoff.ipynb
+```
+
+Le notebook compare Dion, QR Code Monster v1/v2 et Nacholmo v2 sur quatre échelles et douze
+contextes, soit 192 exécutions. Il mesure séparément le brut ControlNet et la sortie SRPG et crée
+le gabarit `physical-validation-template.csv` pour les trois meilleurs modèles. Voir
+[`../docs/e008-controlnet-bakeoff.md`](../docs/e008-controlnet-bakeoff.md).
 
 À la fin, arrêter Jupyter et restaurer exactement les nombres de réplicas précédents :
 

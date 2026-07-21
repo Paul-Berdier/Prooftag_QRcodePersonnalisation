@@ -5,7 +5,8 @@ param(
     [ValidateSet(
         "02_generate_live_on_gpu.ipynb",
         "03_srpg_parameter_search.ipynb",
-        "04_e007_contextual_optimizer.ipynb"
+        "04_e007_contextual_optimizer.ipynb",
+        "05_controlnet_model_bakeoff.ipynb"
     )]
     [string]$Notebook = "02_generate_live_on_gpu.ipynb",
     [switch]$Stop

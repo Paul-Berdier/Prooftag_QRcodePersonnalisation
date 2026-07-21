@@ -51,6 +51,7 @@ def test_remote_gpu_notebook_has_an_isolated_kubernetes_runtime():
     assert "02_generate_live_on_gpu.ipynb" in launcher
     assert "03_srpg_parameter_search.ipynb" in launcher
     assert "04_e007_contextual_optimizer.ipynb" in launcher
+    assert "05_controlnet_model_bakeoff.ipynb" in launcher
     assert "[ValidateSet(" in launcher
     assert "-WindowStyle Normal" in launcher
     assert '"-N"' in launcher
@@ -96,3 +97,19 @@ def test_e007_notebook_is_scannability_first_and_context_adaptive():
     assert "select_delivery_candidate" in source
     assert "expected_cases=len(holdouts)" in source
     assert "aucune image 26/26" in source
+
+
+def test_e008_notebook_compares_controlnets_before_promotion():
+    source = Path("notebooks/05_controlnet_model_bakeoff.ipynb").read_text(encoding="utf-8")
+
+    assert "dion_sd15" in source
+    assert "monster_sd15_v1" in source
+    assert "monster_sd15_v2" in source
+    assert "nacholmo_sd15_v2" in source
+    assert "raw_mean_pass_rate" in source
+    assert "aggregate_controlnet_benchmark" in source
+    assert "best_trial_per_model" in source
+    assert "select_promotable_controlnet" in source
+    assert "model-load-errors.json" in source
+    assert "physical-validation-template.csv" in source
+    assert "CONTROL_SCALES = (0.90, 1.10, 1.35, 1.60)" in source

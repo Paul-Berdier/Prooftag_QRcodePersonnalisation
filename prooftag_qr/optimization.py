@@ -139,7 +139,7 @@ def require_exclusive_gpu() -> None:
             f"PID {item['pid']}={item['used_memory_mib']:.0f} MiB ({item['name']})"
             for item in processes
         )
-        raise RuntimeError(f"GPU not exclusive before E007 model loading: {details}")
+        raise RuntimeError(f"GPU not exclusive before experiment model loading: {details}")
 
 
 class E007Experiment:
@@ -240,6 +240,15 @@ class E007Experiment:
             )
             raw = self._generate_raw(phase, context, trial, blueprint)
             raw_quality = self.quality.score(raw, context.prompt)
+            raw_records = self.validator.validate(raw, context.payload)
+            raw_exact = sum(record.exact_payload_match for record in raw_records)
+            raw_validation_path = self._raw_path(phase, context, trial).with_suffix(
+                ".validations.json"
+            )
+            raw_validation_path.write_text(
+                json.dumps([asdict(record) for record in raw_records], indent=2),
+                encoding="utf-8",
+            )
             raw_image_embedding, prompt_embedding = self.quality.embeddings(raw, context.prompt)
             context_features = image_context_features(raw, blueprint)
             context_features.update(
@@ -272,6 +281,7 @@ class E007Experiment:
                 negative_prompt=trial.negative_prompt,
                 guidance_scale=trial.guidance_scale,
                 generator=generator,
+                control_image=self.backend.control_image(blueprint),
                 config=trial.to_srpg_config(),
             )
             duration = time.perf_counter() - started
@@ -306,6 +316,12 @@ class E007Experiment:
                 "payload_hash": hashlib.sha256(context.payload.encode()).hexdigest(),
                 "seed": context.seed,
                 "error_correction": context.error_correction,
+                "base_model_id": self.settings.base_model_id,
+                "controlnet_model_id": self.settings.controlnet_model_id,
+                "controlnet_model_subfolder": self.settings.controlnet_model_subfolder,
+                "controlnet_conditioning_profile": (
+                    self.settings.controlnet_conditioning_profile
+                ),
                 "parameters": asdict(trial),
                 "context_features": context_features,
                 "qr_version": blueprint.version,
@@ -324,6 +340,10 @@ class E007Experiment:
                 "raw_clip_similarity": raw_quality.clip_similarity,
                 "raw_clip_score": raw_quality.clip_score,
                 "raw_clip_aesthetic": raw_quality.clip_aesthetic,
+                "raw_pass_rate": raw_exact / len(raw_records),
+                "raw_strict_all": raw_exact == len(raw_records),
+                "raw_passed": raw_exact,
+                "raw_validations": len(raw_records),
                 "duration_seconds": duration,
                 "peak_gpu_memory_mib": result.peak_gpu_memory_allocated_mib,
                 "gradient_clip_rate": sum(step.gradient_clipped for step in result.steps)
@@ -344,6 +364,12 @@ class E007Experiment:
                 "status": "error",
                 "timestamp": datetime.now(UTC).isoformat(),
                 "parameters": asdict(trial),
+                "base_model_id": self.settings.base_model_id,
+                "controlnet_model_id": self.settings.controlnet_model_id,
+                "controlnet_model_subfolder": self.settings.controlnet_model_subfolder,
+                "controlnet_conditioning_profile": (
+                    self.settings.controlnet_conditioning_profile
+                ),
                 "duration_seconds": duration,
                 "error": repr(exc),
                 "traceback": traceback.format_exc(),

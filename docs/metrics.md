@@ -110,6 +110,19 @@ température et puissance.
 
 Ces mesures sont persistées dans les artefacts E007 avant leur éventuelle exposition Prometheus.
 
+## Indicateurs ajoutés par la campagne E008
+
+- identifiant exact du ControlNet, sous-dossier de poids et profil de conditionnement ;
+- taux de lecture brut et après SRPG, séparés pour chaque contexte ;
+- pire taux de lecture, moyenne et porte 26/26 sur la campagne complète ;
+- CLIP-aesthetic, CLIPScore, erreur module, durée et pic VRAM ;
+- erreurs de chargement persistées, groupe incomplet explicitement non promouvable ;
+- graphique comparatif du compromis scan/esthétique avant et après SRPG.
+
+Le vainqueur automatique E008 n'autorise pas une mise en production : il fixe seulement le
+ControlNet à réoptimiser dans E007. La livraison reste soumise aux holdouts puis aux scans
+physiques multi-téléphones et imprimés.
+
 ## Indicateurs restant à ajouter pendant la phase d'entraînement
 
 - perte SRL par type de module sur la durée d'une campagne ;

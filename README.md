@@ -40,6 +40,7 @@ recherche reproductible des paramètres et une porte de validation physique. Tou
 recherche sont désactivés par défaut. Voir [`docs/e005-srpg.md`](docs/e005-srpg.md),
 [`docs/e006-parameter-search.md`](docs/e006-parameter-search.md),
 [`docs/e007-contextual-optimizer.md`](docs/e007-contextual-optimizer.md),
+[`docs/e008-controlnet-bakeoff.md`](docs/e008-controlnet-bakeoff.md),
 [`docs/research-roadmap.md`](docs/research-roadmap.md) pour le programme complet et
 [`docs/experiment-log.md`](docs/experiment-log.md) pour les résultats, erreurs et décisions.
 
@@ -111,7 +112,7 @@ benchmark à distance, copie l'archive, l'extrait et ouvre le rapport HTML.
 La campagne causale E005 (baseline puis SRPG seul) s'exécute avec `make benchmark-e005` sur le
 serveur ou `.\scripts\benchmark-remote.ps1 -E005` depuis Windows.
 
-Quatre notebooks séparent maintenant clairement les usages. Le notebook
+Cinq notebooks séparent maintenant clairement les usages. Le notebook
 [`01_srpg_step_by_step.ipynb`](notebooks/01_srpg_step_by_step.ipynb) ne fait que relire une archive.
 Le notebook [`02_generate_live_on_gpu.ipynb`](notebooks/02_generate_live_on_gpu.ipynb) exécute au
 contraire toute la génération sur la RTX du serveur : diffusion brute, validation, pas SRPG
@@ -123,6 +124,10 @@ Le notebook [`04_e007_contextual_optimizer.ipynb`](notebooks/04_e007_contextual_
 ajoute la recherche TPE complète, CLIP-aesthetic, CLIPScore et un mini-modèle contextuel, avec
 livraison interdite sous 26/26. Les commandes exactes sont dans
 [`notebooks/README.md`](notebooks/README.md).
+
+Le notebook [`05_controlnet_model_bakeoff.ipynb`](notebooks/05_controlnet_model_bakeoff.ipynb)
+compare équitablement Dion, QR Code Monster v1/v2 et Nacholmo v2 avant de fixer le ControlNet
+utilisé par E007.
 
 ## Tests
 

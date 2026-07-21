@@ -12,6 +12,7 @@ from PIL import Image
 
 from . import metrics
 from .config import Settings
+from .controlnet_models import control_image_for_profile
 from .guidance import LatentRefinementConfig, refine_candidate_latent
 from .qr import QRBlueprint, module_error_rate, repair_qr_modules
 from .quality import composite_guided_regions, image_change_metrics
@@ -117,10 +118,15 @@ class ControlNetBackend(GenerationBackend):
                 if not torch.cuda.is_available():
                     raise RuntimeError("ControlNet backend requires an available CUDA GPU")
                 dtype = torch.float16
+                controlnet_arguments = {
+                    "torch_dtype": dtype,
+                    "cache_dir": self.settings.model_cache_dir,
+                }
+                if self.settings.controlnet_model_subfolder:
+                    controlnet_arguments["subfolder"] = self.settings.controlnet_model_subfolder
                 controlnet = ControlNetModel.from_pretrained(
                     self.settings.controlnet_model_id,
-                    torch_dtype=dtype,
-                    cache_dir=self.settings.model_cache_dir,
+                    **controlnet_arguments,
                 )
                 pipeline_class = (
                     StableDiffusionControlNetImg2ImgPipeline
@@ -149,7 +155,12 @@ class ControlNetBackend(GenerationBackend):
                 metrics.MODEL_LOAD_DURATION.labels("error").observe(duration)
                 logger.exception(
                     "controlnet_model_load_failed",
-                    extra={"backend": "controlnet", "duration_ms": round(duration * 1000, 2)},
+                    extra={
+                        "backend": "controlnet",
+                        "model_id": self.settings.controlnet_model_id,
+                        "model_subfolder": self.settings.controlnet_model_subfolder,
+                        "duration_ms": round(duration * 1000, 2),
+                    },
                 )
                 raise
             duration = time.perf_counter() - started
@@ -158,7 +169,12 @@ class ControlNetBackend(GenerationBackend):
             metrics.MODEL_LOADED.set(1)
             logger.info(
                 "controlnet_model_loaded",
-                extra={"backend": "controlnet", "duration_ms": round(duration * 1000, 2)},
+                extra={
+                    "backend": "controlnet",
+                    "model_id": self.settings.controlnet_model_id,
+                    "model_subfolder": self.settings.controlnet_model_subfolder,
+                    "duration_ms": round(duration * 1000, 2),
+                },
             )
         return self._pipeline
 
@@ -168,6 +184,7 @@ class ControlNetBackend(GenerationBackend):
         import torch
 
         pipe = self._load()
+        control_image = self.control_image(blueprint)
         generator = torch.Generator(device=self.settings.device).manual_seed(seed)
         arguments = {
             "prompt": request.prompt,
@@ -183,16 +200,22 @@ class ControlNetBackend(GenerationBackend):
             arguments.update(
                 {
                     "image": blueprint.image,
-                    "control_image": blueprint.image,
+                    "control_image": control_image,
                     "strength": request.strength,
                 }
             )
         else:
-            arguments["image"] = blueprint.image
+            arguments["image"] = control_image
         result = pipe(
             **arguments,
         )
         return result.images[0].convert("RGB")
+
+    def control_image(self, blueprint: QRBlueprint) -> Image.Image:
+        return control_image_for_profile(
+            blueprint,
+            self.settings.controlnet_conditioning_profile,
+        )
 
     def _guided_rediffuse(
         self,
@@ -317,6 +340,7 @@ class ControlNetBackend(GenerationBackend):
                     negative_prompt=request.negative_prompt or None,
                     guidance_scale=request.guidance_scale,
                     generator=generator,
+                    control_image=self.control_image(blueprint),
                     config=SRPGConfig(
                         steps=self.settings.srpg_steps,
                         strength=self.settings.srpg_strength,

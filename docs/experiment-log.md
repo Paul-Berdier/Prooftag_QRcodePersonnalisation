@@ -457,3 +457,19 @@ contamination GPU d'E006. Détails :
 Avant les holdouts, les huit meilleurs essais sont maintenant recalculés sur les douze contextes
 factoriels. Cette promotion à 96 exécutions empêche qu'un résultat chanceux sur un prompt unique
 devienne la configuration globale du conseiller.
+
+## E008 — bake-off des ControlNet QR
+
+- **Date :** 2026-07-21
+- **État :** recherche et protocole implémentés ; campagne RTX à exécuter
+- **Déclencheur :** `Nacholmo/controlnet-qr-pattern-v2` pourrait mieux masquer la grille que la
+  baseline Dion, mais aucune source ne publie une comparaison quantitative appariée.
+- **Décision :** ne changer aucun défaut de production avant comparaison de Dion, Monster v1,
+  Monster v2 et Nacholmo v2 sur 192 exécutions SD1.5.
+
+La branche SDXL reste séparée en raison de l'incompatibilité de pipeline/SRPG et du risque VRAM.
+Le protocole, les preuves disponibles et leurs limites sont consignés dans
+[`docs/e008-controlnet-bakeoff.md`](e008-controlnet-bakeoff.md).
+
+Une réussite automatique E008 produit seulement un `AUTOMATIC_CANDIDATE`. Elle autorise la suite
+E007 mais pas la production, qui exige encore les holdouts et la validation physique documentée.
