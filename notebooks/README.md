@@ -17,6 +17,11 @@ Sans variable d'environnement, le notebook sélectionne la dernière archive tro
 `Downloads/prooftag-benchmarks`. Modifier `CASE` dans la deuxième cellule pour examiner un autre
 cas.
 
+Le notebook réutilise d'abord le dossier déjà extrait à côté de l'archive. S'il doit extraire
+lui-même l'archive, il écrit dans `.prooftag-notebook-cache` au même emplacement, jamais dans le
+dossier `notebooks`. Un emplacement différent peut être imposé avec
+`PROOFTAG_QR_NOTEBOOK_CACHE`.
+
 Les archives antérieures à l'instrumentation montrent `raw`, `srpg`, `final` et les courbes, mais
 pas les images intermédiaires. Relancer `make benchmark-e005` après déploiement du code récent pour
 obtenir `srpg_control` et les checkpoints `srpg_step_XX_x0/errors`.

@@ -23,3 +23,5 @@ def test_srpg_notebook_exposes_the_debugging_chain():
     assert "srpg_step_*_x0.png" in source
     assert "srpg_step_*_errors.png" in source
     assert "selected_variant" in source
+    assert "archive_path.parent / run_name" in source
+    assert "Path.cwd() / '.notebook-cache'" not in source
