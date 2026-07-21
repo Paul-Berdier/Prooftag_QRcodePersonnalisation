@@ -74,6 +74,13 @@ Le script exécute d'abord une baseline avec les deux raffinements désactivés,
 seconde diffusion et SR-MPGD activés. Un trap retire les surcharges Kubernetes à la sortie. Vérifier
 ensuite que `/v1/runtime` rapporte de nouveau les deux options à `false`.
 
+Depuis PowerShell, lorsque le service QR possède déjà le GPU, la même campagne et le rapatriement
+des deux rapports s'exécutent en une commande :
+
+```powershell
+.\scripts\benchmark-remote.ps1 -E004
+```
+
 ## Portes de décision
 
 E004a est retenue pour ablation seulement si :

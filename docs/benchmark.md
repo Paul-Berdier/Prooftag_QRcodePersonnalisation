@@ -72,6 +72,13 @@ Cette commande lance le benchmark sur `paul@pcIA`, copie l'archive dans
 `Downloads\prooftag-benchmarks`, l'extrait puis ouvre le rapport. Utiliser `-NoOpen` pour ne
 pas ouvrir le navigateur automatiquement.
 
+Pour E004, la commande suivante lance les deux campagnes distantes, rapatrie les deux archives
+et ouvre le rapport guidé, qui compare automatiquement la seconde campagne à la baseline :
+
+```powershell
+.\scripts\benchmark-remote.ps1 -E004
+```
+
 Un serveur ou un chemin différent peut être indiqué explicitement :
 
 ```powershell
