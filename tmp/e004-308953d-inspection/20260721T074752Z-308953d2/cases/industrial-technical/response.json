@@ -1,0 +1,220 @@
+{
+  "id": "44f71a20-cf22-47ad-a18e-c38e0ea6f3b7",
+  "created_at": "2026-07-21T07:48:33.893645Z",
+  "completed_at": "2026-07-21T07:48:43.916831Z",
+  "status": "accepted",
+  "backend": "controlnet",
+  "seed": 271828,
+  "attempts": 1,
+  "image_url": "/v1/generations/44f71a20-cf22-47ad-a18e-c38e0ea6f3b7/image",
+  "qr_version": 6,
+  "scan_pass_rate": 1.0,
+  "exact_payload_match": true,
+  "module_error_rate": 0.0,
+  "generation_ms": 1115.1529112830758,
+  "validation_ms": 1155.4800672456622,
+  "total_ms": 10023.203348740935,
+  "error": null,
+  "validations": [
+    {
+      "decoder": "opencv",
+      "scenario": "original",
+      "success": true,
+      "exact_payload_match": true,
+      "latency_ms": 9.485063143074512
+    },
+    {
+      "decoder": "zbar",
+      "scenario": "original",
+      "success": true,
+      "exact_payload_match": true,
+      "latency_ms": 6.97547011077404
+    },
+    {
+      "decoder": "opencv",
+      "scenario": "jpeg_90",
+      "success": true,
+      "exact_payload_match": true,
+      "latency_ms": 9.276567958295345
+    },
+    {
+      "decoder": "zbar",
+      "scenario": "jpeg_90",
+      "success": true,
+      "exact_payload_match": true,
+      "latency_ms": 7.542050443589687
+    },
+    {
+      "decoder": "opencv",
+      "scenario": "jpeg_70",
+      "success": true,
+      "exact_payload_match": true,
+      "latency_ms": 9.261570870876312
+    },
+    {
+      "decoder": "zbar",
+      "scenario": "jpeg_70",
+      "success": true,
+      "exact_payload_match": true,
+      "latency_ms": 8.261010982096195
+    },
+    {
+      "decoder": "opencv",
+      "scenario": "blur_3",
+      "success": true,
+      "exact_payload_match": true,
+      "latency_ms": 8.610958233475685
+    },
+    {
+      "decoder": "zbar",
+      "scenario": "blur_3",
+      "success": true,
+      "exact_payload_match": true,
+      "latency_ms": 5.784026347100735
+    },
+    {
+      "decoder": "opencv",
+      "scenario": "brightness_low",
+      "success": true,
+      "exact_payload_match": true,
+      "latency_ms": 9.227811358869076
+    },
+    {
+      "decoder": "zbar",
+      "scenario": "brightness_low",
+      "success": true,
+      "exact_payload_match": true,
+      "latency_ms": 6.628028117120266
+    },
+    {
+      "decoder": "opencv",
+      "scenario": "brightness_high",
+      "success": true,
+      "exact_payload_match": true,
+      "latency_ms": 8.233965374529362
+    },
+    {
+      "decoder": "zbar",
+      "scenario": "brightness_high",
+      "success": true,
+      "exact_payload_match": true,
+      "latency_ms": 6.267574615776539
+    },
+    {
+      "decoder": "opencv",
+      "scenario": "contrast_low",
+      "success": true,
+      "exact_payload_match": true,
+      "latency_ms": 9.241527877748013
+    },
+    {
+      "decoder": "zbar",
+      "scenario": "contrast_low",
+      "success": true,
+      "exact_payload_match": true,
+      "latency_ms": 6.662487052381039
+    },
+    {
+      "decoder": "opencv",
+      "scenario": "downscale_75",
+      "success": true,
+      "exact_payload_match": true,
+      "latency_ms": 8.642013184726238
+    },
+    {
+      "decoder": "zbar",
+      "scenario": "downscale_75",
+      "success": true,
+      "exact_payload_match": true,
+      "latency_ms": 7.131095044314861
+    },
+    {
+      "decoder": "opencv",
+      "scenario": "noise_gaussian",
+      "success": true,
+      "exact_payload_match": true,
+      "latency_ms": 9.425998665392399
+    },
+    {
+      "decoder": "zbar",
+      "scenario": "noise_gaussian",
+      "success": true,
+      "exact_payload_match": true,
+      "latency_ms": 10.797196999192238
+    },
+    {
+      "decoder": "opencv",
+      "scenario": "rotation_3",
+      "success": true,
+      "exact_payload_match": true,
+      "latency_ms": 9.616740047931671
+    },
+    {
+      "decoder": "zbar",
+      "scenario": "rotation_3",
+      "success": true,
+      "exact_payload_match": true,
+      "latency_ms": 6.301448680460453
+    },
+    {
+      "decoder": "opencv",
+      "scenario": "print_dot_gain",
+      "success": true,
+      "exact_payload_match": true,
+      "latency_ms": 11.048303917050362
+    },
+    {
+      "decoder": "zbar",
+      "scenario": "print_dot_gain",
+      "success": true,
+      "exact_payload_match": true,
+      "latency_ms": 4.582987166941166
+    },
+    {
+      "decoder": "opencv",
+      "scenario": "print_dot_loss",
+      "success": true,
+      "exact_payload_match": true,
+      "latency_ms": 6.873792037367821
+    },
+    {
+      "decoder": "zbar",
+      "scenario": "print_dot_loss",
+      "success": true,
+      "exact_payload_match": true,
+      "latency_ms": 3.868311643600464
+    },
+    {
+      "decoder": "opencv",
+      "scenario": "perspective_mild",
+      "success": true,
+      "exact_payload_match": true,
+      "latency_ms": 9.147999808192253
+    },
+    {
+      "decoder": "zbar",
+      "scenario": "perspective_mild",
+      "success": true,
+      "exact_payload_match": true,
+      "latency_ms": 5.606978200376034
+    }
+  ],
+  "attempt_details": [
+    {
+      "attempt": 1,
+      "seed": 271828,
+      "generation_ms": 1115.1529112830758,
+      "validation_ms": 1155.4800672456622,
+      "scan_pass_rate": 1.0,
+      "module_error_rate": 0.0,
+      "accepted": true
+    }
+  ],
+  "quality_metrics": {
+    "brightness_mean": 0.6496550167308134,
+    "contrast_std": 0.851846058453095,
+    "entropy_bits": 5.3607182608866175,
+    "sharpness_laplacian": 5107.807843646966,
+    "clipped_pixel_ratio": 0.5263900756835938
+  }
+}

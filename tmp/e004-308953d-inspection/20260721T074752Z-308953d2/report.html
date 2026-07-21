@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Benchmark Prooftag QR — 20260721T074752Z-308953d2</title>
+  <style>
+    :root { color-scheme: light dark; --bg:#f6f7f8; --surface:#fff; --text:#172026; --muted:#63717a; --line:#d9dfe3; --scan:#15803d; --change:#b45309; --time:#2563eb; }
+    @media (prefers-color-scheme: dark) { :root { --bg:#101416; --surface:#182024; --text:#edf2f4; --muted:#a9b5bb; --line:#344047; --scan:#4ade80; --change:#fbbf24; --time:#60a5fa; } }
+    * { box-sizing:border-box; } body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui,sans-serif; }
+    main { max-width:1440px; margin:auto; padding:24px; } h1,h2,h3 { font-weight:600; } h1 { margin-bottom:4px; } .muted { color:var(--muted); }
+    .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0; }
+    .stat,article { background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:14px; } .stat strong { display:block; font-size:1.7rem; }
+    .charts { display:grid; gap:14px; } .chart-row { display:grid; grid-template-columns:minmax(150px,1.4fr) 145px 2fr; gap:7px 12px; align-items:center; }
+    .track { height:13px; background:var(--line); border-radius:7px; overflow:hidden; } .track i { display:block; height:100%; } .scan { background:var(--scan); } .change { background:var(--change); } .time { background:var(--time); }
+    .gallery { display:grid; grid-template-columns:repeat(auto-fit,minmax(380px,1fr)); gap:16px; } .images { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    figure { margin:0; } img { display:block; width:100%; aspect-ratio:1; object-fit:contain; background:var(--bg); } figcaption { color:var(--muted); text-align:center; }
+    dl { display:grid; grid-template-columns:1fr 1fr; gap:5px 10px; } dt { color:var(--muted); } dd { margin:0; text-align:right; }
+    .table-wrap { overflow-x:auto; } table { width:100%; border-collapse:collapse; } th,td { padding:8px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; } th:first-child,td:first-child { text-align:left; }
+    a { color:var(--time); } section { margin-top:30px; }
+    @media (max-width:680px) { main { padding:14px; } .chart-row { grid-template-columns:1fr; } .gallery { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body><main>
+  <h1>Benchmark Prooftag QR</h1>
+  <p class="muted">Version 308953d25c8bd25e504d129447d8567d2533d4b8 · 2026-07-21T07:47:52.063778+00:00 · comparaison : 20260721T074704Z-308953d2</p>
+  <div class="stats">
+    <div class="stat"><span>Livraison finale</span><strong>100.0%</strong><small>6/6 images</small></div>
+    <div class="stat"><span>Premier essai</span><strong>100.0%</strong></div>
+    <div class="stat"><span>Brut strict, premier essai</span><strong>0.0%</strong></div>
+    <div class="stat"><span>Brut + diffusion guidée + latent</span><strong>0.0%</strong></div>
+    <div class="stat"><span>Sauvetages diffusion guidée</span><strong>0</strong></div>
+    <div class="stat"><span>Sauvetages latents</span><strong>0</strong></div>
+    <div class="stat"><span>Tentatives moyennes</span><strong>1.00</strong></div>
+    <div class="stat"><span>Fallback global</span><strong>0</strong></div>
+    <div class="stat"><span>Lecture moyenne</span><strong>100.0%</strong></div>
+    <div class="stat"><span>Pixels modifiés</span><strong>74.0%</strong></div>
+    <div class="stat"><span>Temps moyen</span><strong>9.62 s</strong></div>
+    <div class="stat"><span>GPU maximum</span><strong>100%</strong></div>
+    <div class="stat"><span>VRAM maximum</span><strong>6192 MiB</strong></div>
+  </div>
+  <section><h2>Mesures par cas</h2><div class="charts">
+            <div class="chart-row">
+              <strong>botanical-short</strong>
+              <span>Lecture 100.0%</span>
+              <div class="track"><i class="scan" style="width:100.00%"></i></div>
+              <span>Pixels modifiés 71.0%</span>
+              <div class="track"><i class="change" style="width:71.04%"></i></div>
+              <span>Temps 10.41s</span>
+              <div class="track"><i class="time" style="width:76.42%"></i></div>
+            </div>
+            
+            <div class="chart-row">
+              <strong>wine-label</strong>
+              <span>Lecture 100.0%</span>
+              <div class="track"><i class="scan" style="width:100.00%"></i></div>
+              <span>Pixels modifiés 72.7%</span>
+              <div class="track"><i class="change" style="width:72.67%"></i></div>
+              <span>Temps 7.65s</span>
+              <div class="track"><i class="time" style="width:56.20%"></i></div>
+            </div>
+            
+            <div class="chart-row">
+              <strong>geometric-packaging</strong>
+              <span>Lecture 100.0%</span>
+              <div class="track"><i class="scan" style="width:100.00%"></i></div>
+              <span>Pixels modifiés 67.4%</span>
+              <div class="track"><i class="change" style="width:67.38%"></i></div>
+              <span>Temps 13.62s</span>
+              <div class="track"><i class="time" style="width:100.00%"></i></div>
+            </div>
+            
+            <div class="chart-row">
+              <strong>cosmetics-organic</strong>
+              <span>Lecture 100.0%</span>
+              <div class="track"><i class="scan" style="width:100.00%"></i></div>
+              <span>Pixels modifiés 73.1%</span>
+              <div class="track"><i class="change" style="width:73.11%"></i></div>
+              <span>Temps 8.30s</span>
+              <div class="track"><i class="time" style="width:60.94%"></i></div>
+            </div>
+            
+            <div class="chart-row">
+              <strong>industrial-technical</strong>
+              <span>Lecture 100.0%</span>
+              <div class="track"><i class="scan" style="width:100.00%"></i></div>
+              <span>Pixels modifiés 65.8%</span>
+              <div class="track"><i class="change" style="width:65.85%"></i></div>
+              <span>Temps 10.02s</span>
+              <div class="track"><i class="time" style="width:73.59%"></i></div>
+            </div>
+            
+            <div class="chart-row">
+              <strong>dense-payload</strong>
+              <span>Lecture 100.0%</span>
+              <div class="track"><i class="scan" style="width:100.00%"></i></div>
+              <span>Pixels modifiés 93.9%</span>
+              <div class="track"><i class="change" style="width:93.94%"></i></div>
+              <span>Temps 7.69s</span>
+              <div class="track"><i class="time" style="width:56.46%"></i></div>
+            </div>
+            </div></section>
+  <section><h2>Évolution depuis le benchmark précédent</h2><div class="table-wrap"><table>
+    <thead><tr><th>Cas</th><th>Lecture</th><th>Δ lecture</th><th>Pixels modifiés</th><th>Δ pixels</th><th>Temps</th><th>Δ temps</th></tr></thead>
+    <tbody><tr><td>botanical-short</td><td>100.0%</td><td>0.0%</td><td>71.0%</td><td>18.7%</td><td>10408 ms</td><td>4726 ms</td></tr><tr><td>wine-label</td><td>100.0%</td><td>0.0%</td><td>72.7%</td><td>15.5%</td><td>7654 ms</td><td>4811 ms</td></tr><tr><td>geometric-packaging</td><td>100.0%</td><td>0.0%</td><td>67.4%</td><td>11.8%</td><td>13620 ms</td><td>5416 ms</td></tr><tr><td>cosmetics-organic</td><td>100.0%</td><td>0.0%</td><td>73.1%</td><td>15.7%</td><td>8300 ms</td><td>874 ms</td></tr><tr><td>industrial-technical</td><td>100.0%</td><td>0.0%</td><td>65.8%</td><td>13.4%</td><td>10023 ms</td><td>6896 ms</td></tr><tr><td>dense-payload</td><td>100.0%</td><td>0.0%</td><td>93.9%</td><td>16.4%</td><td>7690 ms</td><td>3894 ms</td></tr></tbody>
+  </table></div></section>
+  <section><h2>Galerie brute / finale</h2><div class="gallery">
+            <article>
+              <h3>botanical-short</h3>
+              <div class="images">
+                <figure><img src="cases/botanical-short/raw.png" alt="Image brute botanical-short"><figcaption>Brute</figcaption></figure>
+                <figure><img src="cases/botanical-short/attempt_1_guided_control.png" alt="Guide QR botanical-short"><figcaption>Guide QR local</figcaption></figure>
+                <figure><img src="cases/botanical-short/attempt_1_guided_mask.png" alt="Masque local botanical-short"><figcaption>Masque local</figcaption></figure>
+                <figure><img src="cases/botanical-short/attempt_1_guided_unprojected.png" alt="Rediffusion globale botanical-short"><figcaption>Rediffusion globale</figcaption></figure>
+                <figure><img src="cases/botanical-short/attempt_1_guided_candidate.png" alt="Rediffusion projetée botanical-short"><figcaption>Projection locale</figcaption></figure>
+                <figure><img src="cases/botanical-short/attempt_1_guided.png" alt="Seconde diffusion botanical-short"><figcaption>Diffusion guidée</figcaption></figure>
+                <figure><img src="cases/botanical-short/attempt_1_guided_latent_srl.png" alt="Image raffinée botanical-short"><figcaption>guided_latent_srl</figcaption></figure>
+                <figure><img src="cases/botanical-short/final.png" alt="Image finale botanical-short"><figcaption>Finale</figcaption></figure>
+              </div>
+              <dl>
+                <dt>Résultat</dt><dd>accepted</dd>
+                <dt>Profil</dt><dd>guided_latent_rounded_16</dd>
+                <dt>Tentatives</dt><dd>1</dd>
+                <dt>Accepté au premier essai</dt><dd>oui</dd>
+                <dt>Lecture</dt><dd>100.0%</dd>
+                <dt>Pixels modifiés</dt><dd>71.0%</dd>
+                <dt>Entropie</dt><dd>5.787</dd>
+                <dt>Temps total</dt><dd>10.41 s</dd>
+              </dl>
+              <a href="cases/botanical-short/response.json">Réponse JSON</a>
+            </article>
+            
+            <article>
+              <h3>wine-label</h3>
+              <div class="images">
+                <figure><img src="cases/wine-label/raw.png" alt="Image brute wine-label"><figcaption>Brute</figcaption></figure>
+                <figure><img src="cases/wine-label/attempt_1_guided_control.png" alt="Guide QR wine-label"><figcaption>Guide QR local</figcaption></figure>
+                <figure><img src="cases/wine-label/attempt_1_guided_mask.png" alt="Masque local wine-label"><figcaption>Masque local</figcaption></figure>
+                <figure><img src="cases/wine-label/attempt_1_guided_unprojected.png" alt="Rediffusion globale wine-label"><figcaption>Rediffusion globale</figcaption></figure>
+                <figure><img src="cases/wine-label/attempt_1_guided_candidate.png" alt="Rediffusion projetée wine-label"><figcaption>Projection locale</figcaption></figure>
+                <figure><img src="cases/wine-label/attempt_1_guided.png" alt="Seconde diffusion wine-label"><figcaption>Diffusion guidée</figcaption></figure>
+                <figure><img src="cases/wine-label/attempt_1_guided_latent_srl.png" alt="Image raffinée wine-label"><figcaption>guided_latent_srl</figcaption></figure>
+                <figure><img src="cases/wine-label/final.png" alt="Image finale wine-label"><figcaption>Finale</figcaption></figure>
+              </div>
+              <dl>
+                <dt>Résultat</dt><dd>accepted</dd>
+                <dt>Profil</dt><dd>guided_latent_rounded_32</dd>
+                <dt>Tentatives</dt><dd>1</dd>
+                <dt>Accepté au premier essai</dt><dd>oui</dd>
+                <dt>Lecture</dt><dd>100.0%</dd>
+                <dt>Pixels modifiés</dt><dd>72.7%</dd>
+                <dt>Entropie</dt><dd>4.676</dd>
+                <dt>Temps total</dt><dd>7.65 s</dd>
+              </dl>
+              <a href="cases/wine-label/response.json">Réponse JSON</a>
+            </article>
+            
+            <article>
+              <h3>geometric-packaging</h3>
+              <div class="images">
+                <figure><img src="cases/geometric-packaging/raw.png" alt="Image brute geometric-packaging"><figcaption>Brute</figcaption></figure>
+                <figure><img src="cases/geometric-packaging/attempt_1_guided_control.png" alt="Guide QR geometric-packaging"><figcaption>Guide QR local</figcaption></figure>
+                <figure><img src="cases/geometric-packaging/attempt_1_guided_mask.png" alt="Masque local geometric-packaging"><figcaption>Masque local</figcaption></figure>
+                <figure><img src="cases/geometric-packaging/attempt_1_guided_unprojected.png" alt="Rediffusion globale geometric-packaging"><figcaption>Rediffusion globale</figcaption></figure>
+                <figure><img src="cases/geometric-packaging/attempt_1_guided_candidate.png" alt="Rediffusion projetée geometric-packaging"><figcaption>Projection locale</figcaption></figure>
+                <figure><img src="cases/geometric-packaging/attempt_1_guided.png" alt="Seconde diffusion geometric-packaging"><figcaption>Diffusion guidée</figcaption></figure>
+                <figure><img src="cases/geometric-packaging/attempt_1_guided_latent_srl.png" alt="Image raffinée geometric-packaging"><figcaption>guided_latent_srl</figcaption></figure>
+                <figure><img src="cases/geometric-packaging/final.png" alt="Image finale geometric-packaging"><figcaption>Finale</figcaption></figure>
+              </div>
+              <dl>
+                <dt>Résultat</dt><dd>accepted</dd>
+                <dt>Profil</dt><dd>guided_latent_perceptual_32_wide</dd>
+                <dt>Tentatives</dt><dd>1</dd>
+                <dt>Accepté au premier essai</dt><dd>oui</dd>
+                <dt>Lecture</dt><dd>100.0%</dd>
+                <dt>Pixels modifiés</dt><dd>67.4%</dd>
+                <dt>Entropie</dt><dd>5.793</dd>
+                <dt>Temps total</dt><dd>13.62 s</dd>
+              </dl>
+              <a href="cases/geometric-packaging/response.json">Réponse JSON</a>
+            </article>
+            
+            <article>
+              <h3>cosmetics-organic</h3>
+              <div class="images">
+                <figure><img src="cases/cosmetics-organic/raw.png" alt="Image brute cosmetics-organic"><figcaption>Brute</figcaption></figure>
+                <figure><img src="cases/cosmetics-organic/attempt_1_guided_control.png" alt="Guide QR cosmetics-organic"><figcaption>Guide QR local</figcaption></figure>
+                <figure><img src="cases/cosmetics-organic/attempt_1_guided_mask.png" alt="Masque local cosmetics-organic"><figcaption>Masque local</figcaption></figure>
+                <figure><img src="cases/cosmetics-organic/attempt_1_guided_unprojected.png" alt="Rediffusion globale cosmetics-organic"><figcaption>Rediffusion globale</figcaption></figure>
+                <figure><img src="cases/cosmetics-organic/attempt_1_guided_candidate.png" alt="Rediffusion projetée cosmetics-organic"><figcaption>Projection locale</figcaption></figure>
+                <figure><img src="cases/cosmetics-organic/attempt_1_guided.png" alt="Seconde diffusion cosmetics-organic"><figcaption>Diffusion guidée</figcaption></figure>
+                <figure><img src="cases/cosmetics-organic/attempt_1_guided_latent_srl.png" alt="Image raffinée cosmetics-organic"><figcaption>guided_latent_srl</figcaption></figure>
+                <figure><img src="cases/cosmetics-organic/final.png" alt="Image finale cosmetics-organic"><figcaption>Finale</figcaption></figure>
+              </div>
+              <dl>
+                <dt>Résultat</dt><dd>accepted</dd>
+                <dt>Profil</dt><dd>guided_latent_rounded_48</dd>
+                <dt>Tentatives</dt><dd>1</dd>
+                <dt>Accepté au premier essai</dt><dd>oui</dd>
+                <dt>Lecture</dt><dd>100.0%</dd>
+                <dt>Pixels modifiés</dt><dd>73.1%</dd>
+                <dt>Entropie</dt><dd>6.171</dd>
+                <dt>Temps total</dt><dd>8.30 s</dd>
+              </dl>
+              <a href="cases/cosmetics-organic/response.json">Réponse JSON</a>
+            </article>
+            
+            <article>
+              <h3>industrial-technical</h3>
+              <div class="images">
+                <figure><img src="cases/industrial-technical/raw.png" alt="Image brute industrial-technical"><figcaption>Brute</figcaption></figure>
+                <figure><img src="cases/industrial-technical/attempt_1_guided_control.png" alt="Guide QR industrial-technical"><figcaption>Guide QR local</figcaption></figure>
+                <figure><img src="cases/industrial-technical/attempt_1_guided_mask.png" alt="Masque local industrial-technical"><figcaption>Masque local</figcaption></figure>
+                <figure><img src="cases/industrial-technical/attempt_1_guided_unprojected.png" alt="Rediffusion globale industrial-technical"><figcaption>Rediffusion globale</figcaption></figure>
+                <figure><img src="cases/industrial-technical/attempt_1_guided_candidate.png" alt="Rediffusion projetée industrial-technical"><figcaption>Projection locale</figcaption></figure>
+                <figure><img src="cases/industrial-technical/attempt_1_guided.png" alt="Seconde diffusion industrial-technical"><figcaption>Diffusion guidée</figcaption></figure>
+                <figure><img src="cases/industrial-technical/attempt_1_guided_latent_srl.png" alt="Image raffinée industrial-technical"><figcaption>guided_latent_srl</figcaption></figure>
+                <figure><img src="cases/industrial-technical/final.png" alt="Image finale industrial-technical"><figcaption>Finale</figcaption></figure>
+              </div>
+              <dl>
+                <dt>Résultat</dt><dd>accepted</dd>
+                <dt>Profil</dt><dd>guided_latent_rounded_48</dd>
+                <dt>Tentatives</dt><dd>1</dd>
+                <dt>Accepté au premier essai</dt><dd>oui</dd>
+                <dt>Lecture</dt><dd>100.0%</dd>
+                <dt>Pixels modifiés</dt><dd>65.8%</dd>
+                <dt>Entropie</dt><dd>5.361</dd>
+                <dt>Temps total</dt><dd>10.02 s</dd>
+              </dl>
+              <a href="cases/industrial-technical/response.json">Réponse JSON</a>
+            </article>
+            
+            <article>
+              <h3>dense-payload</h3>
+              <div class="images">
+                <figure><img src="cases/dense-payload/raw.png" alt="Image brute dense-payload"><figcaption>Brute</figcaption></figure>
+                <figure><img src="cases/dense-payload/attempt_1_guided_control.png" alt="Guide QR dense-payload"><figcaption>Guide QR local</figcaption></figure>
+                <figure><img src="cases/dense-payload/attempt_1_guided_mask.png" alt="Masque local dense-payload"><figcaption>Masque local</figcaption></figure>
+                <figure><img src="cases/dense-payload/attempt_1_guided_unprojected.png" alt="Rediffusion globale dense-payload"><figcaption>Rediffusion globale</figcaption></figure>
+                <figure><img src="cases/dense-payload/attempt_1_guided_candidate.png" alt="Rediffusion projetée dense-payload"><figcaption>Projection locale</figcaption></figure>
+                <figure><img src="cases/dense-payload/attempt_1_guided.png" alt="Seconde diffusion dense-payload"><figcaption>Diffusion guidée</figcaption></figure>
+                <figure><img src="cases/dense-payload/attempt_1_guided_latent_srl.png" alt="Image raffinée dense-payload"><figcaption>guided_latent_srl</figcaption></figure>
+                <figure><img src="cases/dense-payload/final.png" alt="Image finale dense-payload"><figcaption>Finale</figcaption></figure>
+              </div>
+              <dl>
+                <dt>Résultat</dt><dd>accepted</dd>
+                <dt>Profil</dt><dd>guided_latent_rounded_48</dd>
+                <dt>Tentatives</dt><dd>1</dd>
+                <dt>Accepté au premier essai</dt><dd>oui</dd>
+                <dt>Lecture</dt><dd>100.0%</dd>
+                <dt>Pixels modifiés</dt><dd>93.9%</dd>
+                <dt>Entropie</dt><dd>6.361</dd>
+                <dt>Temps total</dt><dd>7.69 s</dd>
+              </dl>
+              <a href="cases/dense-payload/response.json">Réponse JSON</a>
+            </article>
+            </div></section>
+</main></body></html>

@@ -1,0 +1,106 @@
+{
+  "benchmark_protocol_version": "2.1",
+  "generation_parameters": {
+    "backend": "controlnet",
+    "negative_prompt": "blurry, low quality, text, watermark, unreadable QR",
+    "error_correction": "H",
+    "steps": 12,
+    "guidance_scale": 12,
+    "controlnet_scale": 1.5,
+    "strength": 0.9,
+    "max_attempts": 3
+  },
+  "created_at": "2026-07-21T07:47:04.837088+00:00",
+  "api_url": "http://127.0.0.1:18081",
+  "ready": {
+    "status": "ready",
+    "backend": "controlnet"
+  },
+  "health": {
+    "status": "ok",
+    "version": "0.1.0"
+  },
+  "runtime": {
+    "packages": {
+      "torch": "2.4.1+cu121",
+      "diffusers": "0.31.0",
+      "transformers": "4.44.2",
+      "accelerate": "0.34.2",
+      "huggingface-hub": "0.25.2"
+    },
+    "cuda_available": true,
+    "generation_config": {
+      "base_model_id": "stable-diffusion-v1-5/stable-diffusion-v1-5",
+      "controlnet_model_id": "DionTimmer/controlnet_qrcode-control_v1p_sd15",
+      "controlnet_pipeline_mode": "img2img",
+      "validation_min_pass_rate": 1.0,
+      "max_attempts": 3,
+      "regenerate_before_global_repair": true,
+      "guided_rediffusion_enabled": false,
+      "guided_rediffusion_steps": 8,
+      "guided_rediffusion_strength": 0.3,
+      "guided_rediffusion_controlnet_scale": 1.75,
+      "guided_rediffusion_guide_center_scale": 0.45,
+      "guided_rediffusion_guide_confidence_margin": 16.0,
+      "guided_rediffusion_mask_dilation_px": 4,
+      "guided_rediffusion_mask_feather_px": 4,
+      "guided_rediffusion_max_mean_absolute_change": 0.12,
+      "guided_rediffusion_seed_offset": 1000003,
+      "latent_refinement_enabled": false,
+      "latent_refinement_iterations": 8,
+      "latent_refinement_learning_rate": 0.02,
+      "latent_refinement_qr_weight": 1.0,
+      "latent_refinement_preservation_weight": 1.0,
+      "latent_refinement_functional_weight": 4.0,
+      "latent_refinement_target_module_error_rate": 0.0,
+      "latent_refinement_max_latent_delta": 0.1,
+      "latent_refinement_max_mean_absolute_change": 0.08
+    },
+    "cuda_runtime": "12.1",
+    "device": "NVIDIA RTX 4000 SFF Ada Generation",
+    "device_memory_bytes": 21124022272
+  },
+  "git_commit": "308953d25c8bd25e504d129447d8567d2533d4b8",
+  "git_branch": "main",
+  "git_status": "",
+  "nvidia_smi": {
+    "command": [
+      "nvidia-smi",
+      "--query-gpu=name,driver_version,memory.total,memory.used,utilization.gpu,temperature.gpu,power.draw",
+      "--format=csv,noheader,nounits"
+    ],
+    "returncode": 0,
+    "stdout": "NVIDIA RTX 4000 SFF Ada Generation, 535.247.01, 20475, 4, 0, 39, 12.95",
+    "stderr": ""
+  },
+  "kubernetes_pods": {
+    "command": [
+      "kubectl",
+      "get",
+      "pods",
+      "-n",
+      "qr-core",
+      "-o",
+      "wide"
+    ],
+    "returncode": 0,
+    "stdout": "NAME                                         READY   STATUS      RESTARTS   AGE     IP            NODE   NOMINATED NODE   READINESS GATES\nprooftag-qr-6d95659bb-q2f98                  1/1     Running     0          12s     10.42.0.152   pcia   <none>           <none>\nprooftag-qr-postgres-0                       1/1     Running     0          22h     10.42.0.119   pcia   <none>           <none>\nprooftag-qr-postgres-backup-29743215-9vjtw   0/1     Completed   0          7h32m   10.42.0.151   pcia   <none>           <none>",
+    "stderr": ""
+  },
+  "kubernetes_image_id": {
+    "command": [
+      "kubectl",
+      "get",
+      "pods",
+      "-n",
+      "qr-core",
+      "-l",
+      "app=prooftag-qr",
+      "-o",
+      "jsonpath={.items[0].status.containerStatuses[?(@.name=='api')].imageID}"
+    ],
+    "returncode": 0,
+    "stdout": "sha256:004930d26d02042ec14d5491098c259c5fcb434cfc536f62adcc91236160ca74",
+    "stderr": ""
+  }
+}

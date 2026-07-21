@@ -1,0 +1,531 @@
+# HELP python_gc_objects_collected_total Objects collected during gc
+# TYPE python_gc_objects_collected_total counter
+python_gc_objects_collected_total{generation="0"} 14083.0
+python_gc_objects_collected_total{generation="1"} 1948.0
+python_gc_objects_collected_total{generation="2"} 184.0
+# HELP python_gc_objects_uncollectable_total Uncollectable objects found during GC
+# TYPE python_gc_objects_uncollectable_total counter
+python_gc_objects_uncollectable_total{generation="0"} 0.0
+python_gc_objects_uncollectable_total{generation="1"} 0.0
+python_gc_objects_uncollectable_total{generation="2"} 0.0
+# HELP python_gc_collections_total Number of times this generation was collected
+# TYPE python_gc_collections_total counter
+python_gc_collections_total{generation="0"} 950.0
+python_gc_collections_total{generation="1"} 85.0
+python_gc_collections_total{generation="2"} 7.0
+# HELP python_info Python platform information
+# TYPE python_info gauge
+python_info{implementation="CPython",major="3",minor="11",patchlevel="9",version="3.11.9"} 1.0
+# HELP process_virtual_memory_bytes Virtual memory size in bytes.
+# TYPE process_virtual_memory_bytes gauge
+process_virtual_memory_bytes 3.0538481664e+010
+# HELP process_resident_memory_bytes Resident memory size in bytes.
+# TYPE process_resident_memory_bytes gauge
+process_resident_memory_bytes 3.391905792e+09
+# HELP process_start_time_seconds Start time of the process since unix epoch in seconds.
+# TYPE process_start_time_seconds gauge
+process_start_time_seconds 1.78462001427e+09
+# HELP process_cpu_seconds_total Total user and system CPU time spent in seconds.
+# TYPE process_cpu_seconds_total counter
+process_cpu_seconds_total 47.42
+# HELP process_open_fds Number of open file descriptors.
+# TYPE process_open_fds gauge
+process_open_fds 51.0
+# HELP process_max_fds Maximum number of open file descriptors.
+# TYPE process_max_fds gauge
+process_max_fds 1.048576e+06
+# HELP prooftag_qr_runs_total Number of completed QR generation runs
+# TYPE prooftag_qr_runs_total counter
+prooftag_qr_runs_total{backend="controlnet",status="accepted"} 6.0
+# HELP prooftag_qr_runs_created Number of completed QR generation runs
+# TYPE prooftag_qr_runs_created gauge
+prooftag_qr_runs_created{backend="controlnet",status="accepted"} 1.7846200312144985e+09
+# HELP prooftag_qr_runs_active Number of QR generation runs in progress
+# TYPE prooftag_qr_runs_active gauge
+prooftag_qr_runs_active 0.0
+# HELP prooftag_qr_attempts Number of attempts per completed run
+# TYPE prooftag_qr_attempts histogram
+prooftag_qr_attempts_bucket{le="1.0"} 6.0
+prooftag_qr_attempts_bucket{le="2.0"} 6.0
+prooftag_qr_attempts_bucket{le="3.0"} 6.0
+prooftag_qr_attempts_bucket{le="4.0"} 6.0
+prooftag_qr_attempts_bucket{le="5.0"} 6.0
+prooftag_qr_attempts_bucket{le="8.0"} 6.0
+prooftag_qr_attempts_bucket{le="12.0"} 6.0
+prooftag_qr_attempts_bucket{le="20.0"} 6.0
+prooftag_qr_attempts_bucket{le="+Inf"} 6.0
+prooftag_qr_attempts_count 6.0
+prooftag_qr_attempts_sum 6.0
+# HELP prooftag_qr_attempts_created Number of attempts per completed run
+# TYPE prooftag_qr_attempts_created gauge
+prooftag_qr_attempts_created 1.784620015083734e+09
+# HELP prooftag_qr_regenerations_total New diffusion generations scheduled before global QR repair
+# TYPE prooftag_qr_regenerations_total counter
+# HELP prooftag_qr_duration_seconds Pipeline duration by stage
+# TYPE prooftag_qr_duration_seconds histogram
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="0.05",stage="generation"} 0.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="0.1",stage="generation"} 0.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="0.25",stage="generation"} 0.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="0.5",stage="generation"} 0.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="1.0",stage="generation"} 0.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="2.0",stage="generation"} 5.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="5.0",stage="generation"} 6.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="10.0",stage="generation"} 6.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="20.0",stage="generation"} 6.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="30.0",stage="generation"} 6.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="60.0",stage="generation"} 6.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="120.0",stage="generation"} 6.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="+Inf",stage="generation"} 6.0
+prooftag_qr_duration_seconds_count{backend="controlnet",stage="generation"} 6.0
+prooftag_qr_duration_seconds_sum{backend="controlnet",stage="generation"} 9.778971422463655
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="0.05",stage="validation"} 0.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="0.1",stage="validation"} 0.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="0.25",stage="validation"} 27.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="0.5",stage="validation"} 31.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="1.0",stage="validation"} 31.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="2.0",stage="validation"} 31.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="5.0",stage="validation"} 31.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="10.0",stage="validation"} 31.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="20.0",stage="validation"} 31.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="30.0",stage="validation"} 31.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="60.0",stage="validation"} 31.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="120.0",stage="validation"} 31.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="+Inf",stage="validation"} 31.0
+prooftag_qr_duration_seconds_count{backend="controlnet",stage="validation"} 31.0
+prooftag_qr_duration_seconds_sum{backend="controlnet",stage="validation"} 7.050303474999964
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="0.05",stage="total"} 0.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="0.1",stage="total"} 0.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="0.25",stage="total"} 0.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="0.5",stage="total"} 0.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="1.0",stage="total"} 0.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="2.0",stage="total"} 0.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="5.0",stage="total"} 3.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="10.0",stage="total"} 6.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="20.0",stage="total"} 6.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="30.0",stage="total"} 6.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="60.0",stage="total"} 6.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="120.0",stage="total"} 6.0
+prooftag_qr_duration_seconds_bucket{backend="controlnet",le="+Inf",stage="total"} 6.0
+prooftag_qr_duration_seconds_count{backend="controlnet",stage="total"} 6.0
+prooftag_qr_duration_seconds_sum{backend="controlnet",stage="total"} 31.076119490899146
+# HELP prooftag_qr_duration_seconds_created Pipeline duration by stage
+# TYPE prooftag_qr_duration_seconds_created gauge
+prooftag_qr_duration_seconds_created{backend="controlnet",stage="generation"} 1.784620029837886e+09
+prooftag_qr_duration_seconds_created{backend="controlnet",stage="validation"} 1.784620030044774e+09
+prooftag_qr_duration_seconds_created{backend="controlnet",stage="total"} 1.7846200312145119e+09
+# HELP prooftag_qr_validations_total QR validation outcomes
+# TYPE prooftag_qr_validations_total counter
+prooftag_qr_validations_total{decoder="opencv",outcome="not_detected",scenario="original"} 6.0
+prooftag_qr_validations_total{decoder="zbar",outcome="not_detected",scenario="original"} 7.0
+prooftag_qr_validations_total{decoder="opencv",outcome="not_detected",scenario="jpeg_90"} 6.0
+prooftag_qr_validations_total{decoder="zbar",outcome="not_detected",scenario="jpeg_90"} 7.0
+prooftag_qr_validations_total{decoder="opencv",outcome="not_detected",scenario="jpeg_70"} 6.0
+prooftag_qr_validations_total{decoder="zbar",outcome="not_detected",scenario="jpeg_70"} 7.0
+prooftag_qr_validations_total{decoder="opencv",outcome="not_detected",scenario="blur_3"} 6.0
+prooftag_qr_validations_total{decoder="zbar",outcome="not_detected",scenario="blur_3"} 6.0
+prooftag_qr_validations_total{decoder="opencv",outcome="not_detected",scenario="brightness_low"} 6.0
+prooftag_qr_validations_total{decoder="zbar",outcome="not_detected",scenario="brightness_low"} 7.0
+prooftag_qr_validations_total{decoder="opencv",outcome="not_detected",scenario="brightness_high"} 6.0
+prooftag_qr_validations_total{decoder="zbar",outcome="not_detected",scenario="brightness_high"} 6.0
+prooftag_qr_validations_total{decoder="opencv",outcome="not_detected",scenario="contrast_low"} 6.0
+prooftag_qr_validations_total{decoder="zbar",outcome="not_detected",scenario="contrast_low"} 7.0
+prooftag_qr_validations_total{decoder="opencv",outcome="not_detected",scenario="downscale_75"} 6.0
+prooftag_qr_validations_total{decoder="zbar",outcome="not_detected",scenario="downscale_75"} 12.0
+prooftag_qr_validations_total{decoder="opencv",outcome="not_detected",scenario="noise_gaussian"} 6.0
+prooftag_qr_validations_total{decoder="zbar",outcome="not_detected",scenario="noise_gaussian"} 7.0
+prooftag_qr_validations_total{decoder="opencv",outcome="not_detected",scenario="rotation_3"} 6.0
+prooftag_qr_validations_total{decoder="zbar",outcome="not_detected",scenario="rotation_3"} 7.0
+prooftag_qr_validations_total{decoder="opencv",outcome="not_detected",scenario="print_dot_gain"} 9.0
+prooftag_qr_validations_total{decoder="zbar",outcome="not_detected",scenario="print_dot_gain"} 12.0
+prooftag_qr_validations_total{decoder="opencv",outcome="not_detected",scenario="print_dot_loss"} 16.0
+prooftag_qr_validations_total{decoder="zbar",outcome="not_detected",scenario="print_dot_loss"} 14.0
+prooftag_qr_validations_total{decoder="opencv",outcome="not_detected",scenario="perspective_mild"} 6.0
+prooftag_qr_validations_total{decoder="zbar",outcome="not_detected",scenario="perspective_mild"} 6.0
+prooftag_qr_validations_total{decoder="opencv",outcome="exact",scenario="original"} 25.0
+prooftag_qr_validations_total{decoder="zbar",outcome="exact",scenario="original"} 24.0
+prooftag_qr_validations_total{decoder="opencv",outcome="exact",scenario="jpeg_90"} 25.0
+prooftag_qr_validations_total{decoder="zbar",outcome="exact",scenario="jpeg_90"} 24.0
+prooftag_qr_validations_total{decoder="opencv",outcome="exact",scenario="jpeg_70"} 25.0
+prooftag_qr_validations_total{decoder="zbar",outcome="exact",scenario="jpeg_70"} 24.0
+prooftag_qr_validations_total{decoder="opencv",outcome="exact",scenario="blur_3"} 25.0
+prooftag_qr_validations_total{decoder="zbar",outcome="exact",scenario="blur_3"} 25.0
+prooftag_qr_validations_total{decoder="opencv",outcome="exact",scenario="brightness_low"} 25.0
+prooftag_qr_validations_total{decoder="zbar",outcome="exact",scenario="brightness_low"} 24.0
+prooftag_qr_validations_total{decoder="opencv",outcome="exact",scenario="brightness_high"} 25.0
+prooftag_qr_validations_total{decoder="zbar",outcome="exact",scenario="brightness_high"} 25.0
+prooftag_qr_validations_total{decoder="opencv",outcome="exact",scenario="contrast_low"} 25.0
+prooftag_qr_validations_total{decoder="zbar",outcome="exact",scenario="contrast_low"} 24.0
+prooftag_qr_validations_total{decoder="opencv",outcome="exact",scenario="downscale_75"} 25.0
+prooftag_qr_validations_total{decoder="zbar",outcome="exact",scenario="downscale_75"} 19.0
+prooftag_qr_validations_total{decoder="opencv",outcome="exact",scenario="noise_gaussian"} 25.0
+prooftag_qr_validations_total{decoder="zbar",outcome="exact",scenario="noise_gaussian"} 24.0
+prooftag_qr_validations_total{decoder="opencv",outcome="exact",scenario="rotation_3"} 25.0
+prooftag_qr_validations_total{decoder="zbar",outcome="exact",scenario="rotation_3"} 24.0
+prooftag_qr_validations_total{decoder="opencv",outcome="exact",scenario="print_dot_gain"} 22.0
+prooftag_qr_validations_total{decoder="zbar",outcome="exact",scenario="print_dot_gain"} 19.0
+prooftag_qr_validations_total{decoder="opencv",outcome="exact",scenario="print_dot_loss"} 15.0
+prooftag_qr_validations_total{decoder="zbar",outcome="exact",scenario="print_dot_loss"} 17.0
+prooftag_qr_validations_total{decoder="opencv",outcome="exact",scenario="perspective_mild"} 25.0
+prooftag_qr_validations_total{decoder="zbar",outcome="exact",scenario="perspective_mild"} 25.0
+# HELP prooftag_qr_validations_created QR validation outcomes
+# TYPE prooftag_qr_validations_created gauge
+prooftag_qr_validations_created{decoder="opencv",outcome="not_detected",scenario="original"} 1.7846200300570514e+09
+prooftag_qr_validations_created{decoder="zbar",outcome="not_detected",scenario="original"} 1.78462003005708e+09
+prooftag_qr_validations_created{decoder="opencv",outcome="not_detected",scenario="jpeg_90"} 1.7846200300571008e+09
+prooftag_qr_validations_created{decoder="zbar",outcome="not_detected",scenario="jpeg_90"} 1.7846200300571063e+09
+prooftag_qr_validations_created{decoder="opencv",outcome="not_detected",scenario="jpeg_70"} 1.784620030057111e+09
+prooftag_qr_validations_created{decoder="zbar",outcome="not_detected",scenario="jpeg_70"} 1.7846200300571153e+09
+prooftag_qr_validations_created{decoder="opencv",outcome="not_detected",scenario="blur_3"} 1.7846200300571208e+09
+prooftag_qr_validations_created{decoder="zbar",outcome="not_detected",scenario="blur_3"} 1.784620030057133e+09
+prooftag_qr_validations_created{decoder="opencv",outcome="not_detected",scenario="brightness_low"} 1.784620030057138e+09
+prooftag_qr_validations_created{decoder="zbar",outcome="not_detected",scenario="brightness_low"} 1.7846200300571418e+09
+prooftag_qr_validations_created{decoder="opencv",outcome="not_detected",scenario="brightness_high"} 1.7846200300571456e+09
+prooftag_qr_validations_created{decoder="zbar",outcome="not_detected",scenario="brightness_high"} 1.7846200300571492e+09
+prooftag_qr_validations_created{decoder="opencv",outcome="not_detected",scenario="contrast_low"} 1.7846200300571527e+09
+prooftag_qr_validations_created{decoder="zbar",outcome="not_detected",scenario="contrast_low"} 1.7846200300571575e+09
+prooftag_qr_validations_created{decoder="opencv",outcome="not_detected",scenario="downscale_75"} 1.7846200300571613e+09
+prooftag_qr_validations_created{decoder="zbar",outcome="not_detected",scenario="downscale_75"} 1.784620030057165e+09
+prooftag_qr_validations_created{decoder="opencv",outcome="not_detected",scenario="noise_gaussian"} 1.7846200300571685e+09
+prooftag_qr_validations_created{decoder="zbar",outcome="not_detected",scenario="noise_gaussian"} 1.7846200300571723e+09
+prooftag_qr_validations_created{decoder="opencv",outcome="not_detected",scenario="rotation_3"} 1.7846200300571759e+09
+prooftag_qr_validations_created{decoder="zbar",outcome="not_detected",scenario="rotation_3"} 1.7846200300571797e+09
+prooftag_qr_validations_created{decoder="opencv",outcome="not_detected",scenario="print_dot_gain"} 1.7846200300571833e+09
+prooftag_qr_validations_created{decoder="zbar",outcome="not_detected",scenario="print_dot_gain"} 1.7846200300571878e+09
+prooftag_qr_validations_created{decoder="opencv",outcome="not_detected",scenario="print_dot_loss"} 1.7846200300571918e+09
+prooftag_qr_validations_created{decoder="zbar",outcome="not_detected",scenario="print_dot_loss"} 1.7846200300571961e+09
+prooftag_qr_validations_created{decoder="opencv",outcome="not_detected",scenario="perspective_mild"} 1.7846200300571995e+09
+prooftag_qr_validations_created{decoder="zbar",outcome="not_detected",scenario="perspective_mild"} 1.7846200300572038e+09
+prooftag_qr_validations_created{decoder="opencv",outcome="exact",scenario="original"} 1.7846200306678727e+09
+prooftag_qr_validations_created{decoder="zbar",outcome="exact",scenario="original"} 1.7846200306678836e+09
+prooftag_qr_validations_created{decoder="opencv",outcome="exact",scenario="jpeg_90"} 1.784620030667889e+09
+prooftag_qr_validations_created{decoder="zbar",outcome="exact",scenario="jpeg_90"} 1.7846200306678932e+09
+prooftag_qr_validations_created{decoder="opencv",outcome="exact",scenario="jpeg_70"} 1.7846200306678965e+09
+prooftag_qr_validations_created{decoder="zbar",outcome="exact",scenario="jpeg_70"} 1.7846200306679003e+09
+prooftag_qr_validations_created{decoder="opencv",outcome="exact",scenario="blur_3"} 1.784620030667904e+09
+prooftag_qr_validations_created{decoder="zbar",outcome="exact",scenario="blur_3"} 1.7846200306679072e+09
+prooftag_qr_validations_created{decoder="opencv",outcome="exact",scenario="brightness_low"} 1.7846200306679115e+09
+prooftag_qr_validations_created{decoder="zbar",outcome="exact",scenario="brightness_low"} 1.7846200306679208e+09
+prooftag_qr_validations_created{decoder="opencv",outcome="exact",scenario="brightness_high"} 1.784620030667925e+09
+prooftag_qr_validations_created{decoder="zbar",outcome="exact",scenario="brightness_high"} 1.7846200306679282e+09
+prooftag_qr_validations_created{decoder="opencv",outcome="exact",scenario="contrast_low"} 1.7846200306679316e+09
+prooftag_qr_validations_created{decoder="zbar",outcome="exact",scenario="contrast_low"} 1.7846200306679351e+09
+prooftag_qr_validations_created{decoder="opencv",outcome="exact",scenario="downscale_75"} 1.7846200306679387e+09
+prooftag_qr_validations_created{decoder="zbar",outcome="exact",scenario="downscale_75"} 1.784620030667942e+09
+prooftag_qr_validations_created{decoder="opencv",outcome="exact",scenario="noise_gaussian"} 1.7846200306679456e+09
+prooftag_qr_validations_created{decoder="zbar",outcome="exact",scenario="noise_gaussian"} 1.7846200306679509e+09
+prooftag_qr_validations_created{decoder="opencv",outcome="exact",scenario="rotation_3"} 1.7846200306679544e+09
+prooftag_qr_validations_created{decoder="zbar",outcome="exact",scenario="rotation_3"} 1.7846200306679583e+09
+prooftag_qr_validations_created{decoder="opencv",outcome="exact",scenario="print_dot_gain"} 1.7846200306679618e+09
+prooftag_qr_validations_created{decoder="zbar",outcome="exact",scenario="print_dot_gain"} 1.7846200306679661e+09
+prooftag_qr_validations_created{decoder="opencv",outcome="exact",scenario="print_dot_loss"} 1.78462003066797e+09
+prooftag_qr_validations_created{decoder="zbar",outcome="exact",scenario="print_dot_loss"} 1.7846200306679735e+09
+prooftag_qr_validations_created{decoder="opencv",outcome="exact",scenario="perspective_mild"} 1.7846200306679773e+09
+prooftag_qr_validations_created{decoder="zbar",outcome="exact",scenario="perspective_mild"} 1.7846200306679804e+09
+# HELP prooftag_qr_validation_duration_seconds Individual decoder latency
+# TYPE prooftag_qr_validation_duration_seconds histogram
+prooftag_qr_validation_duration_seconds_bucket{decoder="opencv",le="0.001"} 0.0
+prooftag_qr_validation_duration_seconds_bucket{decoder="opencv",le="0.005"} 55.0
+prooftag_qr_validation_duration_seconds_bucket{decoder="opencv",le="0.01"} 361.0
+prooftag_qr_validation_duration_seconds_bucket{decoder="opencv",le="0.025"} 403.0
+prooftag_qr_validation_duration_seconds_bucket{decoder="opencv",le="0.05"} 403.0
+prooftag_qr_validation_duration_seconds_bucket{decoder="opencv",le="0.1"} 403.0
+prooftag_qr_validation_duration_seconds_bucket{decoder="opencv",le="0.25"} 403.0
+prooftag_qr_validation_duration_seconds_bucket{decoder="opencv",le="0.5"} 403.0
+prooftag_qr_validation_duration_seconds_bucket{decoder="opencv",le="1.0"} 403.0
+prooftag_qr_validation_duration_seconds_bucket{decoder="opencv",le="2.0"} 403.0
+prooftag_qr_validation_duration_seconds_bucket{decoder="opencv",le="+Inf"} 403.0
+prooftag_qr_validation_duration_seconds_count{decoder="opencv"} 403.0
+prooftag_qr_validation_duration_seconds_sum{decoder="opencv"} 3.293934770859778
+prooftag_qr_validation_duration_seconds_bucket{decoder="zbar",le="0.001"} 0.0
+prooftag_qr_validation_duration_seconds_bucket{decoder="zbar",le="0.005"} 59.0
+prooftag_qr_validation_duration_seconds_bucket{decoder="zbar",le="0.01"} 367.0
+prooftag_qr_validation_duration_seconds_bucket{decoder="zbar",le="0.025"} 403.0
+prooftag_qr_validation_duration_seconds_bucket{decoder="zbar",le="0.05"} 403.0
+prooftag_qr_validation_duration_seconds_bucket{decoder="zbar",le="0.1"} 403.0
+prooftag_qr_validation_duration_seconds_bucket{decoder="zbar",le="0.25"} 403.0
+prooftag_qr_validation_duration_seconds_bucket{decoder="zbar",le="0.5"} 403.0
+prooftag_qr_validation_duration_seconds_bucket{decoder="zbar",le="1.0"} 403.0
+prooftag_qr_validation_duration_seconds_bucket{decoder="zbar",le="2.0"} 403.0
+prooftag_qr_validation_duration_seconds_bucket{decoder="zbar",le="+Inf"} 403.0
+prooftag_qr_validation_duration_seconds_count{decoder="zbar"} 403.0
+prooftag_qr_validation_duration_seconds_sum{decoder="zbar"} 2.8199625527486205
+# HELP prooftag_qr_validation_duration_seconds_created Individual decoder latency
+# TYPE prooftag_qr_validation_duration_seconds_created gauge
+prooftag_qr_validation_duration_seconds_created{decoder="opencv"} 1.7846200300570624e+09
+prooftag_qr_validation_duration_seconds_created{decoder="zbar"} 1.7846200300570853e+09
+# HELP prooftag_qr_scan_pass_rate Share of validation cases decoding the exact payload
+# TYPE prooftag_qr_scan_pass_rate histogram
+prooftag_qr_scan_pass_rate_bucket{le="0.5"} 0.0
+prooftag_qr_scan_pass_rate_bucket{le="0.7"} 0.0
+prooftag_qr_scan_pass_rate_bucket{le="0.8"} 0.0
+prooftag_qr_scan_pass_rate_bucket{le="0.9"} 0.0
+prooftag_qr_scan_pass_rate_bucket{le="0.95"} 0.0
+prooftag_qr_scan_pass_rate_bucket{le="0.99"} 0.0
+prooftag_qr_scan_pass_rate_bucket{le="1.0"} 6.0
+prooftag_qr_scan_pass_rate_bucket{le="+Inf"} 6.0
+prooftag_qr_scan_pass_rate_count 6.0
+prooftag_qr_scan_pass_rate_sum 6.0
+# HELP prooftag_qr_scan_pass_rate_created Share of validation cases decoding the exact payload
+# TYPE prooftag_qr_scan_pass_rate_created gauge
+prooftag_qr_scan_pass_rate_created 1.7846200150837815e+09
+# HELP prooftag_qr_module_error_rate Estimated share of QR modules with wrong luminance
+# TYPE prooftag_qr_module_error_rate histogram
+prooftag_qr_module_error_rate_bucket{le="0.001"} 6.0
+prooftag_qr_module_error_rate_bucket{le="0.005"} 6.0
+prooftag_qr_module_error_rate_bucket{le="0.01"} 6.0
+prooftag_qr_module_error_rate_bucket{le="0.02"} 6.0
+prooftag_qr_module_error_rate_bucket{le="0.05"} 6.0
+prooftag_qr_module_error_rate_bucket{le="0.1"} 6.0
+prooftag_qr_module_error_rate_bucket{le="0.2"} 6.0
+prooftag_qr_module_error_rate_bucket{le="0.4"} 6.0
+prooftag_qr_module_error_rate_bucket{le="1.0"} 6.0
+prooftag_qr_module_error_rate_bucket{le="+Inf"} 6.0
+prooftag_qr_module_error_rate_count 6.0
+prooftag_qr_module_error_rate_sum 0.0
+# HELP prooftag_qr_module_error_rate_created Estimated share of QR modules with wrong luminance
+# TYPE prooftag_qr_module_error_rate_created gauge
+prooftag_qr_module_error_rate_created 1.7846200150838428e+09
+# HELP prooftag_qr_image_quality_latest Latest image quality measurement; durable per-run values are stored in SQLite
+# TYPE prooftag_qr_image_quality_latest gauge
+prooftag_qr_image_quality_latest{metric="brightness_mean"} 0.6080814885158164
+prooftag_qr_image_quality_latest{metric="contrast_std"} 0.8134682330783994
+prooftag_qr_image_quality_latest{metric="entropy_bits"} 6.413338601244781
+prooftag_qr_image_quality_latest{metric="sharpness_laplacian"} 6924.785011216067
+prooftag_qr_image_quality_latest{metric="clipped_pixel_ratio"} 0.2648887634277344
+# HELP prooftag_qr_physical_validations_total Physical scan validation outcomes
+# TYPE prooftag_qr_physical_validations_total counter
+# HELP prooftag_qr_model_loads_total ControlNet model load outcomes
+# TYPE prooftag_qr_model_loads_total counter
+prooftag_qr_model_loads_total{status="success"} 1.0
+# HELP prooftag_qr_model_loads_created ControlNet model load outcomes
+# TYPE prooftag_qr_model_loads_created gauge
+prooftag_qr_model_loads_created{status="success"} 1.7846200284696763e+09
+# HELP prooftag_qr_model_load_duration_seconds Time spent loading the ControlNet pipeline by outcome
+# TYPE prooftag_qr_model_load_duration_seconds histogram
+prooftag_qr_model_load_duration_seconds_bucket{le="1.0",status="success"} 0.0
+prooftag_qr_model_load_duration_seconds_bucket{le="5.0",status="success"} 1.0
+prooftag_qr_model_load_duration_seconds_bucket{le="10.0",status="success"} 1.0
+prooftag_qr_model_load_duration_seconds_bucket{le="30.0",status="success"} 1.0
+prooftag_qr_model_load_duration_seconds_bucket{le="60.0",status="success"} 1.0
+prooftag_qr_model_load_duration_seconds_bucket{le="120.0",status="success"} 1.0
+prooftag_qr_model_load_duration_seconds_bucket{le="300.0",status="success"} 1.0
+prooftag_qr_model_load_duration_seconds_bucket{le="600.0",status="success"} 1.0
+prooftag_qr_model_load_duration_seconds_bucket{le="1200.0",status="success"} 1.0
+prooftag_qr_model_load_duration_seconds_bucket{le="+Inf",status="success"} 1.0
+prooftag_qr_model_load_duration_seconds_count{status="success"} 1.0
+prooftag_qr_model_load_duration_seconds_sum{status="success"} 2.93030796200037
+# HELP prooftag_qr_model_load_duration_seconds_created Time spent loading the ControlNet pipeline by outcome
+# TYPE prooftag_qr_model_load_duration_seconds_created gauge
+prooftag_qr_model_load_duration_seconds_created{status="success"} 1.7846200284696956e+09
+# HELP prooftag_qr_model_loaded Whether the ControlNet pipeline is loaded in this process
+# TYPE prooftag_qr_model_loaded gauge
+prooftag_qr_model_loaded 1.0
+# HELP prooftag_qr_repair_variants_total QR repair variants validated by outcome
+# TYPE prooftag_qr_repair_variants_total counter
+prooftag_qr_repair_variants_total{outcome="rejected",variant="raw"} 6.0
+prooftag_qr_repair_variants_total{outcome="accepted",variant="rounded_16"} 1.0
+prooftag_qr_repair_variants_total{outcome="rejected",variant="rounded_16"} 5.0
+prooftag_qr_repair_variants_total{outcome="accepted",variant="rounded_32"} 2.0
+prooftag_qr_repair_variants_total{outcome="rejected",variant="rounded_32"} 3.0
+prooftag_qr_repair_variants_total{outcome="rejected",variant="rounded_48"} 2.0
+prooftag_qr_repair_variants_total{outcome="rejected",variant="perceptual_16"} 2.0
+prooftag_qr_repair_variants_total{outcome="rejected",variant="perceptual_16_strong"} 2.0
+prooftag_qr_repair_variants_total{outcome="rejected",variant="perceptual_32"} 2.0
+prooftag_qr_repair_variants_total{outcome="rejected",variant="perceptual_32_strong"} 2.0
+prooftag_qr_repair_variants_total{outcome="accepted",variant="perceptual_32_wide"} 1.0
+prooftag_qr_repair_variants_total{outcome="rejected",variant="perceptual_32_wide"} 1.0
+prooftag_qr_repair_variants_total{outcome="accepted",variant="perceptual_48"} 1.0
+prooftag_qr_repair_variants_total{outcome="accepted",variant="rounded_48"} 1.0
+# HELP prooftag_qr_repair_variants_created QR repair variants validated by outcome
+# TYPE prooftag_qr_repair_variants_created gauge
+prooftag_qr_repair_variants_created{outcome="rejected",variant="raw"} 1.7846200300572147e+09
+prooftag_qr_repair_variants_created{outcome="accepted",variant="rounded_16"} 1.784620030667991e+09
+prooftag_qr_repair_variants_created{outcome="rejected",variant="rounded_16"} 1.7846200333916636e+09
+prooftag_qr_repair_variants_created{outcome="accepted",variant="rounded_32"} 1.7846200340963395e+09
+prooftag_qr_repair_variants_created{outcome="rejected",variant="rounded_32"} 1.7846200374363325e+09
+prooftag_qr_repair_variants_created{outcome="rejected",variant="rounded_48"} 1.7846200379067883e+09
+prooftag_qr_repair_variants_created{outcome="rejected",variant="perceptual_16"} 1.7846200385668223e+09
+prooftag_qr_repair_variants_created{outcome="rejected",variant="perceptual_16_strong"} 1.7846200394860969e+09
+prooftag_qr_repair_variants_created{outcome="rejected",variant="perceptual_32"} 1.784620040164774e+09
+prooftag_qr_repair_variants_created{outcome="rejected",variant="perceptual_32_strong"} 1.7846200410949047e+09
+prooftag_qr_repair_variants_created{outcome="accepted",variant="perceptual_32_wide"} 1.7846200417711673e+09
+prooftag_qr_repair_variants_created{outcome="rejected",variant="perceptual_32_wide"} 1.7846200490678914e+09
+prooftag_qr_repair_variants_created{outcome="accepted",variant="perceptual_48"} 1.7846200497669728e+09
+prooftag_qr_repair_variants_created{outcome="accepted",variant="rounded_48"} 1.7846200568164477e+09
+# HELP prooftag_qr_repair_selected_total QR repair variants selected as the best candidate
+# TYPE prooftag_qr_repair_selected_total counter
+prooftag_qr_repair_selected_total{variant="rounded_16"} 1.0
+prooftag_qr_repair_selected_total{variant="rounded_32"} 2.0
+prooftag_qr_repair_selected_total{variant="perceptual_32_wide"} 1.0
+prooftag_qr_repair_selected_total{variant="perceptual_48"} 1.0
+prooftag_qr_repair_selected_total{variant="rounded_48"} 1.0
+# HELP prooftag_qr_repair_selected_created QR repair variants selected as the best candidate
+# TYPE prooftag_qr_repair_selected_created gauge
+prooftag_qr_repair_selected_created{variant="rounded_16"} 1.7846200310321467e+09
+prooftag_qr_repair_selected_created{variant="rounded_32"} 1.784620034251064e+09
+prooftag_qr_repair_selected_created{variant="perceptual_32_wide"} 1.7846200424549038e+09
+prooftag_qr_repair_selected_created{variant="perceptual_48"} 1.7846200501413176e+09
+prooftag_qr_repair_selected_created{variant="rounded_48"} 1.784620057333635e+09
+# HELP prooftag_qr_repair_variant_scan_pass_rate Latest scan pass rate measured for each repair variant
+# TYPE prooftag_qr_repair_variant_scan_pass_rate gauge
+prooftag_qr_repair_variant_scan_pass_rate{variant="raw"} 0.0
+prooftag_qr_repair_variant_scan_pass_rate{variant="rounded_16"} 0.6153846153846154
+prooftag_qr_repair_variant_scan_pass_rate{variant="rounded_32"} 0.9230769230769231
+prooftag_qr_repair_variant_scan_pass_rate{variant="rounded_48"} 1.0
+prooftag_qr_repair_variant_scan_pass_rate{variant="perceptual_16"} 0.8461538461538461
+prooftag_qr_repair_variant_scan_pass_rate{variant="perceptual_16_strong"} 0.9230769230769231
+prooftag_qr_repair_variant_scan_pass_rate{variant="perceptual_32"} 0.9230769230769231
+prooftag_qr_repair_variant_scan_pass_rate{variant="perceptual_32_strong"} 0.9230769230769231
+prooftag_qr_repair_variant_scan_pass_rate{variant="perceptual_32_wide"} 0.9615384615384616
+prooftag_qr_repair_variant_scan_pass_rate{variant="perceptual_48"} 1.0
+# HELP prooftag_qr_repair_variant_module_error_rate Latest module error rate measured for each repair variant
+# TYPE prooftag_qr_repair_variant_module_error_rate gauge
+prooftag_qr_repair_variant_module_error_rate{variant="raw"} 0.2688510817055241
+prooftag_qr_repair_variant_module_error_rate{variant="rounded_16"} 0.0
+prooftag_qr_repair_variant_module_error_rate{variant="rounded_32"} 0.0
+prooftag_qr_repair_variant_module_error_rate{variant="rounded_48"} 0.0
+prooftag_qr_repair_variant_module_error_rate{variant="perceptual_16"} 0.004164931278633903
+prooftag_qr_repair_variant_module_error_rate{variant="perceptual_16_strong"} 0.0
+prooftag_qr_repair_variant_module_error_rate{variant="perceptual_32"} 0.001665972511453561
+prooftag_qr_repair_variant_module_error_rate{variant="perceptual_32_strong"} 0.00041649312786339027
+prooftag_qr_repair_variant_module_error_rate{variant="perceptual_32_wide"} 0.0
+prooftag_qr_repair_variant_module_error_rate{variant="perceptual_48"} 0.0
+# HELP prooftag_qr_repair_variant_image_quality Latest image quality measurement for each repair variant
+# TYPE prooftag_qr_repair_variant_image_quality gauge
+prooftag_qr_repair_variant_image_quality{metric="brightness_mean",variant="raw"} 0.5597949308507583
+prooftag_qr_repair_variant_image_quality{metric="contrast_std",variant="raw"} 0.5424209675077419
+prooftag_qr_repair_variant_image_quality{metric="entropy_bits",variant="raw"} 7.770417462299158
+prooftag_qr_repair_variant_image_quality{metric="sharpness_laplacian",variant="raw"} 4530.401647452132
+prooftag_qr_repair_variant_image_quality{metric="clipped_pixel_ratio",variant="raw"} 0.016193389892578125
+prooftag_qr_repair_variant_image_quality{metric="changed_pixel_ratio",variant="raw"} 0.0
+prooftag_qr_repair_variant_image_quality{metric="mean_absolute_change",variant="raw"} 0.0
+prooftag_qr_repair_variant_image_quality{metric="brightness_mean",variant="rounded_16"} 0.5858107323740043
+prooftag_qr_repair_variant_image_quality{metric="contrast_std",variant="rounded_16"} 0.8020213074044884
+prooftag_qr_repair_variant_image_quality{metric="entropy_bits",variant="rounded_16"} 6.7101499414537376
+prooftag_qr_repair_variant_image_quality{metric="sharpness_laplacian",variant="rounded_16"} 8155.4228743752465
+prooftag_qr_repair_variant_image_quality{metric="clipped_pixel_ratio",variant="rounded_16"} 0.23891830444335938
+prooftag_qr_repair_variant_image_quality{metric="changed_pixel_ratio",variant="rounded_16"} 0.6370353698730469
+prooftag_qr_repair_variant_image_quality{metric="mean_absolute_change",variant="rounded_16"} 0.23751530366785387
+prooftag_qr_repair_variant_image_quality{metric="brightness_mean",variant="rounded_32"} 0.6001892389035692
+prooftag_qr_repair_variant_image_quality{metric="contrast_std",variant="rounded_32"} 0.8162972605226363
+prooftag_qr_repair_variant_image_quality{metric="entropy_bits",variant="rounded_32"} 5.137007898576023
+prooftag_qr_repair_variant_image_quality{metric="sharpness_laplacian",variant="rounded_32"} 7999.6340255737305
+prooftag_qr_repair_variant_image_quality{metric="clipped_pixel_ratio",variant="rounded_32"} 0.5540046691894531
+prooftag_qr_repair_variant_image_quality{metric="changed_pixel_ratio",variant="rounded_32"} 0.7153663635253906
+prooftag_qr_repair_variant_image_quality{metric="mean_absolute_change",variant="rounded_32"} 0.23956633424447252
+prooftag_qr_repair_variant_image_quality{metric="brightness_mean",variant="rounded_48"} 0.6080814885158164
+prooftag_qr_repair_variant_image_quality{metric="contrast_std",variant="rounded_48"} 0.8134682330783994
+prooftag_qr_repair_variant_image_quality{metric="entropy_bits",variant="rounded_48"} 6.413338601244781
+prooftag_qr_repair_variant_image_quality{metric="sharpness_laplacian",variant="rounded_48"} 6924.785011216067
+prooftag_qr_repair_variant_image_quality{metric="clipped_pixel_ratio",variant="rounded_48"} 0.2648887634277344
+prooftag_qr_repair_variant_image_quality{metric="changed_pixel_ratio",variant="rounded_48"} 0.7753410339355469
+prooftag_qr_repair_variant_image_quality{metric="mean_absolute_change",variant="rounded_48"} 0.2589911118052364
+prooftag_qr_repair_variant_image_quality{metric="brightness_mean",variant="perceptual_16"} 0.6196987376493566
+prooftag_qr_repair_variant_image_quality{metric="contrast_std",variant="perceptual_16"} 0.7939226417466988
+prooftag_qr_repair_variant_image_quality{metric="entropy_bits",variant="perceptual_16"} 6.834470542246879
+prooftag_qr_repair_variant_image_quality{metric="sharpness_laplacian",variant="perceptual_16"} 4113.916599168544
+prooftag_qr_repair_variant_image_quality{metric="clipped_pixel_ratio",variant="perceptual_16"} 0.3034210205078125
+prooftag_qr_repair_variant_image_quality{metric="changed_pixel_ratio",variant="perceptual_16"} 0.47579193115234375
+prooftag_qr_repair_variant_image_quality{metric="mean_absolute_change",variant="perceptual_16"} 0.08663923475477431
+prooftag_qr_repair_variant_image_quality{metric="brightness_mean",variant="perceptual_16_strong"} 0.6229524799421722
+prooftag_qr_repair_variant_image_quality{metric="contrast_std",variant="perceptual_16_strong"} 0.8146505662233046
+prooftag_qr_repair_variant_image_quality{metric="entropy_bits",variant="perceptual_16_strong"} 6.358871654756616
+prooftag_qr_repair_variant_image_quality{metric="sharpness_laplacian",variant="perceptual_16_strong"} 4488.306903832692
+prooftag_qr_repair_variant_image_quality{metric="clipped_pixel_ratio",variant="perceptual_16_strong"} 0.4475517272949219
+prooftag_qr_repair_variant_image_quality{metric="changed_pixel_ratio",variant="perceptual_16_strong"} 0.4926910400390625
+prooftag_qr_repair_variant_image_quality{metric="mean_absolute_change",variant="perceptual_16_strong"} 0.10475134756050858
+prooftag_qr_repair_variant_image_quality{metric="brightness_mean",variant="perceptual_32"} 0.6235556658576517
+prooftag_qr_repair_variant_image_quality{metric="contrast_std",variant="perceptual_32"} 0.800374370076569
+prooftag_qr_repair_variant_image_quality{metric="entropy_bits",variant="perceptual_32"} 6.780441375944907
+prooftag_qr_repair_variant_image_quality{metric="sharpness_laplacian",variant="perceptual_32"} 4077.129459275966
+prooftag_qr_repair_variant_image_quality{metric="clipped_pixel_ratio",variant="perceptual_32"} 0.3049430847167969
+prooftag_qr_repair_variant_image_quality{metric="changed_pixel_ratio",variant="perceptual_32"} 0.5037727355957031
+prooftag_qr_repair_variant_image_quality{metric="mean_absolute_change",variant="perceptual_32"} 0.09525550892150479
+prooftag_qr_repair_variant_image_quality{metric="brightness_mean",variant="perceptual_32_strong"} 0.6258787267348346
+prooftag_qr_repair_variant_image_quality{metric="contrast_std",variant="perceptual_32_strong"} 0.8169835065541372
+prooftag_qr_repair_variant_image_quality{metric="entropy_bits",variant="perceptual_32_strong"} 6.320829388303464
+prooftag_qr_repair_variant_image_quality{metric="sharpness_laplacian",variant="perceptual_32_strong"} 4434.08143233611
+prooftag_qr_repair_variant_image_quality{metric="clipped_pixel_ratio",variant="perceptual_32_strong"} 0.4528312683105469
+prooftag_qr_repair_variant_image_quality{metric="changed_pixel_ratio",variant="perceptual_32_strong"} 0.5039024353027344
+prooftag_qr_repair_variant_image_quality{metric="mean_absolute_change",variant="perceptual_32_strong"} 0.10404169419232537
+prooftag_qr_repair_variant_image_quality{metric="brightness_mean",variant="perceptual_32_wide"} 0.6270243326822916
+prooftag_qr_repair_variant_image_quality{metric="contrast_std",variant="perceptual_32_wide"} 0.8095493834168537
+prooftag_qr_repair_variant_image_quality{metric="entropy_bits",variant="perceptual_32_wide"} 6.633707297455842
+prooftag_qr_repair_variant_image_quality{metric="sharpness_laplacian",variant="perceptual_32_wide"} 4156.940116798272
+prooftag_qr_repair_variant_image_quality{metric="clipped_pixel_ratio",variant="perceptual_32_wide"} 0.3416290283203125
+prooftag_qr_repair_variant_image_quality{metric="changed_pixel_ratio",variant="perceptual_32_wide"} 0.527740478515625
+prooftag_qr_repair_variant_image_quality{metric="mean_absolute_change",variant="perceptual_32_wide"} 0.10947448630738102
+prooftag_qr_repair_variant_image_quality{metric="brightness_mean",variant="perceptual_48"} 0.6331094928816253
+prooftag_qr_repair_variant_image_quality{metric="contrast_std",variant="perceptual_48"} 0.8307555937630539
+prooftag_qr_repair_variant_image_quality{metric="entropy_bits",variant="perceptual_48"} 6.149146060532901
+prooftag_qr_repair_variant_image_quality{metric="sharpness_laplacian",variant="perceptual_48"} 4343.216587060231
+prooftag_qr_repair_variant_image_quality{metric="clipped_pixel_ratio",variant="perceptual_48"} 0.4697113037109375
+prooftag_qr_repair_variant_image_quality{metric="changed_pixel_ratio",variant="perceptual_48"} 0.5742683410644531
+prooftag_qr_repair_variant_image_quality{metric="mean_absolute_change",variant="perceptual_48"} 0.12726920632755054
+# HELP prooftag_qr_guided_rediffusions_total Second-pass guided diffusion outcomes
+# TYPE prooftag_qr_guided_rediffusions_total counter
+# HELP prooftag_qr_guided_rediffusion_duration_seconds Time spent in the guided img2img diffusion pass
+# TYPE prooftag_qr_guided_rediffusion_duration_seconds histogram
+prooftag_qr_guided_rediffusion_duration_seconds_bucket{le="0.1"} 0.0
+prooftag_qr_guided_rediffusion_duration_seconds_bucket{le="0.25"} 0.0
+prooftag_qr_guided_rediffusion_duration_seconds_bucket{le="0.5"} 0.0
+prooftag_qr_guided_rediffusion_duration_seconds_bucket{le="1.0"} 0.0
+prooftag_qr_guided_rediffusion_duration_seconds_bucket{le="2.0"} 0.0
+prooftag_qr_guided_rediffusion_duration_seconds_bucket{le="5.0"} 0.0
+prooftag_qr_guided_rediffusion_duration_seconds_bucket{le="10.0"} 0.0
+prooftag_qr_guided_rediffusion_duration_seconds_bucket{le="20.0"} 0.0
+prooftag_qr_guided_rediffusion_duration_seconds_bucket{le="30.0"} 0.0
+prooftag_qr_guided_rediffusion_duration_seconds_bucket{le="60.0"} 0.0
+prooftag_qr_guided_rediffusion_duration_seconds_bucket{le="+Inf"} 0.0
+prooftag_qr_guided_rediffusion_duration_seconds_count 0.0
+prooftag_qr_guided_rediffusion_duration_seconds_sum 0.0
+# HELP prooftag_qr_guided_rediffusion_duration_seconds_created Time spent in the guided img2img diffusion pass
+# TYPE prooftag_qr_guided_rediffusion_duration_seconds_created gauge
+prooftag_qr_guided_rediffusion_duration_seconds_created 1.7846200150838976e+09
+# HELP prooftag_qr_guided_rediffusion_module_error_rate Latest module error before and after guided rediffusion
+# TYPE prooftag_qr_guided_rediffusion_module_error_rate gauge
+# HELP prooftag_qr_guided_rediffusion_image_change Latest visual change caused by guided rediffusion
+# TYPE prooftag_qr_guided_rediffusion_image_change gauge
+# HELP prooftag_qr_latent_refinements_total Latent SRL refinement outcomes
+# TYPE prooftag_qr_latent_refinements_total counter
+# HELP prooftag_qr_latent_refinement_duration_seconds Time spent optimizing a candidate in VAE latent space
+# TYPE prooftag_qr_latent_refinement_duration_seconds histogram
+prooftag_qr_latent_refinement_duration_seconds_bucket{le="0.1"} 0.0
+prooftag_qr_latent_refinement_duration_seconds_bucket{le="0.25"} 0.0
+prooftag_qr_latent_refinement_duration_seconds_bucket{le="0.5"} 0.0
+prooftag_qr_latent_refinement_duration_seconds_bucket{le="1.0"} 0.0
+prooftag_qr_latent_refinement_duration_seconds_bucket{le="2.0"} 0.0
+prooftag_qr_latent_refinement_duration_seconds_bucket{le="5.0"} 0.0
+prooftag_qr_latent_refinement_duration_seconds_bucket{le="10.0"} 0.0
+prooftag_qr_latent_refinement_duration_seconds_bucket{le="20.0"} 0.0
+prooftag_qr_latent_refinement_duration_seconds_bucket{le="30.0"} 0.0
+prooftag_qr_latent_refinement_duration_seconds_bucket{le="60.0"} 0.0
+prooftag_qr_latent_refinement_duration_seconds_bucket{le="+Inf"} 0.0
+prooftag_qr_latent_refinement_duration_seconds_count 0.0
+prooftag_qr_latent_refinement_duration_seconds_sum 0.0
+# HELP prooftag_qr_latent_refinement_duration_seconds_created Time spent optimizing a candidate in VAE latent space
+# TYPE prooftag_qr_latent_refinement_duration_seconds_created gauge
+prooftag_qr_latent_refinement_duration_seconds_created 1.7846200150839217e+09
+# HELP prooftag_qr_latent_refinement_iterations Number of SRL latent optimization iterations
+# TYPE prooftag_qr_latent_refinement_iterations histogram
+prooftag_qr_latent_refinement_iterations_bucket{le="1.0"} 0.0
+prooftag_qr_latent_refinement_iterations_bucket{le="2.0"} 0.0
+prooftag_qr_latent_refinement_iterations_bucket{le="3.0"} 0.0
+prooftag_qr_latent_refinement_iterations_bucket{le="4.0"} 0.0
+prooftag_qr_latent_refinement_iterations_bucket{le="6.0"} 0.0
+prooftag_qr_latent_refinement_iterations_bucket{le="8.0"} 0.0
+prooftag_qr_latent_refinement_iterations_bucket{le="12.0"} 0.0
+prooftag_qr_latent_refinement_iterations_bucket{le="16.0"} 0.0
+prooftag_qr_latent_refinement_iterations_bucket{le="24.0"} 0.0
+prooftag_qr_latent_refinement_iterations_bucket{le="40.0"} 0.0
+prooftag_qr_latent_refinement_iterations_bucket{le="100.0"} 0.0
+prooftag_qr_latent_refinement_iterations_bucket{le="+Inf"} 0.0
+prooftag_qr_latent_refinement_iterations_count 0.0
+prooftag_qr_latent_refinement_iterations_sum 0.0
+# HELP prooftag_qr_latent_refinement_iterations_created Number of SRL latent optimization iterations
+# TYPE prooftag_qr_latent_refinement_iterations_created gauge
+prooftag_qr_latent_refinement_iterations_created 1.784620015083932e+09
+# HELP prooftag_qr_latent_refinement_module_error_rate Latest central-submodule error before and after latent optimization
+# TYPE prooftag_qr_latent_refinement_module_error_rate gauge
+# HELP prooftag_qr_latent_refinement_loss Latest SRL and preservation objective components
+# TYPE prooftag_qr_latent_refinement_loss gauge

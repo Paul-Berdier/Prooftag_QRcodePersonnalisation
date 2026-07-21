@@ -1,0 +1,38 @@
+[
+  {
+    "name": "botanical-short",
+    "payload": "https://example.prooftag.test/t/botanical-42",
+    "prompt": "premium botanical engraving, elegant packaging, detailed leaves and flowers",
+    "seed": 42
+  },
+  {
+    "name": "wine-label",
+    "payload": "https://example.prooftag.test/t/wine-7Y3K9Q",
+    "prompt": "luxury wine label engraving, vineyard leaves, grapes, refined copper details",
+    "seed": 137
+  },
+  {
+    "name": "geometric-packaging",
+    "payload": "https://example.prooftag.test/t/geometry-2026",
+    "prompt": "premium geometric packaging pattern, art deco, strong negative space, elegant",
+    "seed": 2026
+  },
+  {
+    "name": "cosmetics-organic",
+    "payload": "https://example.prooftag.test/t/cosmetics-31415",
+    "prompt": "organic luxury cosmetics illustration, flowing petals, cream and sage palette",
+    "seed": 31415
+  },
+  {
+    "name": "industrial-technical",
+    "payload": "https://example.prooftag.test/t/industrial-271828",
+    "prompt": "precise industrial technical illustration, brushed metal, circuits, high contrast",
+    "seed": 271828
+  },
+  {
+    "name": "dense-payload",
+    "payload": "https://example.prooftag.test/verify/product/2026/07/20/lot/FR-9A71C2?serial=0001847295&channel=packaging&campaign=benchmark",
+    "prompt": "dense ornamental security engraving, guilloche lines, premium certificate design",
+    "seed": 9001
+  }
+]
