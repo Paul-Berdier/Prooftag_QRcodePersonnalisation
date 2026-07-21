@@ -62,6 +62,13 @@ Pour chaque image et chaque tentative :
 - résultat des 26 couples décodeur/scénario sur l'image SRPG, même si la porte interne la rejette ;
 - image `attempt_1_srpg.png`, courbe HTML, `refinements.csv` et `srpg-steps.csv`.
 
+Quand `PROOFTAG_QR_SRPG_SAVE_STEP_PREVIEWS=true`, la boucle exporte aussi le contrôle exact et,
+tous les cinq pas par défaut, la prédiction propre `x0` réellement utilisée par SRL/LPIPS ainsi
+que la carte des modules encore erronés. Ces fichiers sont nommés
+`attempt_1_srpg_control.png`, `attempt_1_srpg_step_XX_x0.png` et
+`attempt_1_srpg_step_XX_errors.png`. L'option est réservée aux campagnes de diagnostic afin de ne
+pas augmenter le stockage en production.
+
 Prometheus et Grafana suivent aussi les résultats, la durée P95, l'erreur avant/après, la VRAM et
 les diagnostics par pas. Une alerte signale les erreurs, une inefficacité supérieure à 75 % et
 un pic d'allocation dépassant 18 Gio.
@@ -89,6 +96,11 @@ Depuis le PC Windows :
 ```powershell
 .\scripts\benchmark-remote.ps1 -E005
 ```
+
+Le notebook `notebooks/01_srpg_step_by_step.ipynb` ouvre l'archive téléchargée et présente la
+chaîne dans l'ordre causal : brut, SRPG, courbes des 40 pas, `x0`, cartes d'erreurs, réparations
+candidates et finale sélectionnée. Il signale explicitement lorsqu'une finale provient d'un
+fallback déterministe et non de SRPG.
 
 Le script restaure les trois options Kubernetes à leur valeur du ConfigMap même après une erreur.
 Après la campagne, reprendre vLLM explicitement avec `make resume-vllm` uniquement si le GPU ne
@@ -119,3 +131,33 @@ de cette transformation dans notre pile. E005 utilise donc le QR exact comme con
 ControlNet. Les résultats E005 sont ceux de Prooftag sur sa RTX ; ils ne peuvent pas être assimilés
 au SSR de 99–100 % publié par l'article. QArt constitue E005b seulement après validation de la
 boucle SRPG elle-même.
+
+## Audit de la première campagne RTX
+
+Archives reçues le 21 juillet 2026 : `20260721T090445Z-0b3c040b.tar.gz` et
+`20260721T090541Z-0b3c040b.tar.gz`.
+
+La première archive n'est **pas une baseline valide** : seul `botanical-short` a terminé ; les
+cinq autres cas ont échoué avec `Connection refused`. Son taux de livraison de 1/6 ne doit donc
+servir à aucune comparaison. Le benchmark retourne désormais un code non nul dès qu'un cas est
+en erreur, même si l'archive de diagnostic a bien été créée.
+
+Dans la campagne SRPG, les six finales sont lisibles à 26/26, mais uniquement après réparation
+déterministe (`perceptual_16`, `perceptual_32_strong`, `perceptual_32_wide` ou
+`perceptual_48`). Les images SRPG obtiennent seulement 1 succès sur 156 scénarios de lecture :
+1/26 pour `botanical-short`, 0/26 pour les cinq autres. SRPG modifie en moyenne 95,565 % des
+pixels, avec une MAE de 0,20547. L'erreur module moyenne passe de 13,1525 % à 12,2327 %, mais trois
+cas se dégradent et le gain ne se traduit pratiquement pas en décodage.
+
+L'inspection visuelle montre pourquoi le `final` ressemble au brut recouvert de modules : avec
+`strength=1.0`, SRPG repart presque du bruit et produit une autre illustration. La porte interne
+rejette quatre sorties sur six ; même les deux sorties acceptées ne franchissent pas la matrice de
+lecture. La sélection revient donc au brut puis applique une variante `perceptual_*`. Les modules
+visibles ne sont pas « dissimulés par le modèle » parce que cette finale n'est pas la sortie du
+modèle SRPG.
+
+**Décision : E005a n'est pas promue.** Avant toute nouvelle ablation de poids, une nouvelle
+campagne doit d'abord produire les checkpoints `x0` et les cartes d'erreurs du notebook. On
+identifiera le pas où la structure visuelle est détruite et celui où le signal QR cesse de
+progresser ; ensuite seulement on testera une force inférieure et/ou un contrôle QArt, une
+dimension à la fois.

@@ -132,10 +132,15 @@ def test_srpg_loop_runs_guidance_inside_each_fake_ddim_step(monkeypatch):
             qr_weight=1.0,
             perceptual_weight=0.1,
             min_relative_module_improvement=0.0,
+            save_step_previews=True,
+            preview_interval=1,
         ),
     )
 
     assert len(result.steps) == 2
+    assert [preview.index for preview in result.previews] == [0, 1]
+    assert all(preview.predicted_clean_image.size == (128, 128) for preview in result.previews)
+    assert all(preview.active_module_map.size == (128, 128) for preview in result.previews)
     assert all(step.guidance_applied for step in result.steps)
     assert all(np.isfinite(step.gradient_rms) for step in result.steps)
     assert result.image.size == (128, 128)

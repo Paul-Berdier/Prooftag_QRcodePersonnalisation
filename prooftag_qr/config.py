@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     srpg_max_mean_absolute_change: float = Field(default=0.20, gt=0.0, le=1.0)
     srpg_min_relative_module_improvement: float = Field(default=0.10, ge=0.0, le=1.0)
     srpg_seed_offset: int = Field(default=2_000_003, ge=0, le=2**32 - 1)
+    srpg_save_step_previews: bool = False
+    srpg_preview_interval: int = Field(default=5, ge=1, le=100)
     latent_refinement_enabled: bool = False
     latent_refinement_iterations: int = Field(default=8, ge=1, le=100)
     latent_refinement_learning_rate: float = Field(default=0.02, gt=0.0, le=10.0)

@@ -1,4 +1,4 @@
-.PHONY: install test lint run build deploy status benchmark benchmark-e004 benchmark-e005 pause-vllm resume-vllm
+.PHONY: install test lint run notebook build deploy status benchmark benchmark-e004 benchmark-e005 pause-vllm resume-vllm
 
 install:
 	python -m pip install -e '.[dev]'
@@ -11,6 +11,9 @@ lint:
 
 run:
 	uvicorn prooftag_qr.api:app --reload --port 8080
+
+notebook:
+	python -m jupyter lab notebooks/01_srpg_step_by_step.ipynb
 
 build:
 	docker build -t prooftag-qr:dev .

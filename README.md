@@ -108,6 +108,12 @@ benchmark à distance, copie l'archive, l'extrait et ouvre le rapport HTML.
 La campagne causale E005 (baseline puis SRPG seul) s'exécute avec `make benchmark-e005` sur le
 serveur ou `.\scripts\benchmark-remote.ps1 -E005` depuis Windows.
 
+Pour suivre visuellement chaque étape, ouvrir
+[`notebooks/01_srpg_step_by_step.ipynb`](notebooks/01_srpg_step_by_step.ipynb). Le notebook charge
+une archive, affiche brut/SRPG/final, trace les 40 pas et montre les checkpoints `x0` et cartes
+d'erreurs produits par les nouvelles campagnes E005. Les commandes sont dans
+[`notebooks/README.md`](notebooks/README.md).
+
 ## Tests
 
 ```bash

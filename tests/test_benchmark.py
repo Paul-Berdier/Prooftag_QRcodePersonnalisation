@@ -88,3 +88,7 @@ def test_refinement_csv_exports_unprojected_change_metrics():
     assert '"unprojected_mean_absolute_change",' in source
     assert 'run_dir / "srpg-steps.csv"' in source
     assert '"noise_delta_rms",' in source
+    assert '"preview_steps",' in source
+    assert "BENCHMARK_INCOMPLETE=" in source
+    assert "srpg_step_{step:02d}_x0" in source
+    assert "srpg_step_{step:02d}_errors" in source

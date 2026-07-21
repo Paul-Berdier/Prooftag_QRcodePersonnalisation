@@ -12,6 +12,7 @@ import re
 import shutil
 import statistics
 import subprocess
+import sys
 import threading
 import time
 import urllib.error
@@ -652,6 +653,7 @@ def benchmark_case(
             "accepted": event.get("accepted"),
             "rejection_reason": event.get("rejection_reason"),
             "step_metrics": json.dumps(event.get("step_metrics") or [], separators=(",", ":")),
+            "preview_steps": json.dumps(event.get("preview_steps") or [], separators=(",", ":")),
         }
         for event in events
         if event.get("message")
@@ -683,8 +685,15 @@ def benchmark_case(
             "attempt_1_guided_unprojected",
             "attempt_1_guided_projected",
             "attempt_1_srpg",
+            "attempt_1_srpg_control",
         )
     )
+    for event in events:
+        if event.get("message") != "srpg_completed" or not event.get("attempt"):
+            continue
+        for step in event.get("preview_steps") or []:
+            artifact_names.add(f"attempt_{event['attempt']}_srpg_step_{step:02d}_x0")
+            artifact_names.add(f"attempt_{event['attempt']}_srpg_step_{step:02d}_errors")
     artifact_names.update(
         event["repair_variant"]
         for event in evaluated
@@ -1131,6 +1140,7 @@ def main() -> int:
         "accepted",
         "rejection_reason",
         "step_metrics",
+        "preview_steps",
     )
     write_csv(run_dir / "refinements.csv", refinements, refinement_fields)
     srpg_steps = []
@@ -1197,6 +1207,13 @@ def main() -> int:
     print(f"BENCHMARK_DIR={run_dir}")
     print(f"BENCHMARK_ARCHIVE={archive}")
     print(f"BENCHMARK_REPORT={run_dir / 'report.html'}")
+    failed_cases = [row.get("case") for row in results if row.get("status") == "error"]
+    if failed_cases:
+        print(
+            "BENCHMARK_INCOMPLETE=" + ",".join(str(case) for case in failed_cases),
+            file=sys.stderr,
+        )
+        return 2
     return 0
 
 

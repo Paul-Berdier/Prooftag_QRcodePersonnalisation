@@ -51,6 +51,7 @@ class JsonFormatter(logging.Formatter):
             "converged",
             "rejection_reason",
             "step_metrics",
+            "preview_steps",
         ):
             if hasattr(record, key):
                 payload[key] = getattr(record, key)

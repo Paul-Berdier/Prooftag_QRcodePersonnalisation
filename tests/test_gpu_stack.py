@@ -56,6 +56,8 @@ def test_gpu_dependencies_are_pinned_to_the_torch_base_image():
     assert settings.srpg_qr_weight == 500.0
     assert settings.srpg_perceptual_weight == 3.0
     assert settings.srpg_min_relative_module_improvement == 0.10
+    assert settings.srpg_save_step_previews is False
+    assert settings.srpg_preview_interval == 5
     assert settings.latent_refinement_enabled is False
     assert settings.latent_refinement_iterations == 8
     assert settings.latent_refinement_learning_rate == 0.02
@@ -70,6 +72,8 @@ def test_gpu_dependencies_are_pinned_to_the_torch_base_image():
     assert 'PROOFTAG_QR_GUIDED_REDIFFUSION_STRENGTH: "0.30"' in manifest
     assert 'PROOFTAG_QR_SRPG_ENABLED: "false"' in manifest
     assert 'PROOFTAG_QR_SRPG_STEPS: "40"' in manifest
+    assert 'PROOFTAG_QR_SRPG_SAVE_STEP_PREVIEWS: "false"' in manifest
+    assert 'PROOFTAG_QR_SRPG_PREVIEW_INTERVAL: "5"' in manifest
     assert 'PROOFTAG_QR_LATENT_REFINEMENT_ENABLED: "false"' in manifest
     assert 'PROOFTAG_QR_LATENT_REFINEMENT_MAX_LATENT_DELTA: "0.10"' in manifest
     assert 'PROOFTAG_QR_LATENT_REFINEMENT_MAX_MEAN_ABSOLUTE_CHANGE: "0.08"' in manifest

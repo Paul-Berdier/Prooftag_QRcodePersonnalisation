@@ -11,15 +11,18 @@ restore_defaults() {
   kubectl set env "deployment/${deployment}" -n "$namespace" \
     PROOFTAG_QR_GUIDED_REDIFFUSION_ENABLED- \
     PROOFTAG_QR_SRPG_ENABLED- \
+    PROOFTAG_QR_SRPG_SAVE_STEP_PREVIEWS- \
     PROOFTAG_QR_LATENT_REFINEMENT_ENABLED- >/dev/null
   kubectl rollout status "deployment/${deployment}" -n "$namespace" --timeout="$timeout"
 }
 
 set_mode() {
   local srpg="$1"
+  local previews="$2"
   kubectl set env "deployment/${deployment}" -n "$namespace" \
     "PROOFTAG_QR_GUIDED_REDIFFUSION_ENABLED=false" \
     "PROOFTAG_QR_SRPG_ENABLED=${srpg}" \
+    "PROOFTAG_QR_SRPG_SAVE_STEP_PREVIEWS=${previews}" \
     "PROOFTAG_QR_LATENT_REFINEMENT_ENABLED=false"
   kubectl rollout status "deployment/${deployment}" -n "$namespace" --timeout="$timeout"
 }
@@ -47,7 +50,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 echo "E005 1/2 - baseline du même commit, tous les raffinements désactivés"
-set_mode false
+set_mode false false
 PROOFTAG_QR_BENCHMARK_MAX_ATTEMPTS=1 make benchmark | tee "$baseline_log"
 baseline_archive="$(archive_from_output < "$baseline_log")"
 if [[ -z "$baseline_archive" ]]; then
@@ -56,7 +59,7 @@ if [[ -z "$baseline_archive" ]]; then
 fi
 
 echo "E005 2/2 - véritable boucle DDIM avec SRPG, sans autre raffinement"
-set_mode true
+set_mode true true
 PROOFTAG_QR_BENCHMARK_MAX_ATTEMPTS=1 make benchmark | tee "$srpg_log"
 srpg_archive="$(archive_from_output < "$srpg_log")"
 if [[ -z "$srpg_archive" ]]; then

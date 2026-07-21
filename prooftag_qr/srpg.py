@@ -22,6 +22,8 @@ class SRPGConfig:
     max_noise_delta_rms: float = 2.0
     max_mean_absolute_change: float = 0.20
     min_relative_module_improvement: float = 0.10
+    save_step_previews: bool = False
+    preview_interval: int = 5
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,9 +40,18 @@ class SRPGStep:
 
 
 @dataclass(frozen=True, slots=True)
+class SRPGPreview:
+    index: int
+    timestep: int
+    predicted_clean_image: Image.Image
+    active_module_map: Image.Image
+
+
+@dataclass(frozen=True, slots=True)
 class SRPGResult:
     image: Image.Image
     steps: tuple[SRPGStep, ...]
+    previews: tuple[SRPGPreview, ...]
     initial_module_error_rate: float
     final_module_error_rate: float
     changed_pixel_ratio: float
@@ -114,6 +125,8 @@ def _validate_config(config: SRPGConfig) -> None:
         raise ValueError("max_mean_absolute_change must be between 0 (exclusive) and 1")
     if not 0 <= config.min_relative_module_improvement <= 1:
         raise ValueError("min_relative_module_improvement must be between 0 and 1")
+    if config.preview_interval < 1:
+        raise ValueError("preview_interval must be at least 1")
 
 
 def run_srpg_controlnet_img2img(
@@ -202,6 +215,12 @@ def run_srpg_controlnet_img2img(
     perceptual_model = _load_lpips(pipeline, device)
     scaling_factor = pipeline.vae.config.scaling_factor
     traces: list[SRPGStep] = []
+    previews: list[SRPGPreview] = []
+    preview_indices = (
+        set(range(0, len(timesteps), config.preview_interval)) | {len(timesteps) - 1}
+        if config.save_step_previews
+        else set()
+    )
 
     with torch.enable_grad():
         for index, timestep in enumerate(timesteps):
@@ -251,6 +270,33 @@ def run_srpg_controlnet_img2img(
             )
             perceptual_loss = perceptual_model(decoded.float(), reference_lpips).mean()
             module_error = float(diagnostics["module_error_rate"].detach().float().item())
+            if index in preview_indices:
+                preview_image = pipeline.image_processor.postprocess(
+                    decoded.detach(),
+                    output_type="pil",
+                    do_denormalize=[True],
+                )[0].convert("RGB")
+                active_modules = (
+                    diagnostics["active_mask"][0]
+                    .detach()
+                    .reshape(blueprint.matrix.shape)
+                    .to(torch.uint8)
+                    .mul(255)
+                    .cpu()
+                    .numpy()
+                )
+                active_map = Image.fromarray(active_modules).resize(
+                    blueprint.image.size,
+                    Image.Resampling.NEAREST,
+                )
+                previews.append(
+                    SRPGPreview(
+                        index=index,
+                        timestep=int(timestep.item()),
+                        predicted_clean_image=preview_image,
+                        active_module_map=active_map,
+                    )
+                )
             guidance_applied = module_error > config.target_module_error_rate
             gradient_rms = 0.0
             noise_delta_rms = 0.0
@@ -322,6 +368,7 @@ def run_srpg_controlnet_img2img(
     return SRPGResult(
         image=image,
         steps=tuple(traces),
+        previews=tuple(previews),
         initial_module_error_rate=initial_error,
         final_module_error_rate=final_error,
         changed_pixel_ratio=change["changed_pixel_ratio"],

@@ -382,3 +382,23 @@ Les deux tests différentiables SRPG et un test latent nécessitent PyTorch. Le 
 cette absence locale en contrôle de build : il importe la pile GPU et instancie LPIPS/AlexNet afin
 de télécharger les poids dans l'image avant le déploiement. La syntaxe Bash et l'exécution CUDA
 restent des contrôles serveur obligatoires ; Windows ne possède aucune distribution WSL locale.
+
+### Résultat GPU et autopsie E005a
+
+- **Archives :** `20260721T090445Z-0b3c040b.tar.gz` et
+  `20260721T090541Z-0b3c040b.tar.gz` ;
+- **baseline :** invalide, 5/6 cas en `Connection refused` ;
+- **SRPG strict :** 1 lecture réussie sur 156 scénarios, soit 0,641 % ;
+- **changement SRPG :** 95,565 % des pixels en moyenne, MAE 0,20547 ;
+- **erreur module :** 13,1525 % avant contre 12,2327 % après en moyenne, mais trois cas sur six se
+  dégradent ;
+- **livraison :** 6/6 à 26/26 uniquement grâce aux variantes déterministes `perceptual_*` ;
+- **cause visuelle :** `strength=1.0` détruit l'identité du brut ; SRPG est rejeté ou illisible,
+  puis la chaîne repart du brut et superpose la réparation qui rend les modules visibles.
+
+**Décision : E005a rejetée comme configuration.** Il est interdit d'interpréter les 6/6 finales
+comme une réussite du modèle. L'expérience suivante commence par l'observation : capture du
+contrôle, des `x0` et des cartes d'erreurs aux pas 0/5/10/.../39, puis lecture dans
+`notebooks/01_srpg_step_by_step.ipynb`. Une ablation de force ou de loss ne sera définie qu'après
+avoir localisé précisément la rupture. Le benchmark retourne maintenant un échec si une campagne
+est incomplète, ce qui empêche de répéter la fausse comparaison de cette première baseline.

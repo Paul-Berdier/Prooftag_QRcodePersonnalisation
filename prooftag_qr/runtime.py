@@ -63,6 +63,8 @@ def runtime_info(settings: Settings | None = None) -> dict:
             "srpg_max_mean_absolute_change": settings.srpg_max_mean_absolute_change,
             "srpg_min_relative_module_improvement": (settings.srpg_min_relative_module_improvement),
             "srpg_seed_offset": settings.srpg_seed_offset,
+            "srpg_save_step_previews": settings.srpg_save_step_previews,
+            "srpg_preview_interval": settings.srpg_preview_interval,
             "latent_refinement_enabled": settings.latent_refinement_enabled,
             "latent_refinement_iterations": settings.latent_refinement_iterations,
             "latent_refinement_learning_rate": settings.latent_refinement_learning_rate,

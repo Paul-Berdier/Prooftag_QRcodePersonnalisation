@@ -330,8 +330,16 @@ class ControlNetBackend(GenerationBackend):
                         min_relative_module_improvement=(
                             self.settings.srpg_min_relative_module_improvement
                         ),
+                        save_step_previews=self.settings.srpg_save_step_previews,
+                        preview_interval=self.settings.srpg_preview_interval,
                     ),
                 )
+                if srpg.previews:
+                    self._debug_artifacts["srpg_control"] = blueprint.image.copy()
+                    for preview in srpg.previews:
+                        prefix = f"srpg_step_{preview.index:02d}"
+                        self._debug_artifacts[f"{prefix}_x0"] = preview.predicted_clean_image
+                        self._debug_artifacts[f"{prefix}_errors"] = preview.active_module_map
                 duration = time.perf_counter() - started
                 outcome = "accepted" if srpg.accepted else f"rejected_{srpg.rejection_reason}"
                 metrics.SRPG_RUNS.labels(outcome).inc()
@@ -384,6 +392,7 @@ class ControlNetBackend(GenerationBackend):
                         "peak_gpu_memory_allocated_mib": (srpg.peak_gpu_memory_allocated_mib),
                         "accepted": srpg.accepted,
                         "rejection_reason": srpg.rejection_reason,
+                        "preview_steps": [item.index for item in srpg.previews],
                         "step_metrics": [
                             {
                                 "index": item.index,

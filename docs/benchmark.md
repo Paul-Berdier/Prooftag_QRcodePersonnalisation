@@ -67,11 +67,31 @@ make benchmark-e004
 E005 compare de la même façon une baseline au vrai guidage SRPG seul. Chaque sortie SRPG est
 validée même si sa porte interne la rejette ; le rapport ne confond donc plus « loss améliorée »
 et « QR effectivement lu ». La galerie inclut `attempt_1_srpg.png`, une courbe des 40 pas et
-`srpg-steps.csv` contient les losses, gradients et clips :
+`srpg-steps.csv` contient les losses, gradients et clips. La campagne E005 active en plus les
+checkpoints `x0` et les cartes d'erreurs tous les cinq pas pour le notebook :
 
 ```bash
 make benchmark-e005
 ```
+
+Le benchmark crée toujours l'archive et le rapport disponibles pour diagnostic, mais retourne le
+code `2` si au moins un cas est en erreur. Une sentinelle baseline/SRPG s'arrête donc après une
+baseline incomplète et ne présente plus deux campagnes comme comparables.
+
+## Notebook d'autopsie
+
+Après rapatriement d'une archive, installer une fois les dépendances puis ouvrir le notebook :
+
+```powershell
+python -m pip install -e ".[notebook]"
+$env:PROOFTAG_QR_BENCHMARK_ARCHIVE = "$HOME\Downloads\prooftag-benchmarks\archive.tar.gz"
+make notebook
+```
+
+Le notebook affiche le brut, la sortie SRPG non réparée, la finale, les métriques par pas, les
+prédictions propres `x0`, les cartes des modules actifs et toutes les variantes candidates. Une
+ancienne archive reste consultable, mais affiche un avertissement si elle précède l'export des
+checkpoints.
 
 ## Une commande depuis le PC Windows
 
