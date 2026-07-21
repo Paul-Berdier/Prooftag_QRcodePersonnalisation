@@ -15,7 +15,7 @@ class VariantBackend(GenerationBackend):
         noise = np.random.default_rng(seed).integers(0, 256, (512, 512, 3), dtype=np.uint8)
         return Image.fromarray(noise)
 
-    def variants(self, candidate, blueprint):
+    def variants(self, candidate, blueprint, **kwargs):
         return [("raw", candidate), ("repaired", blueprint.image)]
 
 
@@ -31,7 +31,7 @@ class RegenerationBeforeGlobalBackend(GenerationBackend):
         noise = np.random.default_rng(seed).integers(0, 256, (512, 512, 3), dtype=np.uint8)
         return Image.fromarray(noise)
 
-    def variants(self, candidate, blueprint):
+    def variants(self, candidate, blueprint, **kwargs):
         return [
             ("raw", candidate),
             ("uncertain_16", candidate),

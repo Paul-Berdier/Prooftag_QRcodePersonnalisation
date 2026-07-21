@@ -5,13 +5,16 @@ import threading
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
+from dataclasses import dataclass
+from math import ceil
 
 from PIL import Image
 
 from . import metrics
 from .config import Settings
 from .guidance import LatentRefinementConfig, refine_candidate_latent
-from .qr import QRBlueprint, repair_qr_modules
+from .qr import QRBlueprint, module_error_rate, repair_qr_modules
+from .quality import composite_guided_regions, image_change_metrics
 from .schemas import GenerationRequest
 
 logger = logging.getLogger(__name__)
@@ -30,6 +33,23 @@ GLOBAL_REPAIR_VARIANTS = frozenset(
 )
 
 
+@dataclass(frozen=True, slots=True)
+class GuidedRediffusionResult:
+    image: Image.Image
+    unprojected_image: Image.Image
+    control_image: Image.Image
+    mask_image: Image.Image
+    initial_module_error_rate: float
+    control_module_error_rate: float
+    final_module_error_rate: float
+    mask_coverage: float
+    changed_pixel_ratio: float
+    mean_absolute_change: float
+    unprojected_changed_pixel_ratio: float
+    unprojected_mean_absolute_change: float
+    accepted: bool
+
+
 class GenerationBackend(ABC):
     @abstractmethod
     def generate(
@@ -38,9 +58,19 @@ class GenerationBackend(ABC):
         raise NotImplementedError
 
     def variants(
-        self, candidate: Image.Image, blueprint: QRBlueprint
+        self,
+        candidate: Image.Image,
+        blueprint: QRBlueprint,
+        *,
+        request: GenerationRequest | None = None,
+        seed: int | None = None,
+        run_id: str | None = None,
+        attempt: int | None = None,
     ) -> Iterable[tuple[str, Image.Image]]:
         yield "raw", candidate
+
+    def debug_artifacts(self) -> dict[str, Image.Image]:
+        return {}
 
 
 class QRBackend(GenerationBackend):
@@ -58,6 +88,10 @@ class ControlNetBackend(GenerationBackend):
     def __init__(self, settings: Settings):
         self.settings = settings
         self._pipeline = None
+        self._debug_artifacts: dict[str, Image.Image] = {}
+
+    def debug_artifacts(self) -> dict[str, Image.Image]:
+        return self._debug_artifacts.copy()
 
     def _load(self):
         if self._pipeline is not None:
@@ -158,17 +192,205 @@ class ControlNetBackend(GenerationBackend):
         )
         return result.images[0].convert("RGB")
 
+    def _guided_rediffuse(
+        self,
+        candidate: Image.Image,
+        blueprint: QRBlueprint,
+        request: GenerationRequest,
+        seed: int,
+    ) -> GuidedRediffusionResult:
+        """Run the DiffQRCoder-inspired second img2img diffusion stage.
+
+        A sparse QR-aware control image marks incorrect or uncertain modules. The artistic
+        candidate remains the img2img source, so ControlNet sees the technical constraint while
+        the diffusion source retains the composition and style of stage 1.
+        """
+        import torch
+
+        if self.settings.controlnet_pipeline_mode != "img2img":
+            raise RuntimeError("Guided rediffusion requires the img2img ControlNet pipeline")
+        control_image = repair_qr_modules(
+            candidate,
+            blueprint,
+            center_scale=self.settings.guided_rediffusion_guide_center_scale,
+            incorrect_only=True,
+            preserve_tone=True,
+            confidence_margin=self.settings.guided_rediffusion_guide_confidence_margin,
+            tone_factor=0.08,
+            edge_feather=0.25,
+            preserve_functional_tone=False,
+            rounded_edges=True,
+        )
+        rediffusion_seed = (seed + self.settings.guided_rediffusion_seed_offset) % (2**32)
+        scheduler_steps = ceil(
+            self.settings.guided_rediffusion_steps
+            / self.settings.guided_rediffusion_strength
+        )
+        generator = torch.Generator(device=self.settings.device).manual_seed(rediffusion_seed)
+        result = self._load()(
+            prompt=request.prompt,
+            negative_prompt=request.negative_prompt or None,
+            image=candidate,
+            control_image=control_image,
+            width=512,
+            height=512,
+            num_inference_steps=scheduler_steps,
+            strength=self.settings.guided_rediffusion_strength,
+            guidance_scale=request.guidance_scale,
+            controlnet_conditioning_scale=(
+                self.settings.guided_rediffusion_controlnet_scale
+            ),
+            generator=generator,
+        )
+        unprojected_image = result.images[0].convert("RGB")
+        image, mask_image = composite_guided_regions(
+            candidate,
+            unprojected_image,
+            control_image,
+            dilation_px=self.settings.guided_rediffusion_mask_dilation_px,
+            feather_px=self.settings.guided_rediffusion_mask_feather_px,
+        )
+        mask_histogram = mask_image.histogram()
+        mask_coverage = sum(level * count for level, count in enumerate(mask_histogram)) / (
+            255 * mask_image.width * mask_image.height
+        )
+        change = image_change_metrics(image, candidate)
+        unprojected_change = image_change_metrics(unprojected_image, candidate)
+        return GuidedRediffusionResult(
+            image=image,
+            unprojected_image=unprojected_image,
+            control_image=control_image,
+            mask_image=mask_image,
+            initial_module_error_rate=module_error_rate(candidate, blueprint),
+            control_module_error_rate=module_error_rate(control_image, blueprint),
+            final_module_error_rate=module_error_rate(image, blueprint),
+            mask_coverage=mask_coverage,
+            changed_pixel_ratio=change["changed_pixel_ratio"],
+            mean_absolute_change=change["mean_absolute_change"],
+            unprojected_changed_pixel_ratio=unprojected_change[
+                "changed_pixel_ratio"
+            ],
+            unprojected_mean_absolute_change=unprojected_change[
+                "mean_absolute_change"
+            ],
+            accepted=(
+                change["mean_absolute_change"]
+                <= self.settings.guided_rediffusion_max_mean_absolute_change
+            ),
+        )
+
     def variants(
-        self, candidate: Image.Image, blueprint: QRBlueprint
+        self,
+        candidate: Image.Image,
+        blueprint: QRBlueprint,
+        *,
+        request: GenerationRequest | None = None,
+        seed: int | None = None,
+        run_id: str | None = None,
+        attempt: int | None = None,
     ) -> Iterable[tuple[str, Image.Image]]:
+        self._debug_artifacts.clear()
         yield "raw", candidate
-        refined_candidate = None
+        enhanced_candidate = candidate
+        enhanced_prefix = ""
+        if self.settings.guided_rediffusion_enabled:
+            started = time.perf_counter()
+            try:
+                if request is None or seed is None:
+                    raise ValueError("request and seed are required for guided rediffusion")
+                guided = self._guided_rediffuse(candidate, blueprint, request, seed)
+                self._debug_artifacts["guided_control"] = guided.control_image
+                self._debug_artifacts["guided_mask"] = guided.mask_image
+                self._debug_artifacts["guided_unprojected"] = guided.unprojected_image
+                self._debug_artifacts["guided_candidate"] = guided.image
+                duration = time.perf_counter() - started
+                outcome = "quality_pass" if guided.accepted else "rejected_preservation"
+                metrics.GUIDED_REDIFFUSIONS.labels(outcome).inc()
+                metrics.GUIDED_REDIFFUSION_DURATION.observe(duration)
+                metrics.DURATION.labels("controlnet", "guided_rediffusion").observe(duration)
+                metrics.GUIDED_REDIFFUSION_MODULE_ERROR_RATE.labels("before").set(
+                    guided.initial_module_error_rate
+                )
+                metrics.GUIDED_REDIFFUSION_MODULE_ERROR_RATE.labels("control").set(
+                    guided.control_module_error_rate
+                )
+                metrics.GUIDED_REDIFFUSION_MODULE_ERROR_RATE.labels("after").set(
+                    guided.final_module_error_rate
+                )
+                metrics.GUIDED_REDIFFUSION_IMAGE_CHANGE.labels("changed_pixel_ratio").set(
+                    guided.changed_pixel_ratio
+                )
+                metrics.GUIDED_REDIFFUSION_IMAGE_CHANGE.labels("mean_absolute_change").set(
+                    guided.mean_absolute_change
+                )
+                metrics.GUIDED_REDIFFUSION_IMAGE_CHANGE.labels("mask_coverage").set(
+                    guided.mask_coverage
+                )
+                metrics.GUIDED_REDIFFUSION_IMAGE_CHANGE.labels(
+                    "unprojected_changed_pixel_ratio"
+                ).set(guided.unprojected_changed_pixel_ratio)
+                metrics.GUIDED_REDIFFUSION_IMAGE_CHANGE.labels(
+                    "unprojected_mean_absolute_change"
+                ).set(guided.unprojected_mean_absolute_change)
+                logger.info(
+                    "guided_rediffusion_completed",
+                    extra={
+                        "run_id": run_id,
+                        "backend": "controlnet",
+                        "status": outcome,
+                        "attempt": attempt,
+                        "seed": seed,
+                        "duration_ms": round(duration * 1000, 2),
+                        "steps": self.settings.guided_rediffusion_steps,
+                        "scheduler_steps": ceil(
+                            self.settings.guided_rediffusion_steps
+                            / self.settings.guided_rediffusion_strength
+                        ),
+                        "strength": self.settings.guided_rediffusion_strength,
+                        "controlnet_scale": (
+                            self.settings.guided_rediffusion_controlnet_scale
+                        ),
+                        "initial_module_error_rate": guided.initial_module_error_rate,
+                        "control_module_error_rate": guided.control_module_error_rate,
+                        "final_module_error_rate": guided.final_module_error_rate,
+                        "mask_coverage": guided.mask_coverage,
+                        "changed_pixel_ratio": guided.changed_pixel_ratio,
+                        "mean_absolute_change": guided.mean_absolute_change,
+                        "unprojected_changed_pixel_ratio": (
+                            guided.unprojected_changed_pixel_ratio
+                        ),
+                        "unprojected_mean_absolute_change": (
+                            guided.unprojected_mean_absolute_change
+                        ),
+                        "accepted": guided.accepted,
+                    },
+                )
+                if guided.accepted:
+                    enhanced_candidate = guided.image
+                    enhanced_prefix = "guided_"
+                    yield "guided", guided.image
+            except Exception:
+                duration = time.perf_counter() - started
+                metrics.GUIDED_REDIFFUSIONS.labels("error").inc()
+                metrics.GUIDED_REDIFFUSION_DURATION.observe(duration)
+                metrics.DURATION.labels("controlnet", "guided_rediffusion").observe(duration)
+                logger.exception(
+                    "guided_rediffusion_failed",
+                    extra={
+                        "run_id": run_id,
+                        "backend": "controlnet",
+                        "status": "error",
+                        "attempt": attempt,
+                        "seed": seed,
+                        "duration_ms": round(duration * 1000, 2),
+                    },
+                )
         if self.settings.latent_refinement_enabled:
             started = time.perf_counter()
             try:
                 result = refine_candidate_latent(
                     self._load(),
-                    candidate,
+                    enhanced_candidate,
                     blueprint,
                     LatentRefinementConfig(
                         iterations=self.settings.latent_refinement_iterations,
@@ -228,8 +450,11 @@ class ControlNetBackend(GenerationBackend):
                 logger.info(
                     "latent_refinement_completed",
                     extra={
+                        "run_id": run_id,
                         "backend": "controlnet",
                         "status": outcome,
+                        "attempt": attempt,
+                        "seed": seed,
                         "duration_ms": round(duration * 1000, 2),
                         "iterations": result.iterations,
                         "initial_module_error_rate": result.initial_module_error_rate,
@@ -250,8 +475,9 @@ class ControlNetBackend(GenerationBackend):
                     },
                 )
                 if result.accepted:
-                    refined_candidate = result.image
-                    yield "latent_srl", result.image
+                    enhanced_candidate = result.image
+                    enhanced_prefix = f"{enhanced_prefix}latent_"
+                    yield f"{enhanced_prefix}srl", result.image
             except Exception:
                 duration = time.perf_counter() - started
                 metrics.LATENT_REFINEMENTS.labels("error").inc()
@@ -259,8 +485,11 @@ class ControlNetBackend(GenerationBackend):
                 logger.exception(
                     "latent_refinement_failed",
                     extra={
+                        "run_id": run_id,
                         "backend": "controlnet",
                         "status": "error",
+                        "attempt": attempt,
+                        "seed": seed,
                         "duration_ms": round(duration * 1000, 2),
                     },
                 )
@@ -297,10 +526,10 @@ class ControlNetBackend(GenerationBackend):
             ("centers_95", 0.95, False, False, 0.0, 0.25, 0.0, False, False),
         )
 
-        # A latent refinement that does not scan on its own can still need fewer visible
+        # An enhanced candidate that does not scan on its own can still need fewer visible
         # module repairs than the raw image. Try every targeted profile on that improved
         # base first, then retain the complete raw repair chain as a reliability fallback.
-        if refined_candidate is not None:
+        if enhanced_candidate is not candidate:
             for (
                 name,
                 center_scale,
@@ -315,9 +544,9 @@ class ControlNetBackend(GenerationBackend):
                 if name in GLOBAL_REPAIR_VARIANTS:
                     continue
                 yield (
-                    f"latent_{name}",
+                    f"{enhanced_prefix}{name}",
                     repair_qr_modules(
-                        refined_candidate,
+                        enhanced_candidate,
                         blueprint,
                         center_scale=center_scale,
                         incorrect_only=incorrect_only,

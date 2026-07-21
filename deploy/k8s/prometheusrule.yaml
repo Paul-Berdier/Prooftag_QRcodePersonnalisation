@@ -79,6 +79,16 @@ spec:
           annotations:
             summary: Erreur du raffinement latent QR
             description: Le mode expérimental SRL a échoué ; les replis de production restent disponibles.
+        - alert: ProoftagQRGuidedRediffusionError
+          expr: increase(prooftag_qr_guided_rediffusions_total{outcome="error"}[15m]) > 0
+          for: 1m
+          labels:
+            severity: warning
+            service: prooftag-qr
+            team: proofchat
+          annotations:
+            summary: Erreur de la seconde diffusion guidée
+            description: L'étape expérimentale de rediffusion a échoué ; la chaîne brute de secours reste disponible.
         - alert: ProoftagQRLatentRefinementIneffective
           expr: |
             sum(increase(prooftag_qr_latent_refinements_total{outcome="no_improvement"}[30m]))

@@ -10,6 +10,8 @@ La version `0.1.0` fournit :
 - une API FastAPI ;
 - un générateur QR de référence (`backend=qr`) ;
 - une baseline artistique Stable Diffusion 1.5 + ControlNet (`backend=controlnet`) ;
+- une seconde diffusion img2img guidée par les modules QR incorrects, expérimentale et
+  désactivée par défaut ;
 - un verrouillage des motifs fonctionnels et une réparation adaptative des modules incorrects
   ou peu contrastés, d'abord par luminance et formes arrondies fondues dans l'illustration,
   puis par profils binaires de secours ;
@@ -28,10 +30,10 @@ La réparation locale actuelle conserve teinte et texture, remplace les centres 
 par des superellipses à bords progressifs et constitue le garde-fou structurel de secours :
 chaque variante est validée et la première qui atteint le seuil strict est livrée.
 
-Un premier raffinement latent SRL inspiré de DiffQRCoder est disponible derrière une option
-expérimentale désactivée par défaut. Il optimise le latent VAE, conserve le meilleur
-intermédiaire et ne remplace pas l'image brute si l'erreur des sous-modules centraux ne baisse
-pas. Voir [`docs/research-roadmap.md`](docs/research-roadmap.md) pour le programme complet et
+Le pipeline de recherche inspiré de DiffQRCoder comporte maintenant une seconde diffusion
+ControlNet localisée, suivie du raffinement latent SRL. Il conserve le meilleur intermédiaire,
+applique des portes de préservation et garde la chaîne brute comme secours. Les deux étages sont
+désactivés par défaut. Voir [`docs/research-roadmap.md`](docs/research-roadmap.md) pour le programme complet et
 [`docs/experiment-log.md`](docs/experiment-log.md) pour les résultats, erreurs et décisions.
 
 ## API

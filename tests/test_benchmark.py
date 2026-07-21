@@ -25,6 +25,12 @@ def test_report_contains_comparison_and_gallery():
         "changed_pixel_ratio": 0.45,
         "entropy_bits": 4.15,
         "total_ms": 7600,
+        "guided_artifact_available": True,
+        "guided_control_artifact_available": True,
+        "guided_mask_artifact_available": True,
+        "guided_unprojected_artifact_available": True,
+        "guided_candidate_artifact_available": True,
+        "latent_artifact_variant": "guided_latent_srl",
     }
     summary = {
         "git_commit": "abc123",
@@ -46,5 +52,20 @@ def test_report_contains_comparison_and_gallery():
     assert "botanical-short" in report
     assert "uncertain_48" in report
     assert "cases/botanical-short/final.png" in report
+    assert "attempt_1_guided.png" in report
+    assert "attempt_1_guided_control.png" in report
+    assert "attempt_1_guided_mask.png" in report
+    assert "attempt_1_guided_unprojected.png" in report
+    assert "attempt_1_guided_candidate.png" in report
+    assert "attempt_1_guided_latent_srl.png" in report
     assert "Brut strict" in report
     assert "Première référence" in report
+
+
+def test_guided_prefixed_variants_are_kept_as_debug_artifacts():
+    is_debug_variant = benchmark["is_debug_variant"]
+
+    assert is_debug_variant("guided")
+    assert is_debug_variant("guided_latent_srl")
+    assert is_debug_variant("guided_latent_uncertain_48")
+    assert not is_debug_variant("guided_centers_95")

@@ -1,8 +1,9 @@
 from functools import lru_cache
+from math import ceil
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import URL
 
@@ -22,6 +23,20 @@ class Settings(BaseSettings):
     validation_min_pass_rate: float = Field(default=1.0, ge=0.0, le=1.0)
     max_attempts: int = Field(default=3, ge=1, le=20)
     regenerate_before_global_repair: bool = True
+    guided_rediffusion_enabled: bool = False
+    guided_rediffusion_steps: int = Field(default=8, ge=1, le=40)
+    guided_rediffusion_strength: float = Field(default=0.30, ge=0.05, le=1.0)
+    guided_rediffusion_controlnet_scale: float = Field(default=1.75, gt=0.0, le=3.0)
+    guided_rediffusion_guide_center_scale: float = Field(default=0.45, ge=0.0, le=1.0)
+    guided_rediffusion_guide_confidence_margin: float = Field(
+        default=16.0, ge=0.0, lt=128.0
+    )
+    guided_rediffusion_mask_dilation_px: int = Field(default=4, ge=0, le=64)
+    guided_rediffusion_mask_feather_px: int = Field(default=4, ge=0, le=64)
+    guided_rediffusion_max_mean_absolute_change: float = Field(
+        default=0.12, gt=0.0, le=1.0
+    )
+    guided_rediffusion_seed_offset: int = Field(default=1_000_003, ge=0, le=2**32 - 1)
     latent_refinement_enabled: bool = False
     latent_refinement_iterations: int = Field(default=8, ge=1, le=100)
     latent_refinement_learning_rate: float = Field(default=0.02, gt=0.0, le=10.0)
@@ -46,6 +61,17 @@ class Settings(BaseSettings):
     s3_bucket: str = "prooftag-qr"
     s3_access_key: str = ""
     s3_secret_key: str = ""
+
+    @model_validator(mode="after")
+    def validate_guided_rediffusion_schedule(self) -> "Settings":
+        scheduler_steps = ceil(
+            self.guided_rediffusion_steps / self.guided_rediffusion_strength
+        )
+        if scheduler_steps > 100:
+            raise ValueError(
+                "guided rediffusion effective steps / strength cannot schedule over 100 steps"
+            )
+        return self
 
     @property
     def database_url(self) -> str:

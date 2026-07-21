@@ -93,6 +93,26 @@ REPAIR_VARIANT_IMAGE_QUALITY = Gauge(
     "Latest image quality measurement for each repair variant",
     ["variant", "metric"],
 )
+GUIDED_REDIFFUSIONS = Counter(
+    "prooftag_qr_guided_rediffusions_total",
+    "Second-pass guided diffusion outcomes",
+    ["outcome"],
+)
+GUIDED_REDIFFUSION_DURATION = Histogram(
+    "prooftag_qr_guided_rediffusion_duration_seconds",
+    "Time spent in the guided img2img diffusion pass",
+    buckets=(0.1, 0.25, 0.5, 1, 2, 5, 10, 20, 30, 60),
+)
+GUIDED_REDIFFUSION_MODULE_ERROR_RATE = Gauge(
+    "prooftag_qr_guided_rediffusion_module_error_rate",
+    "Latest module error before and after guided rediffusion",
+    ["stage"],
+)
+GUIDED_REDIFFUSION_IMAGE_CHANGE = Gauge(
+    "prooftag_qr_guided_rediffusion_image_change",
+    "Latest visual change caused by guided rediffusion",
+    ["metric"],
+)
 LATENT_REFINEMENTS = Counter(
     "prooftag_qr_latent_refinements_total",
     "Latent SRL refinement outcomes",

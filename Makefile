@@ -1,4 +1,4 @@
-.PHONY: install test lint run build deploy status benchmark pause-vllm resume-vllm
+.PHONY: install test lint run build deploy status benchmark benchmark-e004 pause-vllm resume-vllm
 
 install:
 	python -m pip install -e '.[dev]'
@@ -24,6 +24,9 @@ status:
 
 benchmark:
 	bash scripts/benchmark.sh
+
+benchmark-e004:
+	bash scripts/e004-guided-benchmark.sh
 
 pause-vllm:
 	bash scripts/gpu-workload.sh pause-vllm

@@ -93,7 +93,14 @@ class GenerationService:
                         or attempt + 1 == max_attempts
                     )
 
-                    for variant_name, candidate in backend.variants(raw_candidate, blueprint):
+                    for variant_name, candidate in backend.variants(
+                        raw_candidate,
+                        blueprint,
+                        request=request,
+                        seed=request.seed + attempt,
+                        run_id=run.id,
+                        attempt=attempt + 1,
+                    ):
                         if variant_name in GLOBAL_REPAIR_VARIANTS and not allow_global_repair:
                             continue
                         validation_started = time.perf_counter()
@@ -156,9 +163,12 @@ class GenerationService:
                                 metrics.REPAIR_VARIANT_IMAGE_QUALITY.labels(
                                     variant_name, quality_name
                                 ).set(quality_value)
-                            debug_variant = variant_name.removeprefix("latent_")
+                            debug_variant = variant_name
+                            for prefix in ("guided_latent_", "guided_", "latent_"):
+                                debug_variant = debug_variant.removeprefix(prefix)
                             if self.settings.save_debug_artifacts and debug_variant in {
                                 "raw",
+                                "guided",
                                 "srl",
                                 "rounded_16",
                                 "rounded_32",
@@ -219,6 +229,19 @@ class GenerationService:
                         if accepted:
                             attempt_accepted = True
                             break
+
+                    if self.settings.save_debug_artifacts:
+                        for artifact_name, artifact_image in backend.debug_artifacts().items():
+                            self.artifact_store.save_variant(
+                                run.id,
+                                artifact_name,
+                                artifact_image,
+                            )
+                            self.artifact_store.save_variant(
+                                run.id,
+                                f"attempt_{attempt + 1}_{artifact_name}",
+                                artifact_image,
+                            )
 
                     if (
                         attempt_accepted

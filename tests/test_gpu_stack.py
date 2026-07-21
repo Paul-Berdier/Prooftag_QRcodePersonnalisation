@@ -2,8 +2,14 @@ import tomllib
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from prooftag_qr import backends
-from prooftag_qr.backends import GLOBAL_REPAIR_VARIANTS, ControlNetBackend
+from prooftag_qr.backends import (
+    GLOBAL_REPAIR_VARIANTS,
+    ControlNetBackend,
+    GuidedRediffusionResult,
+)
 from prooftag_qr.config import Settings
 from prooftag_qr.qr import generate_qr
 from prooftag_qr.schemas import GenerationRequest
@@ -33,6 +39,13 @@ def test_gpu_dependencies_are_pinned_to_the_torch_base_image():
     manifest = Path("deploy/k8s/app-config.yaml").read_text()
     assert settings.controlnet_pipeline_mode == "img2img"
     assert settings.regenerate_before_global_repair is True
+    assert settings.guided_rediffusion_enabled is False
+    assert settings.guided_rediffusion_steps == 8
+    assert settings.guided_rediffusion_strength == 0.30
+    assert settings.guided_rediffusion_controlnet_scale == 1.75
+    assert settings.guided_rediffusion_mask_dilation_px == 4
+    assert settings.guided_rediffusion_mask_feather_px == 4
+    assert settings.guided_rediffusion_max_mean_absolute_change == 0.12
     assert settings.latent_refinement_enabled is False
     assert settings.latent_refinement_iterations == 8
     assert settings.latent_refinement_learning_rate == 0.02
@@ -42,11 +55,18 @@ def test_gpu_dependencies_are_pinned_to_the_torch_base_image():
     assert request.strength == 0.9
     assert "PROOFTAG_QR_CONTROLNET_PIPELINE_MODE: img2img" in manifest
     assert 'PROOFTAG_QR_REGENERATE_BEFORE_GLOBAL_REPAIR: "true"' in manifest
+    assert 'PROOFTAG_QR_GUIDED_REDIFFUSION_ENABLED: "false"' in manifest
+    assert 'PROOFTAG_QR_GUIDED_REDIFFUSION_STRENGTH: "0.30"' in manifest
     assert 'PROOFTAG_QR_LATENT_REFINEMENT_ENABLED: "false"' in manifest
     assert 'PROOFTAG_QR_LATENT_REFINEMENT_MAX_LATENT_DELTA: "0.10"' in manifest
     assert (
         'PROOFTAG_QR_LATENT_REFINEMENT_MAX_MEAN_ABSOLUTE_CHANGE: "0.08"' in manifest
     )
+
+
+def test_guided_rediffusion_rejects_an_excessive_scheduler():
+    with pytest.raises(ValueError, match="cannot schedule over 100 steps"):
+        Settings(guided_rediffusion_steps=40, guided_rediffusion_strength=0.05)
 
 
 def test_targeted_repairs_run_before_global_module_repairs():
@@ -101,3 +121,144 @@ def test_accepted_latent_becomes_the_base_for_targeted_repairs(monkeypatch):
     assert names.index("latent_perceptual_64") < names.index("rounded_16")
     assert not any(name.startswith("latent_centers_") for name in names)
     assert GLOBAL_REPAIR_VARIANTS <= set(names)
+
+
+def test_guided_rediffusion_becomes_the_base_for_targeted_repairs(monkeypatch):
+    blueprint = generate_qr("https://example.prooftag.test/t/guided-chain", "H")
+    backend = ControlNetBackend(Settings(guided_rediffusion_enabled=True))
+    guided_image = blueprint.image.copy()
+    guided = GuidedRediffusionResult(
+        image=guided_image,
+        unprojected_image=guided_image.copy(),
+        control_image=blueprint.image.copy(),
+        mask_image=blueprint.image.convert("L"),
+        initial_module_error_rate=0.2,
+        control_module_error_rate=0.0,
+        final_module_error_rate=0.1,
+        mask_coverage=0.2,
+        changed_pixel_ratio=0.1,
+        mean_absolute_change=0.02,
+        unprojected_changed_pixel_ratio=0.4,
+        unprojected_mean_absolute_change=0.08,
+        accepted=True,
+    )
+    monkeypatch.setattr(backend, "_guided_rediffuse", lambda *args: guided)
+    request = GenerationRequest(payload="https://example.prooftag.test/t/guided-chain")
+
+    names = [
+        name
+        for name, _ in backend.variants(
+            blueprint.image,
+            blueprint,
+            request=request,
+            seed=37,
+        )
+    ]
+
+    assert names.index("raw") < names.index("guided")
+    assert names.index("guided") < names.index("guided_rounded_16")
+    assert names.index("guided_rounded_16") < names.index("rounded_16")
+    assert not any(name.startswith("guided_centers_") for name in names)
+    assert GLOBAL_REPAIR_VARIANTS <= set(names)
+    assert set(backend.debug_artifacts()) == {
+        "guided_control",
+        "guided_mask",
+        "guided_unprojected",
+        "guided_candidate",
+    }
+
+
+def test_guided_then_latent_chain_uses_the_combined_prefix(monkeypatch):
+    blueprint = generate_qr("https://example.prooftag.test/t/guided-latent-chain", "H")
+    backend = ControlNetBackend(
+        Settings(guided_rediffusion_enabled=True, latent_refinement_enabled=True)
+    )
+    guided_image = blueprint.image.copy()
+    guided = GuidedRediffusionResult(
+        image=guided_image,
+        unprojected_image=guided_image.copy(),
+        control_image=blueprint.image.copy(),
+        mask_image=blueprint.image.convert("L"),
+        initial_module_error_rate=0.2,
+        control_module_error_rate=0.0,
+        final_module_error_rate=0.1,
+        mask_coverage=0.2,
+        changed_pixel_ratio=0.1,
+        mean_absolute_change=0.02,
+        unprojected_changed_pixel_ratio=0.4,
+        unprojected_mean_absolute_change=0.08,
+        accepted=True,
+    )
+    latent = SimpleNamespace(
+        image=guided_image.copy(),
+        iterations=2,
+        initial_module_error_rate=0.1,
+        final_module_error_rate=0.05,
+        final_srl=0.1,
+        final_preservation_loss=0.01,
+        final_mean_absolute_change=0.01,
+        best_observed_module_error_rate=0.05,
+        best_observed_mean_absolute_change=0.01,
+        improved=True,
+        accepted=True,
+        converged=False,
+        rejection_reason=None,
+    )
+    monkeypatch.setattr(backend, "_guided_rediffuse", lambda *args: guided)
+    monkeypatch.setattr(backend, "_load", lambda: object())
+    monkeypatch.setattr(backends, "refine_candidate_latent", lambda *args: latent)
+    request = GenerationRequest(
+        payload="https://example.prooftag.test/t/guided-latent-chain"
+    )
+
+    names = [
+        name
+        for name, _ in backend.variants(
+            blueprint.image,
+            blueprint,
+            request=request,
+            seed=41,
+        )
+    ]
+
+    assert names.index("guided") < names.index("guided_latent_srl")
+    assert names.index("guided_latent_srl") < names.index("guided_latent_rounded_16")
+    assert names.index("guided_latent_rounded_16") < names.index("rounded_16")
+
+
+def test_rejected_guided_rediffusion_keeps_diagnostics_and_raw_fallback(monkeypatch):
+    blueprint = generate_qr("https://example.prooftag.test/t/guided-rejected", "H")
+    backend = ControlNetBackend(Settings(guided_rediffusion_enabled=True))
+    guided_image = blueprint.image.copy()
+    guided = GuidedRediffusionResult(
+        image=guided_image,
+        unprojected_image=guided_image.copy(),
+        control_image=blueprint.image.copy(),
+        mask_image=blueprint.image.convert("L"),
+        initial_module_error_rate=0.2,
+        control_module_error_rate=0.0,
+        final_module_error_rate=0.1,
+        mask_coverage=0.8,
+        changed_pixel_ratio=0.9,
+        mean_absolute_change=0.3,
+        unprojected_changed_pixel_ratio=1.0,
+        unprojected_mean_absolute_change=0.5,
+        accepted=False,
+    )
+    monkeypatch.setattr(backend, "_guided_rediffuse", lambda *args: guided)
+    request = GenerationRequest(payload="https://example.prooftag.test/t/guided-rejected")
+
+    names = [
+        name
+        for name, _ in backend.variants(
+            blueprint.image,
+            blueprint,
+            request=request,
+            seed=43,
+        )
+    ]
+
+    assert "guided" not in names
+    assert not any(name.startswith("guided_") for name in names)
+    assert "rounded_16" in names
+    assert "guided_candidate" in backend.debug_artifacts()

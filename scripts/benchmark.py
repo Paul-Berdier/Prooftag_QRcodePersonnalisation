@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-BENCHMARK_PROTOCOL_VERSION = "2.0"
+BENCHMARK_PROTOCOL_VERSION = "2.1"
 
 CASES = (
     {
@@ -76,7 +76,13 @@ GENERATION_PARAMETERS = {
 
 DEBUG_VARIANTS = (
     "raw",
+    "guided_control",
+    "guided_mask",
+    "guided_unprojected",
+    "guided_candidate",
+    "guided",
     "latent_srl",
+    "guided_latent_srl",
     "incorrect_80",
     "incorrect_85",
     "uncertain_16",
@@ -86,6 +92,15 @@ DEBUG_VARIANTS = (
     "tonal_90",
     "tonal_95",
 )
+
+
+def is_debug_variant(name: str) -> bool:
+    if name in DEBUG_VARIANTS:
+        return True
+    base = name
+    for prefix in ("guided_latent_", "guided_", "latent_"):
+        base = base.removeprefix(prefix)
+    return base in DEBUG_VARIANTS
 
 GLOBAL_VARIANTS = frozenset(
     {
@@ -110,6 +125,7 @@ SUMMARY_FIELDS = (
     "first_attempt_accepted",
     "first_attempt_scan_pass_rate",
     "raw_scan_pass_rate",
+    "guided_scan_pass_rate",
     "latent_scan_pass_rate",
     "global_fallback_used",
     "qr_version",
@@ -403,10 +419,41 @@ def render_report(
         case = html.escape(row["case"])
         raw_path = f"cases/{case}/raw.png"
         final_path = f"cases/{case}/final.png"
+        guided_figure = (
+            f'<figure><img src="cases/{case}/attempt_1_guided.png" '
+            f'alt="Seconde diffusion {case}"><figcaption>Diffusion guidée</figcaption></figure>'
+            if row.get("guided_artifact_available")
+            else ""
+        )
+        guided_unprojected_figure = (
+            f'<figure><img src="cases/{case}/attempt_1_guided_unprojected.png" '
+            f'alt="Rediffusion globale {case}"><figcaption>Rediffusion globale</figcaption></figure>'
+            if row.get("guided_unprojected_artifact_available")
+            else ""
+        )
+        guided_candidate_figure = (
+            f'<figure><img src="cases/{case}/attempt_1_guided_candidate.png" '
+            f'alt="Rediffusion projetée {case}"><figcaption>Projection locale</figcaption></figure>'
+            if row.get("guided_candidate_artifact_available")
+            else ""
+        )
+        guided_control_figure = (
+            f'<figure><img src="cases/{case}/attempt_1_guided_control.png" '
+            f'alt="Guide QR {case}"><figcaption>Guide QR local</figcaption></figure>'
+            if row.get("guided_control_artifact_available")
+            else ""
+        )
+        guided_mask_figure = (
+            f'<figure><img src="cases/{case}/attempt_1_guided_mask.png" '
+            f'alt="Masque local {case}"><figcaption>Masque local</figcaption></figure>'
+            if row.get("guided_mask_artifact_available")
+            else ""
+        )
+        latent_variant = row.get("latent_artifact_variant")
         latent_figure = (
-            f'<figure><img src="cases/{case}/attempt_1_latent_srl.png" '
-            f'alt="Image raffinée {case}"><figcaption>Latent SRL</figcaption></figure>'
-            if row.get("latent_artifact_available")
+            f'<figure><img src="cases/{case}/attempt_1_{latent_variant}.png" '
+            f'alt="Image raffinée {case}"><figcaption>{html.escape(latent_variant)}</figcaption></figure>'
+            if latent_variant
             else ""
         )
         gallery.append(
@@ -415,6 +462,11 @@ def render_report(
               <h3>{case}</h3>
               <div class="images">
                 <figure><img src="{raw_path}" alt="Image brute {case}"><figcaption>Brute</figcaption></figure>
+                {guided_control_figure}
+                {guided_mask_figure}
+                {guided_unprojected_figure}
+                {guided_candidate_figure}
+                {guided_figure}
                 {latent_figure}
                 <figure><img src="{final_path}" alt="Image finale {case}"><figcaption>Finale</figcaption></figure>
               </div>
@@ -464,7 +516,8 @@ def render_report(
     <div class="stat"><span>Livraison finale</span><strong>{format_percent(summary["acceptance_rate"])}</strong><small>{summary["accepted_cases"]}/{summary["case_count"]} images</small></div>
     <div class="stat"><span>Premier essai</span><strong>{format_percent(summary.get("first_attempt_acceptance_rate"))}</strong></div>
     <div class="stat"><span>Brut strict, premier essai</span><strong>{format_percent(summary.get("raw_acceptance_rate"))}</strong></div>
-    <div class="stat"><span>Brut + latent, premier essai</span><strong>{format_percent(summary.get("post_latent_acceptance_rate"))}</strong></div>
+    <div class="stat"><span>Brut + diffusion guidée + latent</span><strong>{format_percent(summary.get("post_latent_acceptance_rate"))}</strong></div>
+    <div class="stat"><span>Sauvetages diffusion guidée</span><strong>{summary.get("guided_rescue_cases", 0)}</strong></div>
     <div class="stat"><span>Sauvetages latents</span><strong>{summary.get("latent_rescue_cases", 0)}</strong></div>
     <div class="stat"><span>Tentatives moyennes</span><strong>{format_number(summary.get("mean_attempts"), 2)}</strong></div>
     <div class="stat"><span>Fallback global</span><strong>{summary.get("global_fallback_cases", 0)}</strong></div>
@@ -489,6 +542,7 @@ def benchmark_case(
     case_dir: Path,
 ) -> tuple[
     dict[str, Any],
+    list[dict[str, Any]],
     list[dict[str, Any]],
     list[dict[str, Any]],
     list[dict[str, Any]],
@@ -520,6 +574,50 @@ def benchmark_case(
         encoding="utf-8",
     )
     evaluated = [event for event in events if event.get("message") == "repair_variant_validated"]
+    refinement_rows = [
+        {
+            "case": case["name"],
+            "run_id": run_id,
+            "stage": event.get("message"),
+            "status": event.get("status"),
+            "attempt": event.get("attempt"),
+            "seed": event.get("seed"),
+            "duration_ms": event.get("duration_ms"),
+            "steps": event.get("steps"),
+            "scheduler_steps": event.get("scheduler_steps"),
+            "iterations": event.get("iterations"),
+            "strength": event.get("strength"),
+            "controlnet_scale": event.get("controlnet_scale"),
+            "initial_module_error_rate": event.get("initial_module_error_rate"),
+            "control_module_error_rate": event.get("control_module_error_rate"),
+            "final_module_error_rate": event.get("final_module_error_rate"),
+            "best_observed_module_error_rate": event.get(
+                "best_observed_module_error_rate"
+            ),
+            "changed_pixel_ratio": event.get("changed_pixel_ratio"),
+            "mask_coverage": event.get("mask_coverage"),
+            "mean_absolute_change": event.get("mean_absolute_change"),
+            "unprojected_changed_pixel_ratio": event.get(
+                "unprojected_changed_pixel_ratio"
+            ),
+            "unprojected_mean_absolute_change": event.get(
+                "unprojected_mean_absolute_change"
+            ),
+            "best_observed_mean_absolute_change": event.get(
+                "best_observed_mean_absolute_change"
+            ),
+            "accepted": event.get("accepted"),
+            "rejection_reason": event.get("rejection_reason"),
+        }
+        for event in events
+        if event.get("message")
+        in {
+            "guided_rediffusion_completed",
+            "guided_rediffusion_failed",
+            "latent_refinement_completed",
+            "latent_refinement_failed",
+        }
+    ]
     completed = next(
         (event for event in reversed(events) if event.get("message") == "generation_completed"),
         {},
@@ -533,9 +631,22 @@ def benchmark_case(
 
     artifact_names = set(DEBUG_VARIANTS)
     artifact_names.update(
+        (
+            "attempt_1_guided_control",
+            "attempt_1_guided_mask",
+            "attempt_1_guided_unprojected",
+            "attempt_1_guided_candidate",
+        )
+    )
+    artifact_names.update(
+        event["repair_variant"]
+        for event in evaluated
+        if event.get("repair_variant") and is_debug_variant(event["repair_variant"])
+    )
+    artifact_names.update(
         f"attempt_{event['attempt']}_{event['repair_variant']}"
         for event in evaluated
-        if event.get("attempt") and event.get("repair_variant") in DEBUG_VARIANTS
+        if event.get("attempt") and is_debug_variant(event.get("repair_variant", ""))
     )
     available_variants = set()
     for artifact_name in sorted(artifact_names):
@@ -614,15 +725,48 @@ def benchmark_case(
             ),
             None,
         ),
+        "guided_scan_pass_rate": next(
+            (
+                item.get("scan_pass_rate")
+                for item in variant_rows
+                if item.get("attempt") == 1 and item.get("variant") == "guided"
+            ),
+            None,
+        ),
         "latent_scan_pass_rate": next(
             (
                 item.get("scan_pass_rate")
                 for item in variant_rows
-                if item.get("attempt") == 1 and item.get("variant") == "latent_srl"
+                if item.get("attempt") == 1
+                and str(item.get("variant", "")).endswith("latent_srl")
             ),
             None,
         ),
-        "latent_artifact_available": "attempt_1_latent_srl" in available_variants,
+        "guided_artifact_available": "attempt_1_guided" in available_variants,
+        "guided_control_artifact_available": (
+            "attempt_1_guided_control" in available_variants
+        ),
+        "guided_mask_artifact_available": "attempt_1_guided_mask" in available_variants,
+        "guided_unprojected_artifact_available": (
+            "attempt_1_guided_unprojected" in available_variants
+        ),
+        "guided_candidate_artifact_available": (
+            "attempt_1_guided_candidate" in available_variants
+        ),
+        "latent_artifact_variant": next(
+            (
+                item.get("variant")
+                for item in variant_rows
+                if item.get("attempt") == 1
+                and str(item.get("variant", "")).endswith("latent_srl")
+                and f"attempt_1_{item.get('variant')}" in available_variants
+            ),
+            None,
+        ),
+        "latent_artifact_available": any(
+            name.startswith("attempt_1_") and name.endswith("latent_srl")
+            for name in available_variants
+        ),
         "global_fallback_used": selected_variant in GLOBAL_VARIANTS,
         "qr_version": response.get("qr_version"),
         "scan_pass_rate": response.get("scan_pass_rate"),
@@ -639,7 +783,7 @@ def benchmark_case(
         {"case": case["name"], "run_id": run_id, **validation}
         for validation in response.get("validations", [])
     ]
-    return row, variant_rows, validations, variant_failures
+    return row, variant_rows, validations, variant_failures, refinement_rows
 
 
 def main() -> int:
@@ -709,6 +853,7 @@ def main() -> int:
     variants: list[dict[str, Any]] = []
     validations: list[dict[str, Any]] = []
     variant_failures: list[dict[str, Any]] = []
+    refinements: list[dict[str, Any]] = []
     gpu_sampler = GPUSampler()
     gpu_sampler.start()
     try:
@@ -717,7 +862,7 @@ def main() -> int:
             case_dir = cases_dir / case["name"]
             case_dir.mkdir()
             try:
-                row, variant_rows, validation_rows, failure_rows = benchmark_case(
+                row, variant_rows, validation_rows, failure_rows, refinement_rows = benchmark_case(
                     arguments.api_url, case, case_dir
                 )
             except Exception as exc:
@@ -725,11 +870,13 @@ def main() -> int:
                 variant_rows = []
                 validation_rows = []
                 failure_rows = []
+                refinement_rows = []
                 (case_dir / "benchmark-error.txt").write_text(str(exc), encoding="utf-8")
             results.append(row)
             variants.extend(variant_rows)
             validations.extend(validation_rows)
             variant_failures.extend(failure_rows)
+            refinements.extend(refinement_rows)
             print(
                 f"    {row.get('status')} · lecture={format_percent(row.get('scan_pass_rate'))}"
                 f" · profil={row.get('selected_variant') or '—'}",
@@ -747,9 +894,13 @@ def main() -> int:
     first_latent = [
         row
         for row in variants
-        if row.get("attempt") == 1 and row.get("variant") == "latent_srl"
+        if row.get("attempt") == 1 and str(row.get("variant", "")).endswith("latent_srl")
+    ]
+    first_guided = [
+        row for row in variants if row.get("attempt") == 1 and row.get("variant") == "guided"
     ]
     raw_accepted_cases = sum(row.get("status") == "accepted" for row in first_raw)
+    guided_rescue_cases = sum(row.get("status") == "accepted" for row in first_guided)
     latent_rescue_cases = sum(row.get("status") == "accepted" for row in first_latent)
     summary = {
         "benchmark_protocol_version": BENCHMARK_PROTOCOL_VERSION,
@@ -770,6 +921,12 @@ def main() -> int:
         "raw_accepted_cases": raw_accepted_cases,
         "raw_acceptance_rate": raw_accepted_cases / len(first_raw) if first_raw else None,
         "mean_raw_scan_pass_rate": average(first_raw, "scan_pass_rate"),
+        "guided_evaluated_cases": len(first_guided),
+        "guided_rescue_cases": guided_rescue_cases,
+        "guided_acceptance_rate": (
+            guided_rescue_cases / len(first_guided) if first_guided else None
+        ),
+        "mean_guided_scan_pass_rate": average(first_guided, "scan_pass_rate"),
         "latent_evaluated_cases": len(first_latent),
         "latent_rescue_cases": latent_rescue_cases,
         "latent_acceptance_rate": (
@@ -777,7 +934,7 @@ def main() -> int:
         ),
         "mean_latent_scan_pass_rate": average(first_latent, "scan_pass_rate"),
         "post_latent_acceptance_rate": (
-            (raw_accepted_cases + latent_rescue_cases) / len(results)
+            (raw_accepted_cases + guided_rescue_cases + latent_rescue_cases) / len(results)
         ),
         "mean_attempts": average(results, "attempts"),
         "global_fallback_cases": sum(row.get("global_fallback_used") is True for row in results),
@@ -870,6 +1027,31 @@ def main() -> int:
         variant_failures,
         failure_fields,
     )
+    refinement_fields = (
+        "case",
+        "run_id",
+        "stage",
+        "status",
+        "attempt",
+        "seed",
+        "duration_ms",
+        "steps",
+        "scheduler_steps",
+        "iterations",
+        "strength",
+        "controlnet_scale",
+        "initial_module_error_rate",
+        "control_module_error_rate",
+        "final_module_error_rate",
+        "best_observed_module_error_rate",
+        "changed_pixel_ratio",
+        "mask_coverage",
+        "mean_absolute_change",
+        "best_observed_mean_absolute_change",
+        "accepted",
+        "rejection_reason",
+    )
+    write_csv(run_dir / "refinements.csv", refinements, refinement_fields)
     comparison_fields = (
         "case",
         "scan_pass_rate",

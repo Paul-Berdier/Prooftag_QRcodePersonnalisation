@@ -58,6 +58,10 @@ dimensions, iPhone, Pixel et lecteurs industriels.
 | `prooftag_qr_repair_variant_scan_pass_rate` | jauge | dernier taux de lecture de chaque variante |
 | `prooftag_qr_repair_variant_module_error_rate` | jauge | dernière erreur modules de chaque variante |
 | `prooftag_qr_repair_variant_image_quality` | jauge | qualité visuelle et écart à l'image brute de chaque variante (`changed_pixel_ratio`, `mean_absolute_change`, entropie, écrêtage, contraste, luminosité et netteté) |
+| `prooftag_qr_guided_rediffusions_total` | compteur | résultat de la seconde diffusion : porte qualité franchie, rejet de préservation ou erreur |
+| `prooftag_qr_guided_rediffusion_duration_seconds` | histogramme | coût de la seconde passe img2img/ControlNet |
+| `prooftag_qr_guided_rediffusion_module_error_rate` | jauge | erreur module avant et après la seconde diffusion |
+| `prooftag_qr_guided_rediffusion_image_change` | jauge | pixels modifiés et changement absolu moyen de la seconde diffusion localisée |
 | `prooftag_qr_latent_refinements_total` | compteur | convergence, amélioration acceptée, rejet par préservation, absence d'amélioration ou erreur du raffinement latent |
 | `prooftag_qr_latent_refinement_duration_seconds` | histogramme | coût du raffinement VAE/SRL |
 | `prooftag_qr_latent_refinement_iterations` | histogramme | nombre d'itérations réellement exécutées |
@@ -72,6 +76,12 @@ Les variantes préfixées `latent_` sont des réparations ciblées calculées de
 par exemple `latent_rounded_16`. Les variantes sans ce préfixe restent calculées depuis l'image
 brute et constituent la chaîne de secours. Le nom de la variante sélectionnée doit être contrôlé
 avant d'attribuer un changement de `final.png` au raffinement latent.
+
+Avec E004, `guided_*` désigne une sortie issue de la seconde diffusion et
+`guided_latent_*` une sortie ayant ensuite reçu SR-MPGD. Les artefacts `guided_control` et
+`guided_mask`, `guided_unprojected` et `guided_candidate` sont diagnostiques et ne sont jamais
+sélectionnables comme résultat final. Ils permettent de distinguer l'effet global de la seconde
+diffusion de sa projection locale avant validation.
 
 Les métriques DCGM existantes complètent le dashboard avec VRAM, utilisation GPU,
 température et puissance.

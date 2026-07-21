@@ -261,3 +261,62 @@ conservant la porte MAE à 0,08. Le critère de passage exige au minimum une ré
 sélectionnée avec un écart visuel inférieur à la réparation brute correspondante. Les données
 complètes sont versionnées dans
 `docs/baselines/2026-07-20-584bb0cb-latent-v2.json`.
+
+## E004 — Seconde diffusion guidée localisée
+
+- **Date :** 2026-07-21
+- **État :** implémentée localement, campagne GPU non encore exécutée
+- **Question :** une seconde diffusion peut-elle intégrer les corrections QR dans le style avant
+  les réparations déterministes ?
+- **Référence :** pipeline en deux étapes SRPG puis SR-MPGD de DiffQRCoder.
+
+### Erreur de conception corrigée
+
+E003 ajoutait des corrections après la diffusion, puis appliquait éventuellement SR-MPGD. Le
+modèle génératif ne voyait donc jamais les points correctifs. E004 reconstruit un guide depuis les
+modules incorrects, ajoute de nouveau du bruit à l'image artistique et exécute une passe img2img
+ControlNet avant SR-MPGD.
+
+### Implémentation
+
+- seconde passe déterministe avec seed décalée et enregistrée ;
+- guide local : motifs fonctionnels verrouillés, centres incorrects ou incertains uniquement ;
+- huit étapes effectives, soit 27 timesteps planifiés à strength 0,30, et poids ControlNet 1,75 ;
+- projection du résultat dans un masque dérivé du guide, dilaté et adouci de quatre pixels ;
+- refus de la seconde passe au-dessus d'une MAE de 0,12 ;
+- SR-MPGD appliqué à `guided` et non plus obligatoirement au brut ;
+- réparations `guided_latent_*` calculées depuis le meilleur intermédiaire ;
+- chaîne brute historique intégralement conservée en secours ;
+- artefacts `guided_control`, `guided_mask`, `guided_unprojected`, `guided_candidate`, `guided`
+  et `guided_latent_srl` ;
+- métriques Prometheus et quatre panneaux Grafana spécifiques ;
+- protocole benchmark 2.1 et export `refinements.csv` ;
+- `run_id`, tentative et seed ajoutés aux journaux des raffinements.
+
+### Validation locale avant campagne GPU
+
+- Ruff : aucun défaut sur `prooftag_qr`, `scripts`, `tests` et `main.py` ;
+- tests : 30 réussis, 1 ignoré ;
+- couverture Python totale : 76 % ;
+- manifestes : 14 documents Kubernetes chargés sans erreur ;
+- observabilité : dashboard JSON valide, 34 panneaux ;
+- `git diff --check` : aucune erreur d'espace ou de patch.
+
+La passe GPU n'est pas simulée sur le PC Windows : elle doit être exécutée sur la RTX afin de
+mesurer la VRAM, le temps et le comportement réel de Diffusers. La syntaxe du script Bash sera
+donc également confirmée par son exécution sur le serveur Linux ; le poste local ne possède pas
+de distribution WSL Bash configurée.
+
+### Limite assumée
+
+Cette étape utilise ControlNet comme guidage pendant le débruitage, puis SR-MPGD après la seconde
+diffusion. Elle ne calcule pas encore le gradient SRPG exact à travers l'UNet à chaque timestep et
+n'implémente pas Qart. Les taux de réussite publiés par DiffQRCoder ne peuvent donc pas être
+revendiqués pour E004 avant reproduction complète et mesure locale.
+
+### Porte avant E004b
+
+La campagne courte doit comparer une baseline et E004 sur le même commit et la même image Docker.
+On n'élargit les paramètres que si la galerie contient les quatre étapes, que les six finals restent
+à 26/26, et qu'au moins une variante `guided_*` réduit la réparation visible. Le protocole et les
+commandes sont détaillés dans `docs/e004-guided-rediffusion.md`.

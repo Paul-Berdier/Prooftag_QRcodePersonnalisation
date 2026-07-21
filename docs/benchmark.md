@@ -5,7 +5,7 @@ payload et versions QR. Chaque cas autorise jusqu'à trois seeds déterministes.
 restent identiques entre deux versions du code afin que les écarts mesurés proviennent du
 pipeline et non du hasard.
 
-Le protocole 2.0 inscrit dans chaque rapport sa version, le hash SHA-256 des cas et les
+Le protocole 2.1 inscrit dans chaque rapport sa version, le hash SHA-256 des cas et les
 paramètres complets de génération. Une comparaison dont le hash ou la version diffère doit
 être présentée comme une nouvelle campagne, pas comme une régression directe.
 
@@ -22,8 +22,8 @@ La commande ouvre elle-même un port-forward temporaire, génère les six images
 
 - les images finales, brutes et variantes disponibles pour chaque tentative ;
 - la réponse JSON et le snapshot Prometheus de chaque génération ;
-- `summary.csv`, `variants.csv`, `variant-failures.csv`, `validations.csv` et
-  `comparison.csv` ;
+- `summary.csv`, `variants.csv`, `variant-failures.csv`, `validations.csv`,
+  `refinements.csv` et `comparison.csv` ;
 - les informations Git, GPU, runtime et Kubernetes ;
 - un échantillonnage GPU chaque seconde (`gpu-samples.csv`) avec utilisation, VRAM,
   température et puissance ;
@@ -37,7 +37,7 @@ Le taux « premier essai » mesure la qualité intrinsèque d'une seed. Le taux 
 finale » mesure la capacité réelle du service après régénération et fallback. Le rapport
 indique séparément le nombre de cas ayant nécessité une correction globale.
 
-Le protocole 2.0 ajoute le taux strict de la variante `raw`, le taux après `raw + latent_srl`,
+Le protocole 2.1 ajoute le taux strict de `raw`, `guided` et de la variante SRL disponible,
 le nombre de sauvetages obtenus par le latent et leurs taux moyens. Ces indicateurs ne doivent
 pas être remplacés par le taux final : ils mesurent le progrès réel du modèle avant fallback.
 
@@ -46,10 +46,19 @@ formes arrondies à bords fondus pour réduire l'effet de grille. Les variantes 
 puis binaires restent disponibles comme replis de robustesse. `selected_variant` et
 `variant-failures.csv` permettent de suivre le palier retenu pour chaque image.
 
-Quand le raffinement expérimental est activé, `latent_srl` est évalué juste après `raw`, avant
-toute réparation de pixels. Ses images, pertes, itérations et erreurs avant/après sont
-conservées. Le mode reste désactivé dans le manifeste de production tant qu'une campagne
-d'ablation n'a pas identifié des paramètres sûrs.
+Quand E004 est activée, la galerie conserve `raw`, `guided_control`, `guided_mask`,
+`guided_unprojected`, `guided_candidate`, `guided`,
+`guided_latent_srl` si elle existe, puis l'image finale. `refinements.csv` enregistre le statut,
+la durée, les paramètres, les erreurs modules et les écarts visuels de chaque étape. Les modes
+restent désactivés dans le manifeste de production tant qu'une campagne d'ablation n'a pas
+identifié des paramètres sûrs.
+
+Pour exécuter automatiquement une baseline et E004 sur le même commit, puis restaurer les
+valeurs désactivées même en cas d'erreur :
+
+```bash
+make benchmark-e004
+```
 
 ## Une commande depuis le PC Windows
 

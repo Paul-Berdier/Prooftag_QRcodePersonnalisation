@@ -24,6 +24,28 @@ def runtime_info(settings: Settings | None = None) -> dict:
             "validation_min_pass_rate": settings.validation_min_pass_rate,
             "max_attempts": settings.max_attempts,
             "regenerate_before_global_repair": settings.regenerate_before_global_repair,
+            "guided_rediffusion_enabled": settings.guided_rediffusion_enabled,
+            "guided_rediffusion_steps": settings.guided_rediffusion_steps,
+            "guided_rediffusion_strength": settings.guided_rediffusion_strength,
+            "guided_rediffusion_controlnet_scale": (
+                settings.guided_rediffusion_controlnet_scale
+            ),
+            "guided_rediffusion_guide_center_scale": (
+                settings.guided_rediffusion_guide_center_scale
+            ),
+            "guided_rediffusion_guide_confidence_margin": (
+                settings.guided_rediffusion_guide_confidence_margin
+            ),
+            "guided_rediffusion_mask_dilation_px": (
+                settings.guided_rediffusion_mask_dilation_px
+            ),
+            "guided_rediffusion_mask_feather_px": (
+                settings.guided_rediffusion_mask_feather_px
+            ),
+            "guided_rediffusion_max_mean_absolute_change": (
+                settings.guided_rediffusion_max_mean_absolute_change
+            ),
+            "guided_rediffusion_seed_offset": settings.guided_rediffusion_seed_offset,
             "latent_refinement_enabled": settings.latent_refinement_enabled,
             "latent_refinement_iterations": settings.latent_refinement_iterations,
             "latent_refinement_learning_rate": settings.latent_refinement_learning_rate,
