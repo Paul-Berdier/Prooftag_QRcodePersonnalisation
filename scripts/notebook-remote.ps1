@@ -1,7 +1,7 @@
 param(
     [string]$Server = "paul@pcIA",
     [string]$RemoteRepository = "~/apps/Prooftag_QRcodePersonnalisation",
-    [int]$LocalPort = 8888,
+    [int]$LocalPort = 18888,
     [switch]$Stop
 )
 
@@ -27,6 +27,22 @@ function Stop-RemoteNotebook {
     }
 }
 
+function Assert-LocalPortAvailable {
+    $listener = [System.Net.Sockets.TcpListener]::new(
+        [System.Net.IPAddress]::Loopback,
+        $LocalPort
+    )
+    try {
+        $listener.Start()
+    }
+    catch {
+        throw "Le port local $LocalPort est deja occupe. Utiliser par exemple -LocalPort 18889."
+    }
+    finally {
+        $listener.Stop()
+    }
+}
+
 if ($Stop) {
     Stop-LocalTunnel
     Stop-RemoteNotebook
@@ -34,6 +50,7 @@ if ($Stop) {
     exit 0
 }
 
+Assert-LocalPortAvailable
 $remoteStarted = $false
 $tunnel = $null
 try {

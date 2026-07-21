@@ -20,6 +20,10 @@ cd "C:\Users\p.berdier\Documents\Paul Berdier\codage\Prooftag_QRcodePersonnalisa
 .\scripts\notebook-remote.ps1
 ```
 
+Le tunnel utilise `http://127.0.0.1:18888` par défaut afin de ne pas entrer en conflit avec un
+Jupyter Windows déjà lancé sur le port 8888. Si 18888 est occupé, choisir explicitement un autre
+port : `./scripts/notebook-remote.ps1 -LocalPort 18889`.
+
 Cette commande :
 
 1. mémorise l'état de l'API QR et de vLLM ;

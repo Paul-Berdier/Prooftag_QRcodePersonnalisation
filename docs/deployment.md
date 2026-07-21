@@ -55,6 +55,10 @@ notebook de génération réelle :
 .\scripts\notebook-remote.ps1
 ```
 
+Le port local par défaut est `18888`, distinct du port Jupyter local habituel `8888`. Le lanceur
+vérifie qu'il est libre avant d'arrêter les workloads GPU ; un autre port peut être choisi avec
+`-LocalPort 18889`.
+
 L'arrêt restaure les nombres de réplicas mémorisés avant le démarrage, y compris vLLM :
 
 ```powershell

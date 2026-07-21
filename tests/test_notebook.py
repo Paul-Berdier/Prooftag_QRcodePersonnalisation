@@ -50,6 +50,8 @@ def test_remote_gpu_notebook_has_an_isolated_kubernetes_runtime():
     assert "FROM ${BASE_IMAGE}" in dockerfile
     assert "02_generate_live_on_gpu.ipynb" in launcher
     assert "-WindowStyle Hidden" in launcher
+    assert '[int]$LocalPort = 18888' in launcher
+    assert "Assert-LocalPortAvailable" in launcher
     assert "nvidia.com/gpu: \"1\"" in manifest
     assert "replicas: 0" in manifest
     assert "prooftag-qr-model-cache" in manifest
