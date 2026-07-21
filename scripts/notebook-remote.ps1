@@ -69,17 +69,19 @@ try {
     Stop-LocalTunnel
     $forwardCommand = "kubectl port-forward -n qr-core service/prooftag-qr-notebook 18888:8888"
     $arguments = @(
-        "-N",
+        "-o", "ExitOnForwardFailure=yes",
+        "-o", "ServerAliveInterval=30",
         "-L", "${LocalPort}:127.0.0.1:18888",
         $Server,
         $forwardCommand
     )
-    $tunnel = Start-Process -FilePath "ssh" -ArgumentList $arguments -WindowStyle Hidden -PassThru
+    Write-Host "Une fenetre SSH va s'ouvrir : saisir le mot de passe de $Server."
+    $tunnel = Start-Process -FilePath "ssh" -ArgumentList $arguments -WindowStyle Normal -PassThru
     Set-Content -LiteralPath $pidFile -Value $tunnel.Id
 
     $url = "http://127.0.0.1:${LocalPort}/lab/tree/notebooks/02_generate_live_on_gpu.ipynb?token=$token"
     $headers = @{ Authorization = "token $token" }
-    for ($attempt = 0; $attempt -lt 30; $attempt++) {
+    for ($attempt = 0; $attempt -lt 240; $attempt++) {
         Start-Sleep -Milliseconds 500
         try {
             Invoke-WebRequest -Uri "http://127.0.0.1:${LocalPort}/api" `

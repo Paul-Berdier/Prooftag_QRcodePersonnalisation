@@ -49,7 +49,9 @@ def test_remote_gpu_notebook_has_an_isolated_kubernetes_runtime():
 
     assert "FROM ${BASE_IMAGE}" in dockerfile
     assert "02_generate_live_on_gpu.ipynb" in launcher
-    assert "-WindowStyle Hidden" in launcher
+    assert "-WindowStyle Normal" in launcher
+    assert '"-N"' not in launcher
+    assert '"ExitOnForwardFailure=yes"' in launcher
     assert '[int]$LocalPort = 18888' in launcher
     assert "Assert-LocalPortAvailable" in launcher
     assert "[System.IO.File]::Delete($pidFile)" in launcher

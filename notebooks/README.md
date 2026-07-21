@@ -32,6 +32,10 @@ Cette commande :
 4. crée un tunnel SSH privé ;
 5. ouvre directement `02_generate_live_on_gpu.ipynb` sur le PC.
 
+Sans clé SSH, une seconde fenêtre s'ouvre pour le tunnel : saisir le mot de passe `paul@pcIA`
+dans cette fenêtre et la laisser ouverte pendant la session Jupyter. Elle sera fermée par la
+commande `-Stop`.
+
 Dans Jupyter, utiliser **Run > Run All Cells**. Le notebook fabrique alors, sans archive :
 
 1. le QR de contrôle ;
