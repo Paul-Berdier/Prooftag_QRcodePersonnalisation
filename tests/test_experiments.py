@@ -38,6 +38,23 @@ def test_trial_ranking_prioritizes_strict_scan_over_visual_change():
     assert trial_rank_key(strict) < trial_rank_key(pretty_but_not_strict)
 
 
+def test_trial_ranking_prioritizes_the_weak_decoder_before_the_global_mean():
+    balanced = {
+        "status": "ok",
+        "strict_all": False,
+        "pass_rate": 0.75,
+        "worst_decoder_pass_rate": 0.70,
+        "original_pass_rate": 0.5,
+    }
+    decoder_fragile = {
+        **balanced,
+        "pass_rate": 0.90,
+        "worst_decoder_pass_rate": 0.40,
+    }
+
+    assert trial_rank_key(balanced) < trial_rank_key(decoder_fragile)
+
+
 def test_confirmation_uses_worst_case_before_mean():
     rows = [
         {
@@ -82,3 +99,32 @@ def test_confirmation_uses_worst_case_before_mean():
 
     assert aggregates[0]["trial"] == "stable"
     assert aggregates[0]["worst_pass_rate"] == 0.95
+
+
+def test_confirmation_uses_weak_decoder_before_global_pass_rate():
+    rows = [
+        {
+            "trial": "balanced",
+            "status": "ok",
+            "strict_all": False,
+            "pass_rate": 0.75,
+            "worst_decoder_pass_rate": 0.70,
+            "module_error_rate": 0.01,
+            "mean_absolute_change": 0.1,
+            "duration_seconds": 10,
+        },
+        {
+            "trial": "fragile",
+            "status": "ok",
+            "strict_all": False,
+            "pass_rate": 0.90,
+            "worst_decoder_pass_rate": 0.40,
+            "module_error_rate": 0.01,
+            "mean_absolute_change": 0.1,
+            "duration_seconds": 10,
+        },
+    ]
+
+    aggregates = aggregate_confirmation(rows)
+
+    assert aggregates[0]["trial"] == "balanced"

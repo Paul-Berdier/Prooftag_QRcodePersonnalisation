@@ -4,13 +4,36 @@ import hashlib
 import io
 import time
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from dataclasses import dataclass
+from typing import Any
 
 import cv2
 import numpy as np
 from PIL import Image, ImageEnhance, ImageFilter
 
 from .domain import ValidationRecord
+
+
+def summarize_validation_records(records: list[ValidationRecord]) -> dict[str, Any]:
+    """Expose the weak decoder and scenario instead of hiding them in a global mean."""
+    grouped_decoders: dict[str, list[bool]] = defaultdict(list)
+    grouped_scenarios: dict[str, list[bool]] = defaultdict(list)
+    for record in records:
+        grouped_decoders[record.decoder].append(record.exact_payload_match)
+        grouped_scenarios[record.scenario].append(record.exact_payload_match)
+    decoder_pass_rates = {
+        name: sum(values) / len(values) for name, values in sorted(grouped_decoders.items())
+    }
+    scenario_pass_rates = {
+        name: sum(values) / len(values) for name, values in sorted(grouped_scenarios.items())
+    }
+    return {
+        "decoder_pass_rates": decoder_pass_rates,
+        "scenario_pass_rates": scenario_pass_rates,
+        "worst_decoder_pass_rate": min(decoder_pass_rates.values(), default=0.0),
+        "worst_scenario_pass_rate": min(scenario_pass_rates.values(), default=0.0),
+    }
 
 
 class Decoder(ABC):

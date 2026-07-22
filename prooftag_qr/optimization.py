@@ -22,7 +22,7 @@ from .quality import image_change_metrics
 from .quality_scoring import CLIPQualityScorer, project_embedding
 from .schemas import GenerationRequest
 from .srpg import run_srpg_controlnet_img2img
-from .validation import QRValidator
+from .validation import QRValidator, summarize_validation_records
 
 STAGE2_SEED_STRIDE = 1_000_003
 
@@ -241,6 +241,7 @@ class E007Experiment:
             raw = self._generate_raw(phase, context, trial, blueprint)
             raw_quality = self.quality.score(raw, context.prompt)
             raw_records = self.validator.validate(raw, context.payload)
+            raw_validation_summary = summarize_validation_records(raw_records)
             raw_exact = sum(record.exact_payload_match for record in raw_records)
             raw_validation_path = self._raw_path(phase, context, trial).with_suffix(
                 ".validations.json"
@@ -286,6 +287,7 @@ class E007Experiment:
             )
             duration = time.perf_counter() - started
             records = self.validator.validate(result.image, context.payload)
+            validation_summary = summarize_validation_records(records)
             exact = sum(record.exact_payload_match for record in records)
             originals = [record for record in records if record.scenario == "original"]
             original_exact = sum(record.exact_payload_match for record in originals)
@@ -331,6 +333,7 @@ class E007Experiment:
                 "passed": exact,
                 "validations": len(records),
                 "original_pass_rate": original_exact / len(originals),
+                **validation_summary,
                 "module_error_rate": module_error_rate(result.image, blueprint),
                 "mean_absolute_change": change["mean_absolute_change"],
                 "changed_pixel_ratio": change["changed_pixel_ratio"],
@@ -344,6 +347,14 @@ class E007Experiment:
                 "raw_strict_all": raw_exact == len(raw_records),
                 "raw_passed": raw_exact,
                 "raw_validations": len(raw_records),
+                "raw_decoder_pass_rates": raw_validation_summary["decoder_pass_rates"],
+                "raw_scenario_pass_rates": raw_validation_summary["scenario_pass_rates"],
+                "raw_worst_decoder_pass_rate": raw_validation_summary[
+                    "worst_decoder_pass_rate"
+                ],
+                "raw_worst_scenario_pass_rate": raw_validation_summary[
+                    "worst_scenario_pass_rate"
+                ],
                 "duration_seconds": duration,
                 "peak_gpu_memory_mib": result.peak_gpu_memory_allocated_mib,
                 "gradient_clip_rate": sum(step.gradient_clipped for step in result.steps)

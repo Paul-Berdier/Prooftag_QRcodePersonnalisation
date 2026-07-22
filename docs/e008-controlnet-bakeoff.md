@@ -134,3 +134,14 @@ Après E008, le ControlNet promu devient une constante de la campagne E007. E007
 les 28 paramètres pour ce modèle précis. Le modèle ControlNet ne doit pas être ajouté comme simple
 variable au surrogate : changer de poids implique de décharger et recharger plusieurs gigaoctets et
 constitue une population expérimentale distincte.
+
+## Résultats RTX du 21 juillet 2026
+
+Les 192 exécutions sont complètes et sans erreur. Aucun profil n'est strict sur les douze
+contextes : la décision est `NO_PROMOTION`. Nacholmo v2 à 1,60 est le meilleur résultat observé
+avec 66,0 % de validations exactes en moyenne et un pire contexte à 9/26. Monster v2 à 1,35 suit à
+48,1 %, Dion à 1,35 atteint 29,5 %, et Monster v1 reste à 0 %.
+
+Deux sorties isolées atteignent 26/26, mais aucune configuration ne généralise. L'analyse complète,
+les limites des métriques et le protocole E009 sont consignés dans
+[`e007-e008-results-2026-07-22.md`](e007-e008-results-2026-07-22.md).

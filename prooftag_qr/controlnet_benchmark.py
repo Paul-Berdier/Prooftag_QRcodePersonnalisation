@@ -53,6 +53,9 @@ def aggregate_controlnet_benchmark(
     for trial, items in grouped.items():
         complete = len(items) == expected_contexts
         pass_rates = [float(item["pass_rate"]) for item in items]
+        worst_decoder_rates = [
+            float(item.get("worst_decoder_pass_rate", item["pass_rate"])) for item in items
+        ]
         raw_pass_rates = [float(item["raw_pass_rate"]) for item in items]
         first = items[0]
         aggregates.append(
@@ -69,6 +72,8 @@ def aggregate_controlnet_benchmark(
                 and all(bool(item["raw_strict_all"]) for item in items),
                 "worst_pass_rate": min(pass_rates),
                 "mean_pass_rate": sum(pass_rates) / len(items),
+                "worst_decoder_pass_rate": min(worst_decoder_rates),
+                "mean_worst_decoder_pass_rate": sum(worst_decoder_rates) / len(items),
                 "raw_worst_pass_rate": min(raw_pass_rates),
                 "raw_mean_pass_rate": sum(raw_pass_rates) / len(items),
                 "mean_clip_aesthetic": sum(float(item["clip_aesthetic"]) for item in items)
@@ -112,6 +117,7 @@ def controlnet_rank_key(row: dict[str, Any]) -> tuple[Any, ...]:
     return (
         -int(bool(row["complete"])),
         -int(bool(row["all_strict"])),
+        -float(row.get("worst_decoder_pass_rate", row["worst_pass_rate"])),
         -float(row["worst_pass_rate"]),
         -float(row["mean_pass_rate"]),
         -float(row["mean_clip_aesthetic"]),

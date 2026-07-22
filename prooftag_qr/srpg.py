@@ -484,7 +484,12 @@ def run_srpg_controlnet_img2img(
     peak_gpu_memory_allocated_mib = (
         torch.cuda.max_memory_allocated(device) / (1024**2) if device.type == "cuda" else None
     )
-    qr_improvement_ok = final_error < initial_error * (1.0 - config.min_relative_module_improvement)
+    qr_improvement_ok = _qr_improvement_is_acceptable(
+        initial_error,
+        final_error,
+        target_error=config.target_module_error_rate,
+        min_relative_improvement=config.min_relative_module_improvement,
+    )
     preservation_ok = change["mean_absolute_change"] <= config.max_mean_absolute_change
     rejection_reason = None
     if not qr_improvement_ok:
@@ -503,3 +508,16 @@ def run_srpg_controlnet_img2img(
         accepted=qr_improvement_ok and preservation_ok,
         rejection_reason=rejection_reason,
     )
+
+
+def _qr_improvement_is_acceptable(
+    initial_error: float,
+    final_error: float,
+    *,
+    target_error: float,
+    min_relative_improvement: float,
+) -> bool:
+    """Accept an already-satisfied QR target only when refinement does not regress it."""
+    if initial_error <= target_error:
+        return final_error <= initial_error
+    return final_error < initial_error * (1.0 - min_relative_improvement)

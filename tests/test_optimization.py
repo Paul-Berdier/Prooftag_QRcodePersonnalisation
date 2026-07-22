@@ -19,7 +19,7 @@ from prooftag_qr.experiments import (
 from prooftag_qr.optimization import E007Experiment, factorial_contexts, query_gpu_processes
 from prooftag_qr.qr import generate_qr
 from prooftag_qr.quality_scoring import clip_score_from_similarity, project_embedding
-from prooftag_qr.srpg import SRPGConfig, _validate_config
+from prooftag_qr.srpg import SRPGConfig, _qr_improvement_is_acceptable, _validate_config
 
 
 class FakeSampler:
@@ -223,3 +223,24 @@ def test_srpg_rejects_invalid_robustness_and_eta():
         _validate_config(SRPGConfig(robust_blur_kernel=4))
     with pytest.raises(ValueError, match="downscale_factor"):
         _validate_config(SRPGConfig(robust_downscale_factor=0))
+
+
+def test_srpg_accepts_preserved_zero_error_without_allowing_regression():
+    assert _qr_improvement_is_acceptable(
+        0.0,
+        0.0,
+        target_error=0.0,
+        min_relative_improvement=0.1,
+    )
+    assert not _qr_improvement_is_acceptable(
+        0.0,
+        0.001,
+        target_error=0.0,
+        min_relative_improvement=0.1,
+    )
+    assert _qr_improvement_is_acceptable(
+        0.1,
+        0.08,
+        target_error=0.0,
+        min_relative_improvement=0.1,
+    )

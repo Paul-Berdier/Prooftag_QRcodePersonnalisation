@@ -487,3 +487,19 @@ Le protocole, les preuves disponibles et leurs limites sont consignés dans
 
 Une réussite automatique E008 produit seulement un `AUTOMATIC_CANDIDATE`. Elle autorise la suite
 E007 mais pas la production, qui exige encore les holdouts et la validation physique documentée.
+
+### Résultat E008 et décision de trajectoire
+
+- **Archive :** `e008-controlnet-bakeoff-v1.tar.gz` ;
+- **complétude :** 192/192 sorties, aucune erreur ;
+- **porte :** aucun profil strict sur les douze contextes, statut `NO_PROMOTION` ;
+- **meilleur observé :** Nacholmo v2 à 1,60, moyenne 66,0 %, pire cas 9/26 ;
+- **stricts isolés :** Monster v2/1,60/seed-9001 et Nacholmo v2/1,60/seed-2026 ;
+- **goulot :** OpenCV 85,9 % contre ZBar 46,2 % pour Nacholmo 1,60 ;
+- **décision :** optimisation E009 spécifique à Nacholmo, Monster v2 conservé comme challenger,
+  aucun changement de production.
+
+E007/Dion est archivé comme baseline partielle après 72 recherches et 80 calibrations, toutes
+non-strictes. Les 16 calibrations manquantes et les holdouts ne justifient pas de temps GPU avant
+la nouvelle population Nacholmo. Rapport :
+[`docs/e007-e008-results-2026-07-22.md`](e007-e008-results-2026-07-22.md).

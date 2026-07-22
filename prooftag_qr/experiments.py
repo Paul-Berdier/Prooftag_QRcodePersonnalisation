@@ -224,6 +224,7 @@ def trial_rank_key(row: dict[str, Any]) -> tuple[Any, ...]:
     return (
         row.get("status") != "ok",
         -int(bool(row.get("strict_all"))),
+        -float(row.get("worst_decoder_pass_rate", row.get("pass_rate", 0.0))),
         -float(row.get("pass_rate", 0.0)),
         -float(row.get("original_pass_rate", 0.0)),
         -float(row.get("clip_aesthetic", float("-inf"))),
@@ -244,6 +245,9 @@ def aggregate_confirmation(
     aggregates = []
     for trial, items in grouped.items():
         pass_rates = [float(item["pass_rate"]) for item in items]
+        worst_decoder_rates = [
+            float(item.get("worst_decoder_pass_rate", item["pass_rate"])) for item in items
+        ]
         complete = expected_cases is None or len(items) == expected_cases
         aggregates.append(
             {
@@ -253,6 +257,9 @@ def aggregate_confirmation(
                 "all_strict": complete and all(bool(item["strict_all"]) for item in items),
                 "worst_pass_rate": min(pass_rates),
                 "mean_pass_rate": sum(pass_rates) / len(pass_rates),
+                "worst_decoder_pass_rate": min(worst_decoder_rates),
+                "mean_worst_decoder_pass_rate": sum(worst_decoder_rates)
+                / len(worst_decoder_rates),
                 "mean_module_error_rate": sum(float(item["module_error_rate"]) for item in items)
                 / len(items),
                 "mean_absolute_change": sum(float(item["mean_absolute_change"]) for item in items)
@@ -270,6 +277,7 @@ def aggregate_confirmation(
         key=lambda row: (
             -int(row["complete"]),
             -int(row["all_strict"]),
+            -row["worst_decoder_pass_rate"],
             -row["worst_pass_rate"],
             -row["mean_pass_rate"],
             -row["mean_clip_aesthetic"],
