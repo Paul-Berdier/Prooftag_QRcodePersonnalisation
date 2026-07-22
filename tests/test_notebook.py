@@ -47,12 +47,16 @@ def test_remote_gpu_notebook_has_an_isolated_kubernetes_runtime():
     launcher = Path("scripts/notebook-remote.ps1").read_text(encoding="utf-8")
     server = Path("scripts/notebook-server.sh").read_text(encoding="utf-8")
 
-    assert "FROM ${BASE_IMAGE}" in dockerfile
+    assert "FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime" in dockerfile
+    assert "DIFFQRCODER_COMMIT=e24ea73ee2e13c7e6e87cb422e8b11784e70ae00" in dockerfile
+    assert "git clone https://github.com/jwliao1209/DiffQRCoder.git" in dockerfile
+    assert "diffusers==0.32.2" in dockerfile
     assert "02_generate_live_on_gpu.ipynb" in launcher
     assert "03_srpg_parameter_search.ipynb" in launcher
     assert "04_e007_contextual_optimizer.ipynb" in launcher
     assert "05_controlnet_model_bakeoff.ipynb" in launcher
     assert "06_nacholmo_generate_live.ipynb" in launcher
+    assert "07_diffqrcoder_official_live.ipynb" in launcher
     assert "[ValidateSet(" in launcher
     assert "-WindowStyle Normal" in launcher
     assert '"-N"' in launcher
@@ -148,3 +152,31 @@ def test_nacholmo_live_notebook_separates_artistic_text2img_from_srpg_img2img():
     assert "CLIPQualityScorer" in source
     assert "06_DELIVERY.png" in source
     assert "06_BEST_OBSERVED_NOT_DELIVERABLE.png" in source
+
+
+def test_diffqrcoder_official_notebook_is_paired_strict_and_auditable():
+    source = Path("notebooks/07_diffqrcoder_official_live.ipynb").read_text(encoding="utf-8")
+
+    assert "e24ea73ee2e13c7e6e87cb422e8b11784e70ae00" in source
+    assert "DiffQRCoderPipeline" in source
+    assert "PerceptualLoss.forward = differentiable_perceptual_forward" in source
+    assert "torch.stack(losses).mean()" in source
+    assert "upstream-patches.json" in source
+    assert "Cetus-Mix_Whalefall" in source
+    assert "monster-labs/control_v1p_sd15_qrcode_monster" in source
+    assert "CONTROLNET_SUBFOLDER = 'v2'" in source
+    assert "qr.make(fit=False)" in source
+    assert "QR_VERSION = 3" in source
+    assert "QR_MASK_PATTERN = 4" in source
+    assert "QR_MODULE_SIZE = 20" in source
+    assert "STEPS = 40" in source
+    assert "stage2_rng_state" in source
+    assert "pipe._run_stage1" in source
+    assert "pipe._run_stage2" in source
+    assert "srpg_plus_srmpgd" in source
+    assert "callback_on_step_end=callback" in source
+    assert "validator.validate" in source
+    assert "CLIPQualityScorer" in source
+    assert "delivery_status = 'DELIVERABLE' if selected['strict_all']" in source
+    assert "physical-validation.csv" in source
+    assert "comparison-final.png" in source

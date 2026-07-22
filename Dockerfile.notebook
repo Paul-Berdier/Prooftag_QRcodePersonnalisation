@@ -1,9 +1,38 @@
-ARG BASE_IMAGE=prooftag-qr:dev
-FROM ${BASE_IMAGE}
+FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
+
+ARG DIFFQRCODER_COMMIT=e24ea73ee2e13c7e6e87cb422e8b11784e70ae00
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    HF_HOME=/cache/huggingface \
+    TORCH_HOME=/cache/torch
 
 USER root
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl git libgl1 libglib2.0-0 libzbar0 \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
-RUN pip install --no-cache-dir '.[notebook,optimizer]'
+COPY pyproject.toml README.md ./
+COPY prooftag_qr ./prooftag_qr
+RUN pip install --upgrade pip \
+    && pip install '.[notebook,optimizer]' \
+    && pip install \
+        accelerate==1.3.0 \
+        diffusers==0.32.2 \
+        tqdm==4.67.1 \
+        transformers==4.48.3 \
+        torchvision==0.21.0
+
+RUN git clone https://github.com/jwliao1209/DiffQRCoder.git /opt/DiffQRCoder \
+    && git -C /opt/DiffQRCoder checkout "$DIFFQRCODER_COMMIT" \
+    && test "$(git -C /opt/DiffQRCoder rev-parse HEAD)" = "$DIFFQRCODER_COMMIT" \
+    && rm -rf /opt/DiffQRCoder/.git \
+    && python -c "import sys; sys.path.insert(0, '/opt/DiffQRCoder'); from diffqrcoder import DiffQRCoderPipeline; import torch, torchvision, diffusers; print('DiffQRCoder stack OK:', torch.__version__, torchvision.__version__, diffusers.__version__)"
+
+RUN useradd --create-home --uid 10001 app \
+    && mkdir -p /data /cache /workspace /cache/torch \
+    && chown -R app:app /app /data /cache /workspace
 
 WORKDIR /workspace
 COPY notebooks /workspace/notebooks

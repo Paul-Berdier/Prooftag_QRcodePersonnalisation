@@ -7,7 +7,8 @@ param(
         "03_srpg_parameter_search.ipynb",
         "04_e007_contextual_optimizer.ipynb",
         "05_controlnet_model_bakeoff.ipynb",
-        "06_nacholmo_generate_live.ipynb"
+        "06_nacholmo_generate_live.ipynb",
+        "07_diffqrcoder_official_live.ipynb"
     )]
     [string]$Notebook = "02_generate_live_on_gpu.ipynb",
     [switch]$Stop

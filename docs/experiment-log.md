@@ -523,3 +523,19 @@ la nouvelle population Nacholmo. Rapport :
   paramètres et sélection sont inscrits dans l'archive et `manifest.json`.
 - **État :** implémenté, validation RTX et test téléphone requis ; aucun taux de réussite n'est
   annoncé avant cette nouvelle campagne.
+
+## E010 — retour contrôlé à DiffQRCoder officiel
+
+- **Date :** 2026-07-22
+- **Déclencheur :** les sorties Nacholmo restent visuellement quadrillées et la pipeline historique
+  Prooftag est une approximation img2img, pas l'algorithme à deux stages du dépôt DiffQRCoder.
+- **Décision :** figer le dépôt officiel au commit `e24ea73`, isoler sa pile publiée dans l'image
+  notebook et en faire la nouvelle baseline observable.
+- **Comparaison :** Stage 1, Stage 2 SRPG et Stage 2 SRPG + SR-MPGD, avec état aléatoire Stage 2
+  apparié, aperçu tous les cinq pas et validation stricte multi-décodeur/multi-dégradation.
+- **Porte :** aucun fichier `DELIVERABLE` sans réussite exacte sur tous les tests ; CLIP-aesthetic
+  et CLIPScore interviennent uniquement après la scannabilité.
+- **Correctif amont audité :** remplacement de l'agrégation `torch.tensor` par `torch.stack` dans
+  `PerceptualLoss` afin de conserver le graphe et le device, sans changer la formule de loss.
+- **État :** notebook et protocole implémentés ; exécution RTX requise avant toute revendication de
+  taux. Voir [`docs/e010-diffqrcoder-official-reference.md`](e010-diffqrcoder-official-reference.md).

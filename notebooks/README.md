@@ -1,6 +1,6 @@
 # Notebooks Prooftag QR
 
-Les six notebooks n'ont pas le même rôle :
+Les sept notebooks n'ont pas le même rôle :
 
 - `01_srpg_step_by_step.ipynb` analyse une archive de benchmark déjà produite. Il ne génère rien.
 - `02_generate_live_on_gpu.ipynb` exécute réellement le modèle sur la RTX du serveur et montre
@@ -13,6 +13,36 @@ Les six notebooks n'ont pas le même rôle :
   de relancer l'optimisation E007.
 - `06_nacholmo_generate_live.ipynb` génère en direct avec Nacholmo v2 en text2img, compare trois
   forces ControlNet, puis charge séparément la pipeline img2img nécessaire au SRPG.
+- `07_diffqrcoder_official_live.ipynb` exécute le code public DiffQRCoder figé au commit
+  `e24ea73`, montre les deux stages pas à pas et compare Stage 1, SRPG et SRPG + SR-MPGD.
+
+## Baseline DiffQRCoder officielle (notebook recommandé)
+
+Depuis PowerShell :
+
+```powershell
+.\scripts\notebook-remote.ps1 -Notebook 07_diffqrcoder_official_live.ipynb
+```
+
+Le notebook 07 est maintenant la référence scientifique. L'image notebook possède sa propre pile
+PyTorch 2.6 / Diffusers 0.32.2 et embarque le dépôt officiel au commit complet
+`e24ea73ee2e13c7e6e87cb422e8b11784e70ae00`. Il ne passe pas par
+`run_srpg_controlnet_img2img` : il appelle directement `_run_stage1` puis `_run_stage2` de
+`DiffQRCoderPipeline`.
+
+La configuration initiale reproduit le cadre publié : Cetus-Mix Whalefall, QR Code Monster v2,
+QR version 3/M/masque 4, modules 20 px, 40 pas par stage, ControlNet 1,35, SRG 500 et PG 3. Les
+variantes SRPG et SRPG + SR-MPGD réutilisent exactement le même état aléatoire du Stage 2. Les
+aperçus tous les cinq pas, les validations, CLIP-aesthetic, CLIPScore, le CSV comparatif et le
+manifest complet sont conservés dans `/data/notebook-runs`.
+
+Le payload par défaut est le témoin court du projet de recherche. Pour Prooftag, le remplacer par
+une URL courte. Si elle ne tient pas dans un QR version 3/M, le notebook s'arrête explicitement :
+changer silencieusement de version rendrait les taux incomparables. Détails et limites :
+[`../docs/e010-diffqrcoder-official-reference.md`](../docs/e010-diffqrcoder-official-reference.md).
+
+Le notebook 06 reste une expérience Nacholmo documentée, mais n'est plus la trajectoire
+recommandée après les sorties visuellement quadrillées observées.
 
 ## Génération live Nacholmo corrigée après E008
 
