@@ -1,6 +1,6 @@
 # Notebooks Prooftag QR
 
-Les cinq notebooks n'ont pas le même rôle :
+Les six notebooks n'ont pas le même rôle :
 
 - `01_srpg_step_by_step.ipynb` analyse une archive de benchmark déjà produite. Il ne génère rien.
 - `02_generate_live_on_gpu.ipynb` exécute réellement le modèle sur la RTX du serveur et montre
@@ -11,6 +11,22 @@ Les cinq notebooks n'ont pas le même rôle :
   mesure CLIP-aesthetic/CLIPScore et entraîne le mini-modèle de recommandation.
 - `05_controlnet_model_bakeoff.ipynb` choisit le ControlNet SD1.5 sur une comparaison appariée avant
   de relancer l'optimisation E007.
+- `06_nacholmo_generate_live.ipynb` génère en direct avec Nacholmo v2 et le meilleur profil observé
+  dans E008, avec détails OpenCV/ZBar, scores CLIP et porte de livraison stricte.
+
+## Génération live Nacholmo issue d'E008
+
+Depuis PowerShell :
+
+```powershell
+.\scripts\notebook-remote.ps1 -Notebook 06_nacholmo_generate_live.ipynb
+```
+
+Le profil par défaut reproduit le meilleur point E008 : Nacholmo v2, Stage-1 à 16 pas,
+ControlNet 1,60, CFG 7,5, puis SRPG à 100 pas et ControlNet 1,60. La seed 2026 est le témoin qui a
+obtenu 26/26 dans E008. Modifier `PAYLOAD`, `PROMPT` et `SEED` dans la première cellule permet de
+tester une demande réelle. Le notebook n'écrit `06_DELIVERY.png` que si une candidate passe les
+26 validations ; sinon il produit explicitement `06_BEST_OBSERVED_NOT_DELIVERABLE.png`.
 
 ## Génération réelle depuis le PC Windows
 

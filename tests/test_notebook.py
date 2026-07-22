@@ -52,6 +52,7 @@ def test_remote_gpu_notebook_has_an_isolated_kubernetes_runtime():
     assert "03_srpg_parameter_search.ipynb" in launcher
     assert "04_e007_contextual_optimizer.ipynb" in launcher
     assert "05_controlnet_model_bakeoff.ipynb" in launcher
+    assert "06_nacholmo_generate_live.ipynb" in launcher
     assert "[ValidateSet(" in launcher
     assert "-WindowStyle Normal" in launcher
     assert '"-N"' in launcher
@@ -123,3 +124,18 @@ def test_e008_notebook_compares_controlnets_before_promotion():
     assert "model-load-errors.json" in source
     assert "physical-validation-template.csv" in source
     assert "CONTROL_SCALES = (0.90, 1.10, 1.35, 1.60)" in source
+
+
+def test_nacholmo_live_notebook_uses_the_e008_winner_and_strict_gate():
+    source = Path("notebooks/06_nacholmo_generate_live.ipynb").read_text(encoding="utf-8")
+
+    assert "Nacholmo/controlnet-qr-pattern-v2" in source
+    assert "BASE_CONTROLNET_SCALE = 1.60" in source
+    assert "SRPG_CONTROLNET_SCALE = 1.60" in source
+    assert "SRPG_STEPS = 100" in source
+    assert "run_srpg_controlnet_img2img" in source
+    assert "preview_callback=show_srpg_step" in source
+    assert "summarize_validation_records" in source
+    assert "CLIPQualityScorer" in source
+    assert "06_DELIVERY.png" in source
+    assert "06_BEST_OBSERVED_NOT_DELIVERABLE.png" in source
