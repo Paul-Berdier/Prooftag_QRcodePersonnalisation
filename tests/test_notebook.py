@@ -57,6 +57,7 @@ def test_remote_gpu_notebook_has_an_isolated_kubernetes_runtime():
     assert "05_controlnet_model_bakeoff.ipynb" in launcher
     assert "06_nacholmo_generate_live.ipynb" in launcher
     assert "07_diffqrcoder_official_live.ipynb" in launcher
+    assert "08_diffqrcoder_vs_qrbtf_four_prompts.ipynb" in launcher
     assert "[ValidateSet(" in launcher
     assert "-WindowStyle Normal" in launcher
     assert '"-N"' in launcher
@@ -192,3 +193,38 @@ def test_diffqrcoder_official_notebook_is_paired_strict_and_auditable():
     assert "delivery_status = 'DELIVERABLE' if selected['strict_all']" in source
     assert "physical-validation.csv" in source
     assert "comparison-final.png" in source
+    assert "kubectl cp -n qr-core" in source
+    assert "${{POD}}" in source
+    assert "scp paul@pcIA:~/" in source
+
+
+def test_e011_compares_only_diffqrcoder_and_qrbtf_public_on_four_prompts():
+    source = Path(
+        "notebooks/08_diffqrcoder_vs_qrbtf_four_prompts.ipynb"
+    ).read_text(encoding="utf-8")
+
+    assert "len(PROMPTS) * 4" in source
+    assert "p1_simple" in source
+    assert "p2_medium" in source
+    assert "p3_detailed" in source
+    assert "p4_complex" in source
+    assert "e24ea73ee2e13c7e6e87cb422e8b11784e70ae00" in source
+    assert "Cetus-Mix_Whalefall" in source
+    assert "monster-labs/control_v1p_sd15_qrcode_monster" in source
+    assert "latentcat/control_v1p_sd15_brightness" in source
+    assert "QRBTF public reproduction, not proprietary QRBTF" in source
+    assert "paper_stage2_latents" in source
+    assert "qart_proxy" in source
+    assert "apply_srmpgd" in source
+    assert "{step:03d}.jpg" in source
+    assert "make_gif" in source
+    assert "software_ssr" in source
+    assert "original_ssr" in source
+    assert "clip_aesthetic" in source
+    assert "clip_score" in source
+    assert "physical-ssr.csv" in source
+    assert "comparison-4x4.png" in source
+    assert "kubectl cp -n qr-core" in source
+    assert "RESUME_RUN_NAME" in source
+    assert "def completed(" in source
+    assert "def reset_incomplete(" in source

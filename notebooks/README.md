@@ -1,6 +1,6 @@
 # Notebooks Prooftag QR
 
-Les sept notebooks n'ont pas le même rôle :
+Les huit notebooks n'ont pas le même rôle :
 
 - `01_srpg_step_by_step.ipynb` analyse une archive de benchmark déjà produite. Il ne génère rien.
 - `02_generate_live_on_gpu.ipynb` exécute réellement le modèle sur la RTX du serveur et montre
@@ -15,6 +15,26 @@ Les sept notebooks n'ont pas le même rôle :
   forces ControlNet, puis charge séparément la pipeline img2img nécessaire au SRPG.
 - `07_diffqrcoder_official_live.ipynb` exécute le code public DiffQRCoder figé au commit
   `e24ea73`, montre les deux stages pas à pas et compare Stage 1, SRPG et SRPG + SR-MPGD.
+- `08_diffqrcoder_vs_qrbtf_four_prompts.ipynb` est le comparatif contrôlé actuel : quatre prompts,
+  un QR partagé, DiffQRCoder-paper et reproduction publique QRBTF, puis SR-MPGD sur les deux.
+
+## Comparatif E011 recommandé
+
+Depuis PowerShell :
+
+```powershell
+.\scripts\notebook-remote.ps1 -Notebook 08_diffqrcoder_vs_qrbtf_four_prompts.ipynb
+```
+
+Le notebook sauvegarde chacun des 40 pas de diffusion, produit un GIF par phase et mesure les
+16 sorties attendues : quatre prompts × deux méthodes × sans/avec SR-MPGD. Il rapporte le SSR
+logiciel exact, le SSR de l'image originale, la MER, CLIP-aesthetic, CLIPScore et les temps.
+
+La branche QRBTF est explicitement une reproduction publique locale, avec QR Code Monster v2 et
+Brightness ControlNet : le backend privé de QRBTF n'est pas publié. De même, le dépôt public
+DiffQRCoder ne fournit pas le générateur Reed–Solomon QArt du papier ; le notebook conserve la
+matrice exacte dans une cible visuelle documentée. Ces limites et le protocole complet sont dans
+[`../docs/e011-diffqrcoder-vs-qrbtf.md`](../docs/e011-diffqrcoder-vs-qrbtf.md).
 
 ## Baseline DiffQRCoder officielle (notebook recommandé)
 

@@ -98,7 +98,9 @@ cd "C:\Users\p.berdier\Documents\Paul Berdier\codage\Prooftag_QRcodePersonnalisa
 ```
 
 Dans Jupyter, lancer `Run > Run All Cells`. À la fin, récupérer l'archive avec la commande `scp`
-imprimée par la dernière cellule, puis restaurer le GPU :
+imprimée par la dernière cellule. Le chemin `/data` appartient au conteneur : la cellule imprime
+d'abord un `kubectl cp` à exécuter sur le serveur Linux, puis le `scp` à exécuter depuis Windows.
+Enfin, restaurer le GPU :
 
 ```powershell
 .\scripts\notebook-remote.ps1 -Stop

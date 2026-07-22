@@ -569,3 +569,38 @@ la nouvelle population Nacholmo. Rapport :
   donc conservés, tandis que le décodage final devient détaché comme dans l'appel public officiel.
 - **Résultat scientifique :** aucun fichier final n'ayant été produit, cette tentative reste un
   contrôle d'intégration, pas un résultat de modèle.
+
+### Export de l'archive E010 — confusion de chemin
+
+- **Symptôme :** `results/notebook-runs/...` est introuvable depuis le kernel.
+- **Cause :** le kernel travaille dans `/workspace/notebooks`, tandis que les expériences sont
+  écrites dans le chemin absolu `/data/notebook-runs`. De plus, `/data` appartient au conteneur et
+  ne peut pas être récupéré directement par `scp` depuis l'hôte.
+- **Correction :** l'archivage utilise `RUN_DIR` absolu ; les instructions finales font un
+  `kubectl cp` du pod vers le home Linux, puis un `scp` du serveur vers Windows.
+
+### Résultat E010 — rejet de la baseline visuelle
+
+- **Archive :** `20260722T114948Z-e010-diffqrcoder-official-v1-seed1-Copy1.tar.gz`.
+- **Lecture :** Stage 1, SRPG et SRPG + SR-MPGD sont tous à 0/26.
+- **Évolution :** la MER baisse de 29,36 % à 18,19 %, puis 16,51 %, mais CLIP-aesthetic chute de
+  7,19 à 3,88/3,98 et CLIPScore de 0,844 à 0,567/0,599.
+- **Conclusion :** le guidage public améliore la structure moyenne sans restaurer la lecture et
+  dégrade fortement l'image. Ces sorties ne constituent pas une baseline acceptable.
+- **Écart identifié :** le Stage 2 du dépôt public repart d'un bruit aléatoire alors que le papier
+  décrit l'encodage bruité du Stage 1 ; QArt n'est pas fourni dans le dépôt.
+
+## E011 — DiffQRCoder contre reproduction publique QRBTF
+
+- **Date :** 2026-07-22
+- **Périmètre :** deux familles seulement, quatre prompts de complexité croissante, même payload,
+  même matrice et seeds appariées.
+- **Sorties :** DiffQRCoder-paper et QRBTF-public-reproduction, chacune sans puis avec le même
+  SR-MPGD, soit 16 évaluations.
+- **Observabilité :** chaque pas de diffusion et chaque itération SR-MPGD, GIF, temps par phase,
+  SSR exact, SSR original, MER, CLIP-aesthetic, CLIPScore, manifest et validation physique vide.
+- **Transparence :** le backend QRBTF est fermé ; la branche publique utilise Monster v2 et
+  Brightness ControlNet. Le QArt Reed–Solomon exact manque aussi côté DiffQRCoder ; une cible
+  matricielle dérivée du Stage 1 est exportée et documentée.
+- **État :** notebook et protocole implémentés ; les taux E011 restent à mesurer sur la RTX.
+  Voir [`docs/e011-diffqrcoder-vs-qrbtf.md`](e011-diffqrcoder-vs-qrbtf.md).
