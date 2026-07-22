@@ -458,6 +458,11 @@ Avant les holdouts, les huit meilleurs essais sont maintenant recalculés sur le
 factoriels. Cette promotion à 96 exécutions empêche qu'un résultat chanceux sur un prompt unique
 devienne la configuration globale du conseiller.
 
+Un `KeyboardInterrupt` observé le 21 juillet a révélé que le compteur de reprise considérait aussi
+les essais `FAIL` comme terminés. La reprise compte désormais uniquement les essais Optuna
+`COMPLETE` : une interruption reste auditée mais une exécution de remplacement est obligatoire afin
+d'obtenir réellement 72 résultats exploitables.
+
 ## E008 — bake-off des ControlNet QR
 
 - **Date :** 2026-07-21

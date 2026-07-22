@@ -97,6 +97,9 @@ def test_e007_notebook_is_scannability_first_and_context_adaptive():
     assert "select_delivery_candidate" in source
     assert "expected_cases=len(holdouts)" in source
     assert "aucune image 26/26" in source
+    assert "TrialState.COMPLETE" in source
+    assert "essais complets" in source
+    assert "state.is_finished()" not in source
 
 
 def test_e008_notebook_compares_controlnets_before_promotion():
