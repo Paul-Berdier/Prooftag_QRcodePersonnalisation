@@ -463,6 +463,10 @@ les essais `FAIL` comme terminés. La reprise compte désormais uniquement les e
 `COMPLETE` : une interruption reste auditée mais une exécution de remplacement est obligatoire afin
 d'obtenir réellement 72 résultats exploitables.
 
+Le calcul d'importance restait ensuite opaque pendant la fANOVA Optuna par défaut (64 arbres,
+profondeur maximale 64). Il est désormais déterministe et borné à 32 arbres de profondeur 16, avec
+messages de début/fin et contrôle explicite de la présence des résultats `search/ok`.
+
 ## E008 — bake-off des ControlNet QR
 
 - **Date :** 2026-07-21

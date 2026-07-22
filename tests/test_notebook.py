@@ -100,6 +100,8 @@ def test_e007_notebook_is_scannability_first_and_context_adaptive():
     assert "TrialState.COMPLETE" in source
     assert "essais complets" in source
     assert "state.is_finished()" not in source
+    assert "FanovaImportanceEvaluator(n_trees=32, max_depth=16, seed=20260722)" in source
+    assert "Calcul fANOVA borné en cours" in source
 
 
 def test_e008_notebook_compares_controlnets_before_promotion():
