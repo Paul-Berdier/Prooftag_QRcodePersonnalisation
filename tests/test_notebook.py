@@ -102,6 +102,11 @@ def test_e007_notebook_is_scannability_first_and_context_adaptive():
     assert "state.is_finished()" not in source
     assert "FanovaImportanceEvaluator(n_trees=32, max_depth=16, seed=20260722)" in source
     assert "Calcul fANOVA borné en cours" in source
+    assert "Calibration :" in source
+    assert "[calibration {position}/{calibration_total}] START" in source
+    assert "Holdouts :" in source
+    assert "[holdout {position}/{holdout_total}] START" in source
+    assert "Calibration incomplète" in source
 
 
 def test_e008_notebook_compares_controlnets_before_promotion():

@@ -467,6 +467,11 @@ Le calcul d'importance restait ensuite opaque pendant la fANOVA Optuna par défa
 profondeur maximale 64). Il est désormais déterministe et borné à 32 arbres de profondeur 16, avec
 messages de début/fin et contrôle explicite de la présence des résultats `search/ok`.
 
+La calibration et les holdouts ne produisaient auparavant aucune sortie pendant leurs longues
+boucles GPU. Chaque exécution affiche désormais `START`, statut, scan, durée et progression globale.
+Les lignes étrangères aux configurations actuellement promues sont filtrées et une campagne
+incomplète s'arrête explicitement avant la heatmap ou l'entraînement de l'advisor.
+
 ## E008 — bake-off des ControlNet QR
 
 - **Date :** 2026-07-21
