@@ -9,7 +9,8 @@ param(
         "05_controlnet_model_bakeoff.ipynb",
         "06_nacholmo_generate_live.ipynb",
         "07_diffqrcoder_official_live.ipynb",
-        "08_diffqrcoder_vs_qrbtf_four_prompts.ipynb"
+        "08_diffqrcoder_vs_qrbtf_four_prompts.ipynb",
+        "09_diffqrcoder_faithful_srmpgd.ipynb"
     )]
     [string]$Notebook = "02_generate_live_on_gpu.ipynb",
     [switch]$Stop

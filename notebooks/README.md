@@ -1,6 +1,6 @@
 # Notebooks Prooftag QR
 
-Les huit notebooks n'ont pas le même rôle :
+Les neuf notebooks n'ont pas le même rôle :
 
 - `01_srpg_step_by_step.ipynb` analyse une archive de benchmark déjà produite. Il ne génère rien.
 - `02_generate_live_on_gpu.ipynb` exécute réellement le modèle sur la RTX du serveur et montre
@@ -17,8 +17,27 @@ Les huit notebooks n'ont pas le même rôle :
   `e24ea73`, montre les deux stages pas à pas et compare Stage 1, SRPG et SRPG + SR-MPGD.
 - `08_diffqrcoder_vs_qrbtf_four_prompts.ipynb` est le comparatif contrôlé actuel : quatre prompts,
   un QR partagé, DiffQRCoder-paper et reproduction publique QRBTF, puis SR-MPGD sur les deux.
+- `09_diffqrcoder_faithful_srmpgd.ipynb` est la référence corrective E012 : DiffQRCoder sur quatre
+  prompts, Stage 2 à 40 puis 100 pas, latent final exact et SR-MPGD conforme aux équations 12-14.
 
-## Comparatif E011 recommandé
+## E012 recommandé : SR-MPGD corrigé et auditable
+
+```powershell
+.\scripts\notebook-remote.ps1 -Notebook 09_diffqrcoder_faithful_srmpgd.ipynb
+```
+
+E012 ne réencode jamais un PNG pour lancer SR-MPGD. Il sauvegarde le latent propre produit par la
+Stage 2, puis minimise `SRL + 0,01 × LPIPS` avec `gamma=1000` contre le QR binaire original. La SRL
+est celle du dépôt DiffQRCoder figé ; chaque itération est enregistrée et validée. Le nombre
+d'itérations n'étant pas publié dans l'article, le notebook teste les états 0 à 20 et s'arrête au
+premier 26/26.
+
+Les 16 résultats sont quatre prompts × deux budgets Stage 2 (40/100) × base/SR-MPGD. Toutes les
+frames, GIF, latents safetensors, durées, SSR logiciel, MER, CLIP-aesthetic, CLIPScore, manifest,
+rapport et grille de validation physique sont exportés. Le protocole complet et ses limites sont
+dans [`../docs/e012-faithful-srmpgd.md`](../docs/e012-faithful-srmpgd.md).
+
+## Comparatif E011 historique
 
 Depuis PowerShell :
 
@@ -35,6 +54,10 @@ Brightness ControlNet : le backend privé de QRBTF n'est pas publié. De même, 
 DiffQRCoder ne fournit pas le générateur Reed–Solomon QArt du papier ; le notebook conserve la
 matrice exacte dans une cible visuelle documentée. Ces limites et le protocole complet sont dans
 [`../docs/e011-diffqrcoder-vs-qrbtf.md`](../docs/e011-diffqrcoder-vs-qrbtf.md).
+
+Attention : les variantes appelées SR-MPGD dans E011 réencodaient l'image et réutilisaient la loss
+SRPG pondérée avec un LR 0,1. Elles ne testent pas les équations 12-14 du papier. Leurs résultats
+restent utiles comme constat d'échec de cette ancienne correction, pas comme mesure de SR-MPGD.
 
 ## Baseline DiffQRCoder officielle (notebook recommandé)
 

@@ -604,3 +604,46 @@ la nouvelle population Nacholmo. Rapport :
   matricielle dérivée du Stage 1 est exportée et documentée.
 - **État :** notebook et protocole implémentés ; les taux E011 restent à mesurer sur la RTX.
   Voir [`docs/e011-diffqrcoder-vs-qrbtf.md`](e011-diffqrcoder-vs-qrbtf.md).
+
+### Résultats E011 et diagnostic post-hoc
+
+- **Archive :** `20260722T124932Z-e011-diffqrcoder-vs-qrbtf-public-v1.tar.gz`, 16/16 sorties,
+  640 frames, 20 GIF et 16 validations complètes.
+- **Porte originale :** 0/16 image lisible sans transformation ; aucune promotion.
+- **Esthétique/vitesse :** QRBTF base gagne avec 5,878 CLIP-aesthetic, 0,787 CLIPScore et 18,03 s,
+  contre 4,928, 0,719 et 76,53 s pour DiffQRCoder.
+- **SR-MPGD :** rejeté dans sa configuration commune 20 × 0,1 ; baisse esthétique d'environ 52 %,
+  aucune lecture originale et artefacts dès la première mise à jour.
+- **Cause principale :** quiet zone envahie et motifs fonctionnels trop texturés ; la MER moyenne
+  masque ce défaut. Trois bases QRBTF n'ont qu'un module de données faux, mais 125 à 433 erreurs de
+  quiet zone.
+- **Diagnostic hors protocole :** une projection fonctionnelle tonale rend 7/8 bases lisibles par
+  au moins un décodeur original ; meilleur cas 21/26 et 2/2 décodeurs.
+- **Décision :** E012 doit intégrer la protection fonctionnelle dans la diffusion avant toute
+  nouvelle recherche de modèle ou entraînement. Rapport :
+  [`docs/e011-results-2026-07-22.md`](e011-results-2026-07-22.md).
+
+Cette dernière numérotation est remplacée par l'audit ci-dessous : E012 mesure d'abord le vrai
+SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deux corrections.
+
+## E012 - correction fidèle de SR-MPGD
+
+- **Date :** 2026-07-22.
+- **Déclencheur :** l'audit du notebook E011 montre que sa variante `SR-MPGD` réencode un PNG,
+  vise le proxy QArt et réutilise la loss SRPG 500/3 avec LR 0,1. Elle ne correspond donc pas aux
+  équations 12-14 et son échec ne permet pas de rejeter le vrai SR-MPGD.
+- **Correction :** conserver le latent propre exact de la Stage 2, utiliser le QR binaire original,
+  la SRL du dépôt public, un vrai LPIPS VGG, `gamma=1000` et `lambda=0,01`.
+- **Itérations :** le papier ne donne pas leur nombre. Les états 0 à 20 sont persistés et validés,
+  avec arrêt au premier 26/26 et sélection lexicographique si la porte n'est jamais atteinte.
+- **Comparaison :** quatre prompts appariés, Stage 2 à 40 et 100 pas, chaque base sans puis avec
+  SR-MPGD ; 16 résultats attendus.
+- **Traçabilité :** latents safetensors, toutes les frames/GIF, validations, MER, CLIP-aesthetic,
+  CLIPScore, temps, hash amont/latents, manifest, rapport et grille physique.
+- **Limite maintenue :** QArt Reed-Solomon n'est pas publié ; le proxy matriciel reste déclaré et
+  interdit l'étiquette de reproduction bit-à-bit de l'ensemble DiffQRCoder.
+- **Modèle :** SD1.5/Cetus + QR Monster v2 reste figé pour isoler la correction. SDXL exige une
+  autre pipeline et un ControlNet QR compatible ; il sera comparé séparément en E013b, après la
+  baseline et l'expérience fonctionnelle E013a.
+- **État :** implémenté et testé statiquement ; campagne RTX requise, aucun taux inventé. Voir
+  [`docs/e012-faithful-srmpgd.md`](e012-faithful-srmpgd.md).

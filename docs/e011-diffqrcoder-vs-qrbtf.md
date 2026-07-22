@@ -1,5 +1,14 @@
 # E011 — comparaison contrôlée DiffQRCoder / QRBTF public
 
+Résultats exécutés et décision :
+[`e011-results-2026-07-22.md`](e011-results-2026-07-22.md).
+
+> **Erratum SR-MPGD (2026-07-22).** Les variantes E011 nommées `SR-MPGD` ne reproduisent pas
+> les équations 12-14 : elles repartent d'un latent obtenu par réencodage de l'image, visent le
+> proxy QArt et réutilisent la loss SRPG pondérée avec un LR 0,1. Elles mesurent uniquement cet
+> ancien post-traitement. La reproduction corrigée se trouve dans
+> [`e012-faithful-srmpgd.md`](e012-faithful-srmpgd.md) et le notebook 09.
+
 ## Objectif
 
 E011 répond à une seule question : à QR, prompt et seed identiques, quel workflow offre le

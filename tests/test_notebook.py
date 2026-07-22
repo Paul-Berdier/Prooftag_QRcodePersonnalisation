@@ -58,6 +58,9 @@ def test_remote_gpu_notebook_has_an_isolated_kubernetes_runtime():
     assert "06_nacholmo_generate_live.ipynb" in launcher
     assert "07_diffqrcoder_official_live.ipynb" in launcher
     assert "08_diffqrcoder_vs_qrbtf_four_prompts.ipynb" in launcher
+    assert "09_diffqrcoder_faithful_srmpgd.ipynb" in launcher
+    assert "lpips==0.1.4" in dockerfile
+    assert "LPIPS VGG cache OK" in dockerfile
     assert "[ValidateSet(" in launcher
     assert "-WindowStyle Normal" in launcher
     assert '"-N"' in launcher
@@ -228,3 +231,50 @@ def test_e011_compares_only_diffqrcoder_and_qrbtf_public_on_four_prompts():
     assert "RESUME_RUN_NAME" in source
     assert "def completed(" in source
     assert "def reset_incomplete(" in source
+
+
+def test_e012_uses_exact_stage2_latent_original_qr_and_paper_srmpgd_objective():
+    source = Path("notebooks/09_diffqrcoder_faithful_srmpgd.ipynb").read_text(
+        encoding="utf-8"
+    )
+
+    assert "len(PROMPTS) * len(STAGE2_PROFILES) * 2" in source
+    assert "'name': 'paper40', 'steps': 40" in source
+    assert "'name': 'observed100', 'steps': 100" in source
+    assert "DiffQRCoderPipeline" in source
+    assert "Cetus-Mix_Whalefall" in source
+    assert "monster-labs/control_v1p_sd15_qrcode_monster" in source
+    assert "ScanningRobustLoss(module_size=QR_MODULE_SIZE)" in source
+    assert "SRMPGDConfig(" in source
+    assert "step_size=1000.0" in source
+    assert "lpips_weight=0.01" in source
+    assert "lpips.LPIPS(net='vgg'" in source
+    assert "output_type='latent'" in source
+    assert "stage2-final-latent.safetensors" in source
+    assert "scanning_loss=official_srmpgd_srl" in source
+    assert "pipe, base_latent, blueprint, SRMPGD_CONFIG" in source
+    assert "base_latent.float()" in source
+    assert "'srmpgd_target': 'original binary QR y, not QArt proxy'" in source
+    assert "'srmpgd_initialization': 'exact clean Stage 2 latent, never PNG re-encoding'" in source
+    assert "decoded_latent_state_mer" in source
+    assert "validation_by_iteration" in source
+    assert "srmpgd-frames" in source
+    assert "make_gif" in source
+    assert "module_error_rate" in source
+    assert "software_ssr" in source
+    assert "original_ssr" in source
+    assert "clip_aesthetic" in source
+    assert "clip_score" in source
+    assert "worst_decoder_pass_rate" in source
+    assert "worst_scenario_pass_rate" in source
+    assert "image_change_metrics(image, reference_image)" in source
+    assert "comparison-4x4.png" in source
+    assert "physical-validation.csv" in source
+    assert "manifest.json" in source
+    assert "def drop_result_keys(" in source
+    assert "def trace_artifacts_complete(" in source
+    assert "stage1-time.json" in source
+    assert "stage2-time.json" in source
+    assert "force_profile_regeneration" in source
+    assert "latent_from_image" not in source
+    assert "SRMPGD_LR = 0.1" not in source
