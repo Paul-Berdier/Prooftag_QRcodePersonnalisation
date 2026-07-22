@@ -23,6 +23,11 @@ Le commit et les versions sont contrôlés pendant le build et répétés dans c
 L'image Jupyter est volontairement indépendante de l'image API afin de ne pas modifier la
 production avant la fin de l'expérience.
 
+La RTX 4000 Ada de 20 Gio utilise le profil `rtx_20gb` : paramètres des modèles gelés, attention
+slicée, VAE slicé et gradient checkpointing sur UNet et ControlNet. Cela ne change ni les poids ni
+les objectifs ; le calcul est plus lent mais consomme moins de mémoire pendant le Stage 2
+différentiable.
+
 ## Protocole pas à pas
 
 1. Construire un QR version 3, correction M, masque 4, quiet zone de quatre modules et modules de
@@ -98,6 +103,12 @@ imprimée par la dernière cellule, puis restaurer le GPU :
 ```powershell
 .\scripts\notebook-remote.ps1 -Stop
 ```
+
+Ne pas réutiliser un kernel ayant chargé les notebooks 05 ou 06. Avant le chargement, le notebook
+07 déplace vers le CPU et supprime les pipelines connues, vide l'historique d'objets IPython, lance
+le garbage collector et mesure la mémoire CUDA. S'il reste plus de 1 Gio alloué, utiliser
+`Kernel > Restart Kernel`, puis `Run > Run All Cells`. `torch.cuda.empty_cache()` seul ne libère
+pas un modèle encore référencé.
 
 ## Suite conditionnelle
 

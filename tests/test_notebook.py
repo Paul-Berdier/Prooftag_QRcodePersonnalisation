@@ -171,6 +171,14 @@ def test_diffqrcoder_official_notebook_is_paired_strict_and_auditable():
     assert "QR_MODULE_SIZE = 20" in source
     assert "STEPS = 40" in source
     assert "stage2_rng_state" in source
+    assert "release_previous_gpu_objects" in source
+    assert "Kernel > Restart Kernel" in source
+    assert "memory_after_cleanup['free_driver'] < 15.0" in source
+    assert "MEMORY_PROFILE = 'rtx_20gb'" in source
+    assert "pipe.unet.requires_grad_(False).eval()" in source
+    assert "pipe.unet.enable_gradient_checkpointing()" in source
+    assert "pipe.controlnet.enable_gradient_checkpointing()" in source
+    assert "pipe.enable_attention_slicing('max')" in source
     assert "pipe._run_stage1" in source
     assert "pipe._run_stage2" in source
     assert "srpg_plus_srmpgd" in source

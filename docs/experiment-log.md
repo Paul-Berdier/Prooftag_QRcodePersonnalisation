@@ -539,3 +539,18 @@ la nouvelle population Nacholmo. Rapport :
   `PerceptualLoss` afin de conserver le graphe et le device, sans changer la formule de loss.
 - **État :** notebook et protocole implémentés ; exécution RTX requise avant toute revendication de
   taux. Voir [`docs/e010-diffqrcoder-official-reference.md`](e010-diffqrcoder-official-reference.md).
+
+### Premier démarrage E010 — OOM avant génération
+
+- **Symptôme :** `pipe.to('cuda')` échoue avec 19,66 Gio utilisés sur 19,67 Gio ; aucune image n'a
+  encore été générée.
+- **Diagnostic :** le processus du kernel Jupyter détient lui-même 19,37 Gio alloués. Il ne s'agit
+  ni du téléchargement ni d'un autre pod GPU. `empty_cache()` ne libérait pas les pipelines encore
+  référencées par le kernel.
+- **Correction :** libération CPU et suppression explicite des objets GPU, nettoyage de
+  l'historique IPython, garbage collection, porte de propreté à 1 Gio et message demandant un
+  redémarrage du kernel si nécessaire.
+- **Prévention 20 Gio :** paramètres gelés, attention/VAE slicing et gradient checkpointing UNet +
+  ControlNet avant le Stage 2 différentiable.
+- **Résultat scientifique :** aucun ; l'échec ayant précédé le Stage 1, il ne compte pas comme un
+  essai du modèle.
