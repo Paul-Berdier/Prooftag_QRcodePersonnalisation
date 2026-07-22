@@ -503,3 +503,23 @@ E007/Dion est archivé comme baseline partielle après 72 recherches et 80 calib
 non-strictes. Les 16 calibrations manquantes et les holdouts ne justifient pas de temps GPU avant
 la nouvelle population Nacholmo. Rapport :
 [`docs/e007-e008-results-2026-07-22.md`](e007-e008-results-2026-07-22.md).
+
+## E009a — correction d'intégration Nacholmo
+
+- **Date :** 2026-07-22
+- **Déclencheur :** le brut Nacholmo transforme presque chaque module QR en objet carré et dégrade
+  fortement le respect du prompt.
+- **Cause :** E008 et la première version du notebook 06 utilisaient le QR comme source img2img avec
+  une force ControlNet 1,60. La fiche Nacholmo montre au contraire une pipeline ControlNet
+  text2img ; 1,60 était le meilleur point de lecture E008, pas un optimum esthétique.
+- **Première correction :** Stage-1 text2img sur DreamShaper 8, 30 pas, CFG 6,5, balayage des
+  forces 0,80/1,00/1,20 ; pipeline img2img/DDIM séparée pour SRPG 100 pas.
+- **Résultat :** toujours fortement quadrillé. La classe de pipeline était corrigée, mais la
+  condition binaire complète, appliquée jusqu'au dernier pas, dominait encore la composition.
+- **Deuxième correction :** base `Nacholmo/Counterfeit-V2.5-vae-swapped` recommandée par l'auteur,
+  condition ternaire `nacholmo_extremes_25`, profils force/fin `0,40/0,55`, `0,55/0,70` et
+  `0,75/0,85`. SRPG reste volontairement binaire et séparé.
+- **Traçabilité :** images de chaque force, classe de pipeline, scheduler, validations, CLIP,
+  paramètres et sélection sont inscrits dans l'archive et `manifest.json`.
+- **État :** implémenté, validation RTX et test téléphone requis ; aucun taux de réussite n'est
+  annoncé avant cette nouvelle campagne.

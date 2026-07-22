@@ -126,11 +126,20 @@ def test_e008_notebook_compares_controlnets_before_promotion():
     assert "CONTROL_SCALES = (0.90, 1.10, 1.35, 1.60)" in source
 
 
-def test_nacholmo_live_notebook_uses_the_e008_winner_and_strict_gate():
+def test_nacholmo_live_notebook_separates_artistic_text2img_from_srpg_img2img():
     source = Path("notebooks/06_nacholmo_generate_live.ipynb").read_text(encoding="utf-8")
 
     assert "Nacholmo/controlnet-qr-pattern-v2" in source
-    assert "BASE_CONTROLNET_SCALE = 1.60" in source
+    assert "Nacholmo/Counterfeit-V2.5-vae-swapped" in source
+    assert '\\"name\\": \\"art\\", \\"scale\\": 0.40, \\"control_end\\": 0.55' in source
+    assert '\\"name\\": \\"balanced\\", \\"scale\\": 0.55, \\"control_end\\": 0.70' in source
+    assert '\\"name\\": \\"structured\\", \\"scale\\": 0.75, \\"control_end\\": 0.85' in source
+    assert "nacholmo_extremes_25" in source
+    assert "control_guidance_end" in source
+    assert 'controlnet_pipeline_mode=\\"text2img\\"' in source
+    assert 'controlnet_pipeline_mode=\\"img2img\\"' in source
+    assert "DPMSolverMultistepScheduler" in source
+    assert "raw_backend._pipeline = None" in source
     assert "SRPG_CONTROLNET_SCALE = 1.60" in source
     assert "SRPG_STEPS = 100" in source
     assert "run_srpg_controlnet_img2img" in source

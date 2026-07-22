@@ -19,7 +19,9 @@ class Settings(BaseSettings):
     base_model_id: str = "stable-diffusion-v1-5/stable-diffusion-v1-5"
     controlnet_model_id: str = "DionTimmer/controlnet_qrcode-control_v1p_sd15"
     controlnet_model_subfolder: str = ""
-    controlnet_conditioning_profile: Literal["binary", "gray_quiet_zone"] = "binary"
+    controlnet_conditioning_profile: Literal[
+        "binary", "gray_quiet_zone", "nacholmo_extremes_25"
+    ] = "binary"
     controlnet_pipeline_mode: Literal["text2img", "img2img"] = "img2img"
     device: str = "cuda"
     validation_min_pass_rate: float = Field(default=1.0, ge=0.0, le=1.0)

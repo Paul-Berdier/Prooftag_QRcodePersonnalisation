@@ -145,3 +145,31 @@ avec 66,0 % de validations exactes en moyenne et un pire contexte à 9/26. Monst
 Deux sorties isolées atteignent 26/26, mais aucune configuration ne généralise. L'analyse complète,
 les limites des métriques et le protocole E009 sont consignés dans
 [`e007-e008-results-2026-07-22.md`](e007-e008-results-2026-07-22.md).
+
+## Correction méthodologique du 22 juillet 2026
+
+E008 imposait une pipeline img2img commune à tous les candidats et utilisait le QR binaire comme
+image initiale du Stage-1. Ce protocole reste valide pour comparer la **scannabilité sous forte
+contrainte**, mais il ne mesure pas correctement le potentiel artistique propre de Nacholmo.
+La fiche officielle charge en effet `StableDiffusionControlNetPipeline`, donc une génération
+text2img où le QR est seulement la condition ControlNet. Avec notre ancien couple img2img + force
+1,60, chaque module était déjà présent dans l'image initiale puis fortement renforcé : le rendu en
+petits carrés observé était une conséquence prévisible du protocole.
+
+Le notebook 06 sépare désormais les deux objectifs :
+
+1. Stage-1 artistique Nacholmo en text2img, 30 pas et CFG 6,5 ;
+2. déchargement complet de cette pipeline ;
+3. chargement img2img/DDIM uniquement pour le raffinement SRPG à 100 pas ;
+4. validation des 26 couples décodeur/scénario et porte de livraison inchangée.
+
+Cette correction invalide toute conclusion esthétique tirée d'E008, mais pas ses mesures de lecture
+dans le protocole contraint. Une comparaison scientifique text2img multi-prompts devra être menée
+avant de promouvoir définitivement Nacholmo ou une base artistique.
+
+Le premier essai text2img est resté visuellement quadrillé : changer de classe de pipeline ne
+suffisait pas tant que le QR binaire complet était conditionné à force 0,80–1,20 pendant 100 % des
+pas. La seconde correction utilise la base avec VAE recommandée par l'auteur, une approximation
+terne du conditionnement 25/25 et trois couples force/fin de guidage beaucoup plus faibles. Le
+raffinement SRPG conserve, lui, la condition binaire forte puisqu'il porte la responsabilité de la
+lecture et non celle de la composition initiale.

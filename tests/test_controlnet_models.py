@@ -28,6 +28,10 @@ def test_sd15_registry_contains_distinct_real_candidates():
     assert CONTROLNET_PROFILES["monster_sd15_v2"].conditioning_profile == "gray_quiet_zone"
     assert CONTROLNET_PROFILES["monster_sd15_v1"].subfolder == ""
     assert CONTROLNET_PROFILES["monster_sd15_v1"].conditioning_profile == "binary"
+    assert (
+        CONTROLNET_PROFILES["nacholmo_sd15_v2"].conditioning_profile
+        == "nacholmo_extremes_25"
+    )
     assert CONTROLNET_PROFILES["nacholmo_sdxl"].status.startswith("work_in_progress")
 
 
@@ -57,6 +61,27 @@ def test_monster_conditioning_grays_only_the_quiet_zone():
         conditioned[core_start:core_end, core_start:core_end],
         original[core_start:core_end, core_start:core_end],
     )
+
+
+def test_nacholmo_conditioning_keeps_sparse_extremes_on_neutral_gray():
+    blueprint = generate_qr("https://example.prooftag.test/control/nacholmo", "H")
+
+    conditioned = np.asarray(
+        control_image_for_profile(blueprint, "nacholmo_extremes_25")
+    )
+    gray = conditioned[..., 0]
+    values = set(np.unique(gray).tolist())
+    module_pixels = conditioned.shape[0] / blueprint.matrix.shape[0]
+    core_start = round(blueprint.border * module_pixels)
+    core_end = round((blueprint.matrix.shape[0] - blueprint.border) * module_pixels)
+    extreme_ratio = float(np.isin(gray, (0, 255)).mean())
+
+    assert values == {0, 128, 255}
+    assert np.all(gray[:core_start] == 128)
+    assert np.all(gray[core_end:] == 128)
+    assert np.all(gray[:, :core_start] == 128)
+    assert np.all(gray[:, core_end:] == 128)
+    assert 0.40 <= extreme_ratio <= 0.55
 
 
 def test_controlnet_trials_vary_only_the_paired_scales():

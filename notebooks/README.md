@@ -11,10 +11,10 @@ Les six notebooks n'ont pas le même rôle :
   mesure CLIP-aesthetic/CLIPScore et entraîne le mini-modèle de recommandation.
 - `05_controlnet_model_bakeoff.ipynb` choisit le ControlNet SD1.5 sur une comparaison appariée avant
   de relancer l'optimisation E007.
-- `06_nacholmo_generate_live.ipynb` génère en direct avec Nacholmo v2 et le meilleur profil observé
-  dans E008, avec détails OpenCV/ZBar, scores CLIP et porte de livraison stricte.
+- `06_nacholmo_generate_live.ipynb` génère en direct avec Nacholmo v2 en text2img, compare trois
+  forces ControlNet, puis charge séparément la pipeline img2img nécessaire au SRPG.
 
-## Génération live Nacholmo issue d'E008
+## Génération live Nacholmo corrigée après E008
 
 Depuis PowerShell :
 
@@ -22,11 +22,23 @@ Depuis PowerShell :
 .\scripts\notebook-remote.ps1 -Notebook 06_nacholmo_generate_live.ipynb
 ```
 
-Le profil par défaut reproduit le meilleur point E008 : Nacholmo v2, Stage-1 à 16 pas,
-ControlNet 1,60, CFG 7,5, puis SRPG à 100 pas et ControlNet 1,60. La seed 2026 est le témoin qui a
-obtenu 26/26 dans E008. Modifier `PAYLOAD`, `PROMPT` et `SEED` dans la première cellule permet de
-tester une demande réelle. Le notebook n'écrit `06_DELIVERY.png` que si une candidate passe les
-26 validations ; sinon il produit explicitement `06_BEST_OBSERVED_NOT_DELIVERABLE.png`.
+Le Stage-1 suit l'architecture publiée par Nacholmo : `StableDiffusionControlNetPipeline` text2img,
+et non un img2img initialisé par le QR. La base par défaut est maintenant
+`Nacholmo/Counterfeit-V2.5-vae-swapped`, recommandée par l'auteur dans la discussion Diffusers du
+modèle. Le QR binaire complet n'est plus injecté au Stage-1 : le profil
+`nacholmo_extremes_25` conserve des centres noirs et blancs arrondis sur un fond gris neutre. C'est
+une approximation documentée du conditionnement 25 % noir / 25 % blanc, car le code exact de
+prétraitement n'est pas publié.
+
+Le notebook produit avec la même seed trois compromis : `art` (0,40 jusqu'à 55 % des pas),
+`balanced` (0,55 jusqu'à 70 %) et `structured` (0,75 jusqu'à 85 %). Il retient explicitement
+`balanced`. Ensuite seulement il libère la VRAM et charge une pipeline img2img DDIM avec condition
+binaire pour les 100 pas SRPG. Modifier `PAYLOAD`, `PROMPT`, `SEED` ou `RAW_SELECTED_PROFILE` dans
+la première cellule permet de tester une demande réelle.
+
+Le notebook n'écrit `06_DELIVERY.png` que si une candidate passe les 26 validations ; sinon il
+produit explicitement `06_BEST_OBSERVED_NOT_DELIVERABLE.png`. Le 26/26 isolé d'E008 reste une
+preuve de scannabilité sur un contexte, pas une validation des anciens paramètres artistiques.
 
 ## Génération réelle depuis le PC Windows
 
