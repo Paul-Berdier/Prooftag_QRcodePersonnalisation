@@ -43,7 +43,7 @@ QR v3/M/masque 4 + prompt + seed
               v
 Stage 1 DiffQRCoder - 40 pas DDIM - image de référence
               |
-              +--> proxy QArt matriciel audité (condition seulement)
+              +--> QR binaire original valide (condition Stage 2 publique)
               |
               v
 Stage 2 SRPG - 40 pas OU 100 pas - latent propre exact
@@ -68,6 +68,7 @@ estimation `x0|t`. Cette distinction corrige aussi une ambiguïté des notebooks
 | ControlNet | `monster-labs/control_v1p_sd15_qrcode_monster`, sous-dossier `v2` |
 | Scheduler | DDIM |
 | QR | version 3, correction M, masque 4, module 20 px, quiet zone 4 |
+| Condition Stage 2 | QR binaire original valide ; aucune imitation QArt |
 | Stage 1 | 40 pas, CFG 7,5, ControlNet 1,35 |
 | Stage 2 | profils appariés 40 et 100 pas, SRG 500, PG 3 |
 | SR-MPGD | 0 à 20 mises à jour, gamma 1000, LPIPS 0,01, VGG |
@@ -101,10 +102,16 @@ devient pas une preuve de SSR physique avant les essais téléphone/écran/impre
 ## Limite QArt non masquée
 
 Le papier utilise QArt pour changer les bits sélectionnables tout en conservant le message et les
-codes Reed-Solomon. Le dépôt DiffQRCoder ne publie pas ce générateur. E012 conserve donc le proxy
-matriciel existant pour la condition de Stage 2, vérifie son payload original et l'exporte. Cette
-limite interdit de qualifier l'ensemble de la pipeline de reproduction bit-à-bit. Elle ne touche
-pas l'expérience SR-MPGD elle-même, qui vise bien le QR original comme l'équation 13.
+codes Reed-Solomon. Le dépôt DiffQRCoder ne publie pas ce générateur. Le premier brouillon d'E012
+avait tenté un proxy visuel matriciel ; l'exécution sur `p1_simple` a démontré qu'il ne préservait
+pas le payload. Ce proxy n'était donc pas un QArt valide et a été supprimé.
+
+E012 utilise maintenant le QR binaire original comme condition Stage 2, ce qui correspond au
+chemin reproductible du code public. Le fichier `stage2-binary-qr-condition.png` est exporté pour
+lever toute ambiguïté. Cette décision permet une baseline honnête du code public et de SR-MPGD,
+mais pas une reproduction complète de la pipeline du papier. Une future expérience QArt devra
+réencoder réellement les degrés de liberté Reed-Solomon et franchir la porte payload avant toute
+diffusion ; aucun proxy graphique ne sera accepté.
 
 ## Pourquoi ne pas changer immédiatement pour SDXL ou FLUX
 

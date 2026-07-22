@@ -31,7 +31,7 @@ $$z_i = z_{i-1} - 1000 \, \nabla_z [L_{SR}(D(z), y) + 0{,}01 L_{LPIPS}(D(z), x_0
 
 Le nombre d'itérations n'étant pas donné dans l'article, chaque état de 0 à 20 est sauvegardé, validé par tous les décodeurs/scénarios, puis la boucle s'arrête au premier 26/26. À défaut, elle conserve le meilleur état selon l'ordre : lecture, pire décodeur, pire scénario, LPIPS, MER.
 
-La Stage 2 reçoit également un **vrai LPIPS VGG différentiable**. La cible QArt Reed–Solomon exacte n'étant pas publiée dans DiffQRCoder, la condition Stage 2 reste le proxy matriciel exporté et validé ; cette limite est inscrite dans le manifeste et interdit l'étiquette « reproduction bit-à-bit du papier ».
+La Stage 2 reçoit également un **vrai LPIPS VGG différentiable**. La transformation QArt Reed–Solomon exacte n'étant pas publiée dans DiffQRCoder, E012 emploie le **QR binaire original valide** comme condition Stage 2, comme le chemin exécutable du dépôt public. Cette lacune est inscrite dans le manifeste : E012 reproduit le code public et l'objectif SR-MPGD, pas la chaîne QArt non publiée du papier.
 """
     ),
     markdown(
@@ -40,7 +40,7 @@ La Stage 2 reçoit également un **vrai LPIPS VGG différentiable**. La cible QA
 ```text
 QR v3/M/mask4 ──► Stage 1 ControlNet (40 pas)
                          │ image artistique x-hat
-                         ├──► proxy QArt matriciel validé ──► condition Stage 2
+                         ├──► QR binaire original valide ──► condition Stage 2
                          └──► encodage VAE + bruit apparié ──► Stage 2 SRPG (40 ou 100 pas)
                                                                   │
                                                                   ├── image x0 + métriques
@@ -143,7 +143,7 @@ assert importlib.metadata.version('diffusers') == '0.32.2'
     ),
     markdown("## 1. Paramètres figés, profils appariés et reprise"),
     code(
-        """EXPERIMENT_NAME = 'e012-diffqrcoder-faithful-srmpgd-v1'
+        """EXPERIMENT_NAME = 'e012-diffqrcoder-public-binary-srmpgd-v2'
 RESUME_RUN_NAME = None  # mettre le nom d'un dossier existant après une interruption
 PAYLOAD = 'https://ptag.io/t/e012'  # URL courte Prooftag ; doit tenir strictement en v3/M
 NEGATIVE_PROMPT = 'easynegative'
@@ -187,7 +187,7 @@ SRMPGD_CONFIG = SRMPGDConfig(
     light_threshold=0.65,
     center_fraction=1 / 3,
 )
-QART_IMPLEMENTATION = 'matrix-preserving visual proxy; exact Reed-Solomon QArt unavailable upstream'
+STAGE2_CONDITION_IMPLEMENTATION = 'original binary QR; exact Reed-Solomon QArt transform unavailable in the public DiffQRCoder repository'
 SRL_IMPLEMENTATION = 'public DiffQRCoder ScanningRobustLoss, unchanged'
 EXPECTED_RESULTS = len(PROMPTS) * len(STAGE2_PROFILES) * 2
 
@@ -455,31 +455,9 @@ print(f'Pipeline chargée en {time.perf_counter() - load_started:.1f}s')
 print('VRAM :', cuda_memory_gib())
 """
     ),
-    markdown("## 5. Stage 1, condition QArt proxy et Stage 2 avec latent final exact"),
+    markdown("## 5. Stage 1, condition QR binaire et Stage 2 avec latent final exact"),
     code(
-        """def qart_proxy(stage1_image):
-    # Limite explicite : ce proxy ne réencode pas les blocs Reed-Solomon. Il conserve la matrice
-    # et adapte les centres à l'image Stage 1. Le fichier et sa validation sont toujours exportés.
-    source = np.asarray(stage1_image.resize(qr_image.size)).astype(np.float32)
-    count = matrix.shape[0]
-    protected = functional_pattern_mask(blueprint)
-    for row in range(count):
-        for col in range(count):
-            y0, y1 = row * QR_MODULE_SIZE, (row + 1) * QR_MODULE_SIZE
-            x0, x1 = col * QR_MODULE_SIZE, (col + 1) * QR_MODULE_SIZE
-            fraction = 0.72 if protected[row, col] else 0.38
-            margin = max(1, round(QR_MODULE_SIZE * (1 - fraction) / 2))
-            target = 0 if matrix[row, col] else 255
-            region = source[y0 + margin:y1 - margin, x0 + margin:x1 - margin]
-            source[y0 + margin:y1 - margin, x0 + margin:x1 - margin] = 0.15 * region + 0.85 * target
-    source[:QR_BORDER_MODULES * QR_MODULE_SIZE, :] = 255
-    source[-QR_BORDER_MODULES * QR_MODULE_SIZE:, :] = 255
-    source[:, :QR_BORDER_MODULES * QR_MODULE_SIZE] = 255
-    source[:, -QR_BORDER_MODULES * QR_MODULE_SIZE:] = 255
-    return Image.fromarray(np.clip(source, 0, 255).astype(np.uint8))
-
-
-@torch.no_grad()
+        """@torch.no_grad()
 def paper_stage2_latents(pipeline, stage1_tensor, seed, steps):
     normalized = stage1_tensor.to('cuda', dtype=torch.float16) * 2 - 1
     encoded = pipeline.vae.encode(normalized).latent_dist.mode() * pipeline.vae.config.scaling_factor
@@ -674,12 +652,11 @@ for prompt_case in PROMPTS:
             drop_result_keys(stale_prompt_keys)
         stage1_tensor, stage1_image, stage1_seconds = run_stage1(prompt_case, prompt_dir)
 
-    target = qart_proxy(stage1_image)
-    target.save(prompt_dir / 'qart-proxy-condition.png')
-    target_validation, target_records = validation_payload(target)
-    (prompt_dir / 'qart-proxy-validations.json').write_text(json.dumps(target_records, indent=2), encoding='utf-8')
-    if target_validation['original_passed'] != target_validation['original_total']:
-        raise RuntimeError(f"Le proxy QArt de {prompt_case['id']} ne préserve pas le payload sur l image originale.")
+    # Le dépôt public ne fournit pas le transformateur QArt Reed–Solomon décrit dans le papier.
+    # Ne pas fabriquer un proxy visuel : il pourrait modifier la matrice et casser le payload.
+    # Le QR témoin a déjà franchi la porte d'intégrité dans la section 2.
+    target = qr_image.copy()
+    target.save(prompt_dir / 'stage2-binary-qr-condition.png')
 
     for profile in STAGE2_PROFILES:
         profile_dir = prompt_dir / profile['name']
@@ -873,7 +850,8 @@ for prompt_case in PROMPTS:
     'faithfulness': {
         'stage2_initialization': 'VAE encoding of Stage 1 plus paired Gaussian noise',
         'stage2_perceptual': 'learned LPIPS VGG with differentiable input',
-        'stage2_condition': QART_IMPLEMENTATION,
+        'stage2_condition': STAGE2_CONDITION_IMPLEMENTATION,
+        'paper_gap': 'QArt Reed-Solomon transform is described in the paper but absent from the public repository; no visual proxy is substituted',
         'srmpgd_initialization': 'exact clean Stage 2 latent, never PNG re-encoding',
         'srmpgd_target': 'original binary QR y, not QArt proxy',
         'srmpgd_srl': SRL_IMPLEMENTATION,
@@ -931,7 +909,8 @@ report_lines = [
     f'original {control_validation["original_passed"]}/{control_validation["original_total"]}.',
     f'- Pic VRAM : {manifest["peak_gpu_memory_gib"]:.2f} Gio',
     '- SR-MPGD : gamma=1000, LPIPS=0,01, latent Stage 2 exact, QR original.',
-    f'- Limite QArt : {QART_IMPLEMENTATION}.', '',
+    f'- Condition Stage 2 : {STAGE2_CONDITION_IMPLEMENTATION}.',
+    '- Limite QArt : aucune transformation QArt n est simulée ; il faudra une implémentation Reed-Solomon réellement valide pour tester cette étape.', '',
     '## Sélection par prompt', '',
 ]
 for prompt_id, selected in selected_by_prompt.items():
@@ -959,7 +938,8 @@ print(f'scp paul@pcIA:~/{archive_path.name} "$HOME/Downloads/"')
 - Une sortie SR-MPGD non sélectionnée reste dans les frames pour expliquer l'évolution, mais ne remplace jamais automatiquement la base.
 - `DELIVERABLE` signifie seulement 26/26 logiciel dans cette campagne. La validation physique doit encore être remplie.
 - Les résultats 40 et 100 pas sont appariés par prompt/seed. Le changement de fondation vers SDXL ne sera testé qu'après cette baseline, dans une expérience séparée.
-- La présence du proxy QArt interdit de reprendre directement les 99–100 % de l'article comme taux attendu pour Prooftag.
+- L'absence du transformateur QArt Reed–Solomon interdit de qualifier E012 de reproduction complète du papier et de reprendre directement ses 99–100 % comme taux attendu pour Prooftag.
+- Aucun proxy visuel QArt n'est utilisé : une condition qui ne préserve pas le payload invaliderait toute la comparaison.
 """
     ),
 ]

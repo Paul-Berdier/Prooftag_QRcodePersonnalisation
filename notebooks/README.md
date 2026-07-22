@@ -32,6 +32,11 @@ est celle du dépôt DiffQRCoder figé ; chaque itération est enregistrée et v
 d'itérations n'étant pas publié dans l'article, le notebook teste les états 0 à 20 et s'arrête au
 premier 26/26.
 
+La condition Stage 2 est également le QR binaire original valide. Le transformateur QArt
+Reed–Solomon décrit dans le papier n'est pas fourni dans le dépôt public : E012 n'invente plus de
+proxy visuel susceptible de casser le payload. Il s'agit donc de la baseline du code public avec
+SR-MPGD fidèle, et non d'une reproduction complète de l'étape QArt du papier.
+
 Les 16 résultats sont quatre prompts × deux budgets Stage 2 (40/100) × base/SR-MPGD. Toutes les
 frames, GIF, latents safetensors, durées, SSR logiciel, MER, CLIP-aesthetic, CLIPScore, manifest,
 rapport et grille de validation physique sont exportés. Le protocole complet et ses limites sont

@@ -281,5 +281,13 @@ def test_e012_uses_exact_stage2_latent_original_qr_and_paper_srmpgd_objective():
     assert "stage1-time.json" in source
     assert "stage2-time.json" in source
     assert "force_profile_regeneration" in source
+    assert "e012-diffqrcoder-public-binary-srmpgd-v2" in source
+    assert "STAGE2_CONDITION_IMPLEMENTATION" in source
+    assert "target = qr_image.copy()" in source
+    assert "stage2-binary-qr-condition.png" in source
+    assert "exact Reed-Solomon QArt transform unavailable" in source
+    assert "def qart_proxy(" not in source
+    assert "matrix-preserving visual proxy" not in source
+    assert "Le proxy QArt de" not in source
     assert "latent_from_image" not in source
     assert "SRMPGD_LR = 0.1" not in source

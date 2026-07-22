@@ -634,6 +634,12 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   équations 12-14 et son échec ne permet pas de rejeter le vrai SR-MPGD.
 - **Correction :** conserver le latent propre exact de la Stage 2, utiliser le QR binaire original,
   la SRL du dépôt public, un vrai LPIPS VGG, `gamma=1000` et `lambda=0,01`.
+- **Incident QArt :** le premier brouillon utilisait un proxy visuel présenté à tort comme
+  matriciel. `p1_simple` n'était plus décodable avant même Stage 2 : ce proxy ne préservait donc ni
+  la matrice utile ni le payload et a été rejeté.
+- **Décision v2 :** conditionner Stage 2 avec le QR binaire original valide, comme le chemin
+  exécutable du dépôt public. L'absence du transformateur QArt Reed–Solomon est consignée comme
+  écart au papier ; aucun faux proxy n'est substitué.
 - **Itérations :** le papier ne donne pas leur nombre. Les états 0 à 20 sont persistés et validés,
   avec arrêt au premier 26/26 et sélection lexicographique si la porte n'est jamais atteinte.
 - **Comparaison :** quatre prompts appariés, Stage 2 à 40 et 100 pas, chaque base sans puis avec
