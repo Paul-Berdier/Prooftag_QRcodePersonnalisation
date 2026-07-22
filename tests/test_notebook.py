@@ -241,6 +241,11 @@ def test_e012_uses_exact_stage2_latent_original_qr_and_paper_srmpgd_objective():
     assert "len(PROMPTS) * len(STAGE2_PROFILES) * 2" in source
     assert "'name': 'paper40', 'steps': 40" in source
     assert "'name': 'observed100', 'steps': 100" in source
+    assert "original_control_records" in source
+    assert "QR témoin illisible sans dégradation" in source
+    assert "00_qr_control_validations.json" in source
+    assert "'control_validation': control_validation" in source
+    assert "all(item.exact_payload_match for item in control_records)" not in source
     assert "DiffQRCoderPipeline" in source
     assert "Cetus-Mix_Whalefall" in source
     assert "monster-labs/control_v1p_sd15_qrcode_monster" in source

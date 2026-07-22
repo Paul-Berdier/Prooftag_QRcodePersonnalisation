@@ -90,6 +90,11 @@ par phase, itération sélectionnée et motif d'arrêt. Les artefacts incluent :
 - `manifest.json`, `upstream-patches.json`, `run-report.md` et le notebook exécuté ;
 - `physical-validation.csv`, dix essais par téléphone et support, laissé vide tant que non testé.
 
+Le QR binaire témoin doit être décodé exactement dans le scénario `original` par OpenCV et ZBar.
+Ses autres scénarios servent de calibration et sont tous enregistrés, mais un échec simulé ne
+bloque pas le lancement : exiger 26/26 à ce point confondrait intégrité du QR et robustesse. La
+porte 26/26 reste inchangée pour déclarer une image artistique `DELIVERABLE`.
+
 Une sortie `DELIVERABLE` signifie seulement qu'elle a passé la porte logicielle complète. Elle ne
 devient pas une preuve de SSR physique avant les essais téléphone/écran/impression.
 

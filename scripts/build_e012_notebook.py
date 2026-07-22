@@ -227,9 +227,54 @@ assert qr_image.size == (740, 740) and matrix.shape == (37, 37)
 
 validator = QRValidator()
 control_records = validator.validate(qr_image, PAYLOAD)
-assert control_records and all(item.exact_payload_match for item in control_records), 'Le QR témoin doit réussir tous les tests.'
-print('Décodeurs :', [decoder.name for decoder in validator.decoders])
-print('QR témoin :', len(control_records), '/', len(control_records), 'payload SHA-256', payload_hash)
+decoder_names = [decoder.name for decoder in validator.decoders]
+missing_decoders = {'opencv', 'zbar'} - set(decoder_names)
+if missing_decoders:
+    raise RuntimeError(
+        f"Décodeurs requis absents : {sorted(missing_decoders)}. "
+        'Reconstruire Dockerfile.notebook avec libzbar0/pyzbar.'
+    )
+
+original_control_records = [item for item in control_records if item.scenario == 'original']
+original_control_failures = [
+    item for item in original_control_records if not item.exact_payload_match
+]
+if not original_control_records or original_control_failures:
+    details = [f'{item.decoder}/{item.scenario}' for item in original_control_failures]
+    raise AssertionError(
+        f'QR témoin illisible sans dégradation : {details}. '
+        'Vérifier payload, version, masque et décodeurs avant la diffusion.'
+    )
+
+control_passed = sum(item.exact_payload_match for item in control_records)
+control_failures = [
+    f'{item.decoder}/{item.scenario}'
+    for item in control_records
+    if not item.exact_payload_match
+]
+control_validation = {
+    'passed': control_passed,
+    'total': len(control_records),
+    'software_ssr': control_passed / len(control_records),
+    'original_passed': len(original_control_records),
+    'original_total': len(original_control_records),
+    'original_ssr': 1.0,
+    'failures': control_failures,
+}
+(RUN_DIR / '00_qr_control_validations.json').write_text(
+    json.dumps([asdict(item) for item in control_records], indent=2), encoding='utf-8'
+)
+print('Décodeurs :', decoder_names)
+print(
+    'QR témoin original :', len(original_control_records), '/', len(original_control_records),
+    '— robustesse simulée :', control_passed, '/', len(control_records),
+    '— payload SHA-256 :', payload_hash,
+)
+if control_failures:
+    display(Markdown(
+        '**Calibration : le QR binaire est lisible sans dégradation, mais ne passe pas toute la '
+        f'grille robuste. Échecs :** `{control_failures}`'
+    ))
 display(qr_image.resize((370, 370)))
 """
     ),
@@ -837,6 +882,7 @@ for prompt_case in PROMPTS:
         'srmpgd_iteration_count': 'not published; states 0..20 evaluated with strict early stop',
     },
     'payload_sha256': payload_hash,
+    'control_validation': control_validation,
     'prompts': PROMPTS,
     'qr': {
         'version': QR_VERSION, 'error_correction': 'M', 'mask_pattern': QR_MASK_PATTERN,
@@ -881,6 +927,8 @@ report_lines = [
     '# Rapport automatique E012', '',
     f'- Résultats complets : {len(rows)}/{EXPECTED_RESULTS}',
     f'- Candidats stricts : {strict_count}/{len(rows)}',
+    f'- QR témoin : {control_validation["passed"]}/{control_validation["total"]} sur la grille, '
+    f'original {control_validation["original_passed"]}/{control_validation["original_total"]}.',
     f'- Pic VRAM : {manifest["peak_gpu_memory_gib"]:.2f} Gio',
     '- SR-MPGD : gamma=1000, LPIPS=0,01, latent Stage 2 exact, QR original.',
     f'- Limite QArt : {QART_IMPLEMENTATION}.', '',
