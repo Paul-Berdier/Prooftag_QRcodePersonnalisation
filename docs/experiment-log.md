@@ -552,5 +552,20 @@ la nouvelle population Nacholmo. Rapport :
   redémarrage du kernel si nécessaire.
 - **Prévention 20 Gio :** paramètres gelés, attention/VAE slicing et gradient checkpointing UNet +
   ControlNet avant le Stage 2 différentiable.
+- **Compatibilité Jupyter :** la première implémentation appelait la magic `%reset_out`, absente du
+  serveur. Elle est remplacée par l'effacement direct de `Out`, `_`, `__` et `___` dans le namespace
+  IPython.
 - **Résultat scientifique :** aucun ; l'échec ayant précédé le Stage 1, il ne compte pas comme un
   essai du modèle.
+
+### Première exécution du Stage 2 — conversion PIL encore attachée
+
+- **Symptôme :** les 40 pas SRPG se terminent en 93 secondes, puis `pt_to_numpy` refuse le tenseur
+  final car il requiert encore un gradient.
+- **Cause :** le notebook appelle `_run_stage2` directement pour séparer et apparier les variantes,
+  alors que seul `DiffQRCoderPipeline.__call__` porte le décorateur externe `@torch.no_grad()`.
+- **Correction :** `run_stage2` est maintenant décorée par `@torch.no_grad()`. Les sections SRPG et
+  SR-MPGD du code amont utilisent leurs propres blocs `torch.enable_grad()` : leurs gradients sont
+  donc conservés, tandis que le décodage final devient détaché comme dans l'appel public officiel.
+- **Résultat scientifique :** aucun fichier final n'ayant été produit, cette tentative reste un
+  contrôle d'intégration, pas un résultat de modèle.

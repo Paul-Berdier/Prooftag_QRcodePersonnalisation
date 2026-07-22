@@ -172,6 +172,8 @@ def test_diffqrcoder_official_notebook_is_paired_strict_and_auditable():
     assert "STEPS = 40" in source
     assert "stage2_rng_state" in source
     assert "release_previous_gpu_objects" in source
+    assert "output_history.clear()" in source
+    assert "run_line_magic('reset_out'" not in source
     assert "Kernel > Restart Kernel" in source
     assert "memory_after_cleanup['free_driver'] < 15.0" in source
     assert "MEMORY_PROFILE = 'rtx_20gb'" in source
@@ -181,6 +183,8 @@ def test_diffqrcoder_official_notebook_is_paired_strict_and_auditable():
     assert "pipe.enable_attention_slicing('max')" in source
     assert "pipe._run_stage1" in source
     assert "pipe._run_stage2" in source
+    assert '"@torch.no_grad()\\n"' in source
+    assert '"def run_stage2(profile):\\n"' in source
     assert "srpg_plus_srmpgd" in source
     assert "callback_on_step_end=callback" in source
     assert "validator.validate" in source
