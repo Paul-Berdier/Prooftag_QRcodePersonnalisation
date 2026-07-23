@@ -1,0 +1,183 @@
+# Protocole E014–E016 : blueprint, fusion latente, backbone et surrogate
+
+## Pourquoi cette série remplace une nouvelle recherche globale
+
+E013 a mélangé trop de causes possibles : géométrie, backbone, ControlNet, guidage, nombre de pas
+et paramètres de correction. E014–E016 impose une progression où une étape ne commence qu'avec un
+artefact explicite de l'étape précédente :
+
+```text
+E014A : construire une condition QR fiable
+   │
+   ├── artefact : blueprint exact-payload sélectionné + matrice + géométrie + Stage 1
+   ▼
+E014B : mesurer la fusion latente, canal par canal et timestep par timestep
+   │
+   ├── artefact : configuration de fusion observée + traces complètes
+   ▼
+E015 : choisir, séparément, une meilleure référence esthétique
+   │
+   ├── artefact : comparaison SD1.5 / SDXL / FLUX, sans prétendre à la compatibilité QR
+   ▼
+E016 : apprendre une loss différentiable sur les réponses des vrais décodeurs
+   │
+   └── artefact : dataset, modèle expérimental, calibration et audit adversarial
+```
+
+Un résultat logiciel strict signifie que tous les décodeurs disponibles lisent le payload attendu
+sur les treize scénarios. Il ne signifie pas encore 99 % de scans physiques.
+
+## E014A — vrai QArt et variantes exact-payload
+
+Notebook :
+[`11_e014a_qart_blueprint_bakeoff.ipynb`](../notebooks/11_e014a_qart_blueprint_bakeoff.ipynb)
+
+Quatre conditions sont appariées dans la même Stage 2 DiffQRCoder :
+
+| Variante | Payload | ECC | Nature |
+|---|---:|---:|---|
+| `binary_mask4_m` | exact | M | QR standard, baseline |
+| `qart_fragment_l` | URL canonique | L | vrai QArt public, fragment ajouté |
+| `exact_payload_mask_search_m` | exact | M | meilleur des huit masques standards |
+| `adaptive_exact_payload_m` | exact | M | centres adaptés à la luminance, fonctions binaires |
+
+Le binaire `qart` est construit depuis `andrewyur/qart` au commit
+`6e0e00804a1994db7098432c19fadfc552071e30`. Cette implémentation ajoute un fragment `#…` pour
+obtenir des degrés de liberté Reed–Solomon et suppose une correction L. Elle est donc testée en
+comparant l'URL après suppression du fragment. Elle n'est jamais présentée comme exact-payload.
+Son CLI n'expose pas de seed déterministe : E014A exécute trois répétitions pour chacun des cinq
+seuils, conserve les SHA-256 et ne régénère jamais ces blueprints pendant une reprise.
+
+La variante exacte recherche les huit masques permis par la norme. L'adaptatif part du meilleur
+masque et calcule, module par module, la plus petite zone centrale noire ou blanche nécessaire
+d'après la luminance locale. Les finder, timing, alignment, format/version patterns restent
+binaires. Ce procédé est une méthode Prooftag documentée, pas une reproduction QArt.
+
+Artefacts essentiels, par prompt :
+
+- `stage1-reference.png`, `stage1.safetensors`, toutes les frames et le GIF ;
+- les quatre dossiers `blueprints/*`, matrices, métadonnées et validations ;
+- les quatre Stage 2, leurs latents finaux, frames, GIF, validations et scores ;
+- `selected-blueprint.png`, `selected-matrix.npy`, `selected-meta.json`.
+
+La sélection E014B n'accepte que les variantes exact-payload. L'ordre est : porte stricte, SSR,
+pire décodeur, pire scénario, CLIP-aesthetic, CLIPScore, visibilité de grille.
+
+## E014B — fusion latente inspirée de FreeQR
+
+Notebook :
+[`12_e014b_freeqr_latent_fusion.ipynb`](../notebooks/12_e014b_freeqr_latent_fusion.ipynb)
+
+Le notebook retrouve le dernier E014A ou utilise le dossier renseigné dans `E014A_RUN_DIR`.
+Il charge le blueprint sélectionné, sa matrice, sa géométrie et le tensor Stage 1. Il reprend le
+même latent initial pour chaque variante.
+
+La publication FreeQR ([DOI 10.1109/TMM.2026.3668595](https://doi.org/10.1109/TMM.2026.3668595))
+décrit la fusion d'un canal précis avec le latent bruité du blueprint au timestep correspondant,
+puis un guidage par les erreurs de scan dans le latent. Les détails exécutables complets et une
+implémentation officielle n'étant pas disponibles dans le projet, E014B teste explicitement les
+choix manquants au lieu de prétendre reproduire des paramètres non publiés.
+
+L'ablation se déroule en quatre phases :
+
+1. baseline puis canaux latents 0 à 3 ;
+2. fenêtres `early`, `middle`, `late`, `all` sur le meilleur canal ;
+3. coefficients `0.05`, `0.10`, `0.15`, `0.22` ;
+4. meilleur réglage avec une loss centrale différentiable à trois pas d'apprentissage.
+
+Le callback de Diffusers intervient après un pas DDIM. Le QR latent est donc bruité au timestep
+suivant, inscrit dans `target_timestep_after_step`. La dernière étape utilise le latent QR propre.
+La variante avec gradient est séparée : sa loss de marge n'est ni le SRL officiel DiffQRCoder, ni
+SR-MPGD. Le manifeste utilise volontairement l'étiquette
+`FreeQR-inspired channel/timestep reconstruction`.
+
+La première campagne utilise `p1_simple`. Le réglage gagnant doit ensuite être confirmé en
+modifiant `PROMPT_ID` pour les trois autres prompts ; une réussite unique n'est pas une recette.
+
+## E015 — références esthétiques
+
+Notebook :
+[`13_e015_aesthetic_backbone_reference.ipynb`](../notebooks/13_e015_aesthetic_backbone_reference.ipynb)
+
+E015 charge un seul modèle à la fois :
+
+- Cetus-Mix SD 1.5, 30 pas ;
+- SDXL Base 1.0, 30 pas ;
+- FLUX.1-schnell, 4 pas.
+
+Le tableau compare temps chaud, pic de VRAM, CLIP-aesthetic et CLIPScore sur quatre prompts.
+Le constructeur adaptatif E014A est appliqué à chaque référence et validé, mais aucune Stage 2 QR
+n'est lancée. E015 répond donc à « quelle référence est la plus utile/esthétique ? », pas à
+« quel modèle remplace DiffQRCoder ? ». Une migration SDXL ou FLUX nécessitera un mécanisme de
+contrôle compatible et une expérience dédiée.
+
+FLUX utilise l'offload CPU sur la carte 20 Go. Le premier lancement peut surtout être limité par le
+téléchargement et l'espace du cache Hugging Face. Les modèles sont libérés entre familles.
+
+## E016 — surrogate différentiable
+
+Notebook :
+[`14_e016_differentiable_scan_surrogate.ipynb`](../notebooks/14_e016_differentiable_scan_surrogate.ipynb)
+
+E016 prend les PNG finaux d'E014A/E014B, applique chaque scénario réel, puis demande à OpenCV,
+ZBar et ZXing-cpp si le payload exact est lu. Une ligne contient l'image réellement transformée et
+un label par décodeur. Le split train/validation/test est groupé par image source : deux variantes
+dégradées d'une même image ne peuvent pas être réparties entre entraînement et test.
+
+Le CNN multi-sorties s'entraîne seulement si les seuils de volume, de groupes et de classes sont
+atteints. Les métriques holdout sont AUCPR, ROC-AUC lorsque les deux classes existent, Brier et
+calibration. L'audit final optimise une image holdout avec le gradient du CNN sous une contrainte
+de `±8/255`, puis mesure les vrais décodeurs avant/après. Si seul le CNN progresse, le surrogate a
+été trompé et la porte échoue.
+
+Un groupe correspond à un contexte `(payload, prompt, seed)`, et non à un simple fichier. Les
+quatre contextes initiaux d'E014A ne suffisent donc volontairement pas au seuil par défaut de douze
+groupes : il faut ajouter des campagnes avec d'autres prompts/seeds dans `SOURCE_RUNS`. Abaisser ce
+seuil ferait fonctionner le code mais donnerait une validation trompeuse par fuite de contexte.
+
+Les captures physiques suivent le fichier `physical-captures-template.csv`. Tant qu'aucune capture
+n'est fournie, `production_usable` reste faux même si les métriques numériques sont bonnes.
+
+## Installation et lancement
+
+Le Docker notebook a de nouvelles dépendances : binaire QArt compilé et figé, ZXing-cpp et Kornia.
+Il faut donc reconstruire l'image notebook avant le premier lancement :
+
+```bash
+cd ~/apps/Prooftag_QRcodePersonnalisation
+git pull
+docker build -f Dockerfile.notebook -t prooftag-qr-notebook:dev .
+docker save prooftag-qr-notebook:dev | sudo k3s ctr images import -
+kubectl apply -k deploy/k8s
+```
+
+Depuis PowerShell sur le PC :
+
+```powershell
+cd "C:\Users\p.berdier\Documents\Paul Berdier\codage\Prooftag_QRcodePersonnalisation"
+git pull
+.\scripts\notebook-remote.ps1 -Notebook 11_e014a_qart_blueprint_bakeoff.ipynb
+```
+
+Puis, après E014A :
+
+```powershell
+.\scripts\notebook-remote.ps1 -Stop
+.\scripts\notebook-remote.ps1 -Notebook 12_e014b_freeqr_latent_fusion.ipynb
+```
+
+E015 et E016 se lancent avec les noms `13_e015_aesthetic_backbone_reference.ipynb` et
+`14_e016_differentiable_scan_surrogate.ipynb`. Toujours arrêter la session avant de changer de
+notebook afin de restituer le GPU à l'API/vLLM.
+
+## Portes de décision
+
+| Étape | Continuer si | Revenir en arrière si |
+|---|---|---|
+| E014A | une condition exacte réduit la grille sans baisser le pire SSR | aucun blueprint exact ne passe son propre contrôle |
+| E014B | le gain tient sur les quatre prompts et ne détruit pas CLIP | seul un prompt ou un seul décodeur progresse |
+| E015 | une référence améliore l'esthétique et reste intégrable | le coût/VRAM augmente sans gain apparié |
+| E016 | holdout calibré + vrais décodeurs améliorés | classes pauvres, fuite, proxy adversarial |
+
+Seulement après ces portes, le dataset contiendra une cible suffisamment stable pour entraîner un
+ControlLoRA/ControlNet Prooftag et un sélecteur de paramètres sans apprendre les erreurs du pipeline.

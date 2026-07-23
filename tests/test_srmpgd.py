@@ -80,6 +80,48 @@ def test_srmpgd_uses_exact_latent_original_qr_and_stops_on_strict_validation(mon
     assert scanning_loss_calls == [((1, 3, 128, 128), (1, 1, 128, 128))] * 2
 
 
+def test_srmpgd_keeps_state_zero_when_the_gradient_is_not_finite(monkeypatch):
+    torch = pytest.importorskip("torch")
+    from prooftag_qr import srmpgd
+
+    class FakeVAE(torch.nn.Module):
+        config = SimpleNamespace(scaling_factor=1.0)
+
+        def __init__(self):
+            super().__init__()
+            self.anchor = torch.nn.Parameter(torch.tensor(1.0), requires_grad=False)
+
+        def decode(self, latent, **kwargs):
+            return (latent * self.anchor,)
+
+    class FakeImageProcessor:
+        def postprocess(self, image, **kwargs):
+            array = image[0].detach().permute(1, 2, 0).clamp(0, 1)
+            return [Image.fromarray(np.uint8(array.cpu().numpy() * 255), mode="RGB")]
+
+    class ZeroLPIPS(torch.nn.Module):
+        def forward(self, image, reference):
+            return image.mean().reshape(1, 1, 1, 1) * 0
+
+    monkeypatch.setattr(srmpgd, "_load_lpips", lambda pipeline, device, net: ZeroLPIPS())
+    blueprint = generate_qr("https://example.test/nan", "M", size=128)
+    latent = torch.full((1, 3, 128, 128), 0.5)
+
+    result = srmpgd.run_srmpgd(
+        SimpleNamespace(vae=FakeVAE(), image_processor=FakeImageProcessor()),
+        latent,
+        blueprint,
+        SRMPGDConfig(max_iterations=3, step_size=100.0),
+        scanning_loss=lambda image, target: (image * torch.tensor(float("nan"))).mean(),
+        validation_callback=lambda image, iteration: {"passed": 0, "total": 2},
+    )
+
+    assert len(result.steps) == 1
+    assert result.selected_iteration == 0
+    assert result.stop_reason == "non_finite_gradient_at_iteration_0"
+    assert result.steps[0].gradient_rms is None
+
+
 @pytest.mark.parametrize(
     ("config", "message"),
     [

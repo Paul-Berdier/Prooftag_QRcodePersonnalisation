@@ -5,6 +5,7 @@ import io
 import time
 from abc import ABC, abstractmethod
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -69,10 +70,27 @@ class PyzbarDecoder(Decoder):
         return results[0].data.decode("utf-8") if results else ""
 
 
+class ZXingCPPDecoder(Decoder):
+    name = "zxingcpp"
+
+    def __init__(self) -> None:
+        import zxingcpp
+
+        self._zxingcpp = zxingcpp
+
+    def decode(self, image: Image.Image) -> str:
+        results = self._zxingcpp.read_barcodes(np.asarray(image.convert("RGB")))
+        return results[0].text if results else ""
+
+
 def available_decoders() -> list[Decoder]:
     decoders: list[Decoder] = [OpenCVDecoder()]
     try:
         decoders.append(PyzbarDecoder())
+    except (ImportError, OSError):
+        pass
+    try:
+        decoders.append(ZXingCPPDecoder())
     except (ImportError, OSError):
         pass
     return decoders
@@ -176,8 +194,16 @@ class QRValidator:
     def __init__(self, decoders: list[Decoder] | None = None):
         self.decoders = decoders or available_decoders()
 
-    def validate(self, image: Image.Image, expected_payload: str) -> list[ValidationRecord]:
+    def validate(
+        self,
+        image: Image.Image,
+        expected_payload: str,
+        *,
+        matcher: Callable[[str, str], bool] | None = None,
+        match_mode: str = "exact",
+    ) -> list[ValidationRecord]:
         expected_hash = hashlib.sha256(expected_payload.encode()).hexdigest()
+        comparator = matcher or (lambda decoded, expected: decoded == expected)
         records: list[ValidationRecord] = []
         for scenario in DEFAULT_SCENARIOS:
             transformed = scenario.apply(image)
@@ -185,7 +211,7 @@ class QRValidator:
                 started = time.perf_counter()
                 decoded = decoder.decode(transformed)
                 elapsed_ms = (time.perf_counter() - started) * 1000
-                exact = decoded == expected_payload
+                exact = comparator(decoded, expected_payload)
                 records.append(
                     ValidationRecord(
                         decoder=decoder.name,
@@ -196,7 +222,11 @@ class QRValidator:
                         decoded_hash=(
                             hashlib.sha256(decoded.encode()).hexdigest() if decoded else None
                         ),
-                        parameters={**scenario.parameters, "expected_hash": expected_hash},
+                        parameters={
+                            **scenario.parameters,
+                            "expected_hash": expected_hash,
+                            "match_mode": match_mode,
+                        },
                     )
                 )
         return records

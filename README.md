@@ -19,7 +19,7 @@ La version `0.1.0` fournit :
   puis par profils binaires de secours ;
 - une régénération avec une nouvelle seed avant tout fallback de réparation globale ;
 - plusieurs tentatives avec conservation automatique du meilleur résultat ;
-- une validation exacte du payload par OpenCV et ZBar ;
+- une validation exacte du payload par OpenCV, ZBar et ZXing-cpp ;
 - treize scénarios de dégradation ;
 - PostgreSQL en production, avec migrations Alembic et sauvegardes quotidiennes ;
 - SQLite pour les tests et le développement local ;

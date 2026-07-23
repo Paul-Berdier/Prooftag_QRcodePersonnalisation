@@ -1,5 +1,19 @@
 # Notebooks Prooftag QR
 
+## Série actuelle E014–E016
+
+- `11_e014a_qart_blueprint_bakeoff.ipynb` compare vrai QArt, QR binaire, recherche de masque
+  exact-payload et blueprint adaptatif dans une Stage 2 appariée.
+- `12_e014b_freeqr_latent_fusion.ipynb` teste la fusion latente canal/timestep/force, puis isole
+  l'apport d'une loss différentiable.
+- `13_e015_aesthetic_backbone_reference.ipynb` compare SD 1.5, SDXL et FLUX comme références
+  esthétiques uniquement.
+- `14_e016_differentiable_scan_surrogate.ipynb` construit le dataset des vrais décodeurs, entraîne
+  le surrogate et vérifie son gradient contre les décodeurs externes.
+
+Le protocole, les limites scientifiques, les artefacts et les portes de décision sont dans
+[`../docs/e014-e016-experiment-protocol.md`](../docs/e014-e016-experiment-protocol.md).
+
 Les neuf notebooks n'ont pas le même rôle :
 
 - `01_srpg_step_by_step.ipynb` analyse une archive de benchmark déjà produite. Il ne génère rien.

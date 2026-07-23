@@ -790,6 +790,16 @@ if cuda_memory_gib()['free_driver'] < 15:
     (output_dir / 'paper-srmpgd-validations.json').write_text(
         json.dumps(validations, indent=2), encoding='utf-8'
     )
+    (output_dir / 'paper-srmpgd-summary.json').write_text(
+        json.dumps({
+            'selected_iteration': result.selected_iteration,
+            'stop_reason': result.stop_reason,
+            'duration_s': result.duration_s,
+            'initial_module_error_rate': result.initial_module_error_rate,
+            'final_module_error_rate': result.final_module_error_rate,
+        }, indent=2),
+        encoding='utf-8',
+    )
     make_gif(frame_dir, output_dir / 'paper-srmpgd.gif')
     release_gpu(official_srl)
     return result
@@ -1108,20 +1118,39 @@ def search_one_model(model_name, runner_type):
         duration = state['duration_s']
         variant = 'base'
         refinement_s = 0.0
+        refinement_metadata = {}
         if config['refinement'] == 'paper':
-            paper = run_paper_refinement(
-                runner, case, config, aligned, state, output_dir, save_frames=False
-            )
-            image = paper.image
-            refinement_s = paper.duration_s
-            duration += refinement_s
-            variant = 'paper_srmpgd'
+            try:
+                paper = run_paper_refinement(
+                    runner, case, config, aligned, state, output_dir, save_frames=False
+                )
+                image = paper.image
+                refinement_s = paper.duration_s
+                duration += refinement_s
+                variant = 'paper_srmpgd'
+                refinement_metadata = {
+                    'selected_iteration': paper.selected_iteration,
+                    'stop_reason': paper.stop_reason,
+                    'numerical_refinement_fallback': paper.stop_reason.startswith(
+                        'non_finite'
+                    ),
+                }
+            except FloatingPointError as exc:
+                # Défense supplémentaire pour une ancienne version de run_srmpgd ou une
+                # autre branche numérique : la diffusion finie reste une observation valide.
+                variant = 'base_after_failed_paper'
+                refinement_metadata = {
+                    'selected_iteration': 0,
+                    'stop_reason': f'floating_point_error: {exc}',
+                    'numerical_refinement_fallback': True,
+                }
         row = evaluate_candidate(
             'search', case, config, variant, image, aligned, duration,
             state['image'], output_dir,
             {
                 'trial_number': trial.number, 'seed_index': seed_index,
                 'refinement_s': refinement_s, 'peak_vram_gib': cuda_memory_gib()['peak_allocated'],
+                **refinement_metadata,
             },
         )
         append_jsonl(SEARCH_RESULTS_PATH, row)
@@ -1139,12 +1168,22 @@ def search_one_model(model_name, runner_type):
             row['duration_s'],
         )
 
-    remaining = max(0, OPTUNA_TRIALS_PER_MODEL - len(study.trials))
-    if remaining:
-        study.optimize(objective, n_trials=remaining, gc_after_trial=True)
-    runner.close()
-    gc.collect()
-    torch.cuda.empty_cache()
+    completed_count = sum(
+        trial.state == optuna.trial.TrialState.COMPLETE for trial in study.trials
+    )
+    remaining = max(0, OPTUNA_TRIALS_PER_MODEL - completed_count)
+    try:
+        if remaining:
+            study.optimize(
+                objective,
+                n_trials=remaining,
+                gc_after_trial=True,
+                catch=(FloatingPointError,),
+            )
+    finally:
+        runner.close()
+        gc.collect()
+        torch.cuda.empty_cache()
     return study
 
 
@@ -1236,6 +1275,7 @@ if RUN_CONFIRMATION and search_rows:
                 image = state['image']
                 duration = state['duration_s']
                 variant = 'base'
+                refinement_metadata = {}
                 if config.get('refinement') == 'paper':
                     paper = run_paper_refinement(
                         runner, case, config, aligned, state, output_dir, save_frames=False
@@ -1243,9 +1283,20 @@ if RUN_CONFIRMATION and search_rows:
                     image, duration, variant = (
                         paper.image, duration + paper.duration_s, 'paper_srmpgd'
                     )
+                    refinement_metadata = {
+                        'selected_iteration': paper.selected_iteration,
+                        'stop_reason': paper.stop_reason,
+                        'numerical_refinement_fallback': paper.stop_reason.startswith(
+                            'non_finite'
+                        ),
+                    }
                 row = evaluate_candidate(
                     'confirmation', case, config, variant, image, aligned, duration,
-                    state['image'], output_dir, {'source_trial': source.get('trial_number')},
+                    state['image'], output_dir,
+                    {
+                        'source_trial': source.get('trial_number'),
+                        **refinement_metadata,
+                    },
                 )
                 append_jsonl(RESULTS_PATH, row)
                 confirmation_rows.append(row)

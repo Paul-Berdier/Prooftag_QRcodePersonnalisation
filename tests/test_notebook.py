@@ -321,6 +321,8 @@ def test_e013_compares_exact_geometry_sd15_sd21_and_builds_policy_dataset():
     assert "negative_profile" in source
     assert "control_start" in source
     assert "constraints_func=constraints_func" in source
+    assert "trial.state == optuna.trial.TrialState.COMPLETE" in source
+    assert "catch=(FloatingPointError,)" in source
     assert "directions=['maximize', 'maximize', 'maximize', 'minimize']" in source
     assert "policy-dataset.csv" in source
     assert "CatBoostClassifier" in source
@@ -331,3 +333,77 @@ def test_e013_compares_exact_geometry_sd15_sd21_and_builds_policy_dataset():
     assert "physical-validation.csv" in source
     assert "{step_index:03d}.jpg" in source
     assert "RESUME_RUN_NAME" in source
+
+
+def test_e014a_uses_real_qart_and_keeps_exact_payload_claims_separate():
+    source = Path("notebooks/11_e014a_qart_blueprint_bakeoff.ipynb").read_text(
+        encoding="utf-8"
+    )
+    dockerfile = Path("Dockerfile.notebook").read_text(encoding="utf-8")
+    launcher = Path("scripts/notebook-remote.ps1").read_text(encoding="utf-8")
+
+    assert "6e0e00804a1994db7098432c19fadfc552071e30" in source
+    assert "/usr/local/bin/qart" in source
+    assert "canonical_url_match" in source
+    assert "exact_payload_mask_search_m" in source
+    assert "adaptive_exact_payload_m" in source
+    assert "all_mask_costs" in source
+    assert "QART_REPEATS = 3" in source
+    assert "load_saved_target" in source
+    assert "stage1-control-preflight.json" in source
+    assert "paired_stage2_latents" in source
+    assert "selected-blueprint.png" in source
+    assert "selected-matrix.npy" in source
+    assert "exact payload only" in source
+    assert "FROM rust:1.85-slim-bookworm AS qart-builder" in dockerfile
+    assert "zxing-cpp" in dockerfile
+    assert "11_e014a_qart_blueprint_bakeoff.ipynb" in launcher
+
+
+def test_e014b_factorizes_channel_timestep_alpha_and_decoder_gradient_audit():
+    source = Path("notebooks/12_e014b_freeqr_latent_fusion.ipynb").read_text(
+        encoding="utf-8"
+    )
+
+    assert "target_timestep_after_step" in source
+    assert "for channel in range(4)" in source
+    assert "WINDOWS" in source
+    assert "ALPHAS = [0.05, 0.10, 0.15, 0.22]" in source
+    assert "blueprint_latent" in source
+    assert "differentiable_module_loss" in source
+    assert "baseline_no_fusion" in source
+    assert "FreeQR-inspired channel/timestep reconstruction" in source
+
+
+def test_e015_is_an_aesthetic_reference_comparison_not_a_qr_model_claim():
+    source = Path("notebooks/13_e015_aesthetic_backbone_reference.ipynb").read_text(
+        encoding="utf-8"
+    )
+
+    assert "sd15_cetus" in source
+    assert "stabilityai/stable-diffusion-xl-base-1.0" in source
+    assert "black-forest-labs/FLUX.1-schnell" in source
+    assert "enable_model_cpu_offload" in source
+    assert "resolved-model-revisions.json" in source
+    assert "model_info(spec['repo']).sha" in source
+    assert "CLIPQualityScorer" in source
+    assert "selection_scope" in source
+    assert "no claim about QR diffusion compatibility" in source
+
+
+def test_e016_labels_with_real_decoders_prevents_leakage_and_audits_gradients():
+    source = Path("notebooks/14_e016_differentiable_scan_surrogate.ipynb").read_text(
+        encoding="utf-8"
+    )
+
+    assert "DEFAULT_SCENARIOS" in source
+    assert "len(decoder_names) < 3" in source
+    assert "GroupShuffleSplit" in source
+    assert "isdisjoint" in source
+    assert "BCEWithLogitsLoss" in source
+    assert "average_precision_score" in source
+    assert "brier_score_loss" in source
+    assert "calibration_curve" in source
+    assert "real_decoder_improved" in source
+    assert "physical-captures-template.csv" in source
+    assert "production_usable" in source

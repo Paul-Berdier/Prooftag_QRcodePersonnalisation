@@ -1,6 +1,17 @@
+FROM rust:1.85-slim-bookworm AS qart-builder
+
+ARG QART_COMMIT=6e0e00804a1994db7098432c19fadfc552071e30
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git pkg-config \
+    && git clone https://github.com/andrewyur/qart.git /src/qart \
+    && git -C /src/qart checkout "$QART_COMMIT" \
+    && test "$(git -C /src/qart rev-parse HEAD)" = "$QART_COMMIT" \
+    && cargo build --manifest-path /src/qart/Cargo.toml --release --locked
+
 FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
 
 ARG DIFFQRCODER_COMMIT=e24ea73ee2e13c7e6e87cb422e8b11784e70ae00
+ARG QART_COMMIT=6e0e00804a1994db7098432c19fadfc552071e30
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -8,6 +19,8 @@ ENV PYTHONUNBUFFERED=1 \
     TORCH_HOME=/cache/torch
 
 USER root
+COPY --from=qart-builder /src/qart/target/release/qart /usr/local/bin/qart
+COPY --from=qart-builder /src/qart/LICENSE /opt/licenses/qart-LICENSE
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl git libgl1 libglib2.0-0 libzbar0 \
     && rm -rf /var/lib/apt/lists/*
@@ -24,6 +37,9 @@ RUN pip install --upgrade pip \
         tqdm==4.67.1 \
         transformers==4.48.3 \
         torchvision==0.21.0
+
+RUN qart help >/dev/null \
+    && python -c "import importlib.metadata, zxingcpp, kornia; print('QArt/ZXing/Kornia stack OK:', '$QART_COMMIT', importlib.metadata.version('zxing-cpp'), kornia.__version__)"
 
 RUN git clone https://github.com/jwliao1209/DiffQRCoder.git /opt/DiffQRCoder \
     && git -C /opt/DiffQRCoder checkout "$DIFFQRCODER_COMMIT" \

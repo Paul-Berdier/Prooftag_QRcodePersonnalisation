@@ -203,3 +203,23 @@ Le lancement du notebook met en pause la charge GPU existante selon le script se
 - Les scores CLIP évaluent la cohérence et une esthétique apprise ; ils ne représentent pas à eux
   seuls la qualité Prooftag.
 - Un sélecteur appris réduit le coût moyen. Il ne remplace jamais la validation de la sortie.
+
+## Incident E013-01 - gradient SR-MPGD non fini
+
+Le premier lancement a rencontré un gradient non fini à l'itération zéro de l'essai Optuna 8 :
+SD 1.5, canvas 744, modules 16, 70 pas, H, masque 0 et SR-MPGD papier. La diffusion de 70 pas
+était terminée ; seule la correction latente était numériquement invalide.
+
+La première implémentation levait `FloatingPointError`, ce qui arrêtait toute l'étude après presque
+trois minutes de diffusion. Le comportement corrigé est :
+
+1. conserver et valider l'état zéro, qui reste une image finie ;
+2. arrêter uniquement cette correction avec
+   `stop_reason=non_finite_gradient_at_iteration_0` ;
+3. ne jamais remplacer silencieusement les NaN par un gradient arbitraire ;
+4. continuer l'étude ;
+5. viser 32 essais `COMPLETE`, sans compter les anciens essais `FAIL` dans ce quota ;
+6. libérer le modèle dans un bloc `finally` si une autre exception interrompt l'étude.
+
+La base SQLite et les huit essais complets antérieurs sont réutilisables. Il ne faut ni supprimer
+le dossier d'expérience ni recommencer la baseline.

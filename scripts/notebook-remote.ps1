@@ -10,7 +10,12 @@ param(
         "06_nacholmo_generate_live.ipynb",
         "07_diffqrcoder_official_live.ipynb",
         "08_diffqrcoder_vs_qrbtf_four_prompts.ipynb",
-        "09_diffqrcoder_faithful_srmpgd.ipynb"
+        "09_diffqrcoder_faithful_srmpgd.ipynb",
+        "10_exact_geometry_sd15_sd21_policy.ipynb",
+        "11_e014a_qart_blueprint_bakeoff.ipynb",
+        "12_e014b_freeqr_latent_fusion.ipynb",
+        "13_e015_aesthetic_backbone_reference.ipynb",
+        "14_e016_differentiable_scan_surrogate.ipynb"
     )]
     [string]$Notebook = "02_generate_live_on_gpu.ipynb",
     [switch]$Stop

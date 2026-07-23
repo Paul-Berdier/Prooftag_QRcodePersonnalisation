@@ -674,3 +674,51 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   candidat dans un budget plafonné, puis rejette.
 - **Référence complète :**
   [`docs/e013-exact-geometry-sd21-policy.md`](e013-exact-geometry-sd21-policy.md).
+- **Incident E013-01 :** l'essai Optuna 8 a produit un gradient SR-MPGD non fini dès l'itération
+  zéro. La diffusion était valide, mais l'exception arrêtait l'étude. SR-MPGD conserve désormais
+  l'état zéro, inscrit un `stop_reason` numérique et laisse l'étude continuer. Le quota Optuna
+  compte les essais `COMPLETE` plutôt que tous les états, ce qui préserve 32 observations valides.
+
+### Résultat et audit E013
+
+- **Archive :** `20260723T081024Z-e013-exact-geometry-sd15-sd21-policy-v1.tar.gz`.
+- **Complétude :** 80 lignes de baseline et 36 recherches. Les 32 recherches SD 1.5 sont
+  présentes, mais seulement 4/32 recherches SD 2.1. La confirmation multi-prompt n'a pas été
+  exécutée.
+- **Lecture :** 1/116 ligne à 26/26 et 4/116 à 2/2 sur l'original. L'unique résultat strict est
+  `p1_simple`, DiffQRCoder SD 1.5, 768 px, modules 20, 40 + 40 pas et SR-MPGD du dépôt public.
+- **Erreur de porte :** seuls 5/12 QR témoins géométriques au masque 4 passent 26/26. Quarante-sept
+  lignes utilisent exactement une combinaison masque 4 inéligible. Trente recherches emploient
+  un autre masque sans témoin exact dans l'archive ; seules 39 lignes sont certifiées éligibles.
+- **Modèles :** la baseline SD 1.5 obtient 16,03 % de validations en moyenne, contre 0,84 % pour
+  SD 2.1. SD 2.1 améliore CLIP-aesthetic mais ne préserve pas le QR.
+- **SR-MPGD papier :** amélioration dans 2/32 paires ; l'état initial reste sélectionné dans 30/32
+  cas. Le SR-MPGD public produit le seul strict, mais améliore 4 paires, en dégrade 4 et modifie
+  78,3 % des pixels en moyenne.
+- **MER :** 39 sorties ont une erreur module égale à zéro, mais une seule est stricte. La métrique
+  de centres ne prédit donc pas les décodeurs.
+- **Politique :** CatBoost n'est pas entraîné, car le dataset ne contient qu'un positif strict.
+- **Comparabilité :** le 99 % de l'article mesure 99 images originales lisibles par `qr-verify`
+  sur 100 prompts, pas une porte 26/26. L'étape QArt Reed-Solomon décrite dans l'article reste
+  absente du dépôt public et d'E013.
+- **Décision :** suspendre SD 2.1, Optuna large et l'advisor. Conserver DiffQRCoder SD 1.5,
+  recalibrer la porte sur les témoins, reproduire le protocole `qr-verify`, puis implémenter un
+  vrai QArt avant toute nouvelle recherche.
+- **Rapport complet :**
+  [`docs/e013-results-and-project-audit-2026-07-23.md`](e013-results-and-project-audit-2026-07-23.md).
+
+## E014–E016 — plan causal blueprint, latent, esthétique et surrogate
+
+- **E014A :** intégration du QArt public réel au commit
+  `6e0e00804a1994db7098432c19fadfc552071e30`. Sa correction L et son fragment `#…` sont
+  explicitement séparés des variantes exact-payload. Comparaison appariée avec QR binaire,
+  meilleur des huit masques légaux et blueprint Prooftag adaptatif.
+- **E014B :** reconstruction déclarée `FreeQR-inspired`, avec ablations successives du canal,
+  de la fenêtre temporelle et de la force. La cible bruitée est alignée sur le timestep suivant
+  car le callback intervient après le pas DDIM.
+- **E015 :** SD 1.5, SDXL et FLUX comparés comme références esthétiques uniquement. Aucun résultat
+  ne sera interprété comme une compatibilité ControlNet QR.
+- **E016 :** labels demandés à OpenCV, ZBar et ZXing-cpp sur les dégradations réelles, split
+  groupé anti-fuite, CNN multi-sorties, calibration et audit du gradient avec les vrais décodeurs.
+- **État :** notebooks et protocole implémentés ; résultats RTX à produire, aucun taux inventé.
+  Voir [`docs/e014-e016-experiment-protocol.md`](e014-e016-experiment-protocol.md).

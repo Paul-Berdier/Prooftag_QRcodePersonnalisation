@@ -283,6 +283,7 @@ def run_srmpgd(
     states: list[tuple[SRMPGDStep, Any, Image.Image]] = []
     stop_reason = "max_iterations"
     for iteration in range(config.max_iterations + 1):
+        numerical_stop_reason = None
         with torch.enable_grad():
             working = working.detach().requires_grad_(True)
             decoded, image = _decode_latent(pipeline, working)
@@ -323,11 +324,13 @@ def run_srmpgd(
             if not validation["strict_all"] and iteration < config.max_iterations:
                 gradient = torch.autograd.grad(objective, working, only_inputs=True)[0]
                 if not torch.isfinite(gradient).all():
-                    raise FloatingPointError(
-                        f"non-finite SR-MPGD gradient at iteration {iteration}"
+                    numerical_stop_reason = (
+                        f"non_finite_gradient_at_iteration_{iteration}"
                     )
-                gradient_rms = float(gradient.square().mean().sqrt().detach().cpu())
-                next_step_rms = config.step_size * gradient_rms
+                    gradient = None
+                else:
+                    gradient_rms = float(gradient.square().mean().sqrt().detach().cpu())
+                    next_step_rms = config.step_size * gradient_rms
 
             step = SRMPGDStep(
                 iteration=iteration,
@@ -352,6 +355,12 @@ def run_srmpgd(
                 preview_callback(image, step)
             if step.strict_all:
                 stop_reason = "strict_validation_passed"
+                break
+            if numerical_stop_reason is not None:
+                # A failed refinement must not abort a multi-hour search. State i is still a
+                # valid decoded candidate and is ranked normally; the stop reason makes the
+                # numerical failure explicit instead of silently replacing NaNs with zeros.
+                stop_reason = numerical_stop_reason
                 break
             if gradient is not None:
                 working = working - config.step_size * gradient
