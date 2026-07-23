@@ -45,8 +45,10 @@ dev = [
 notebook = [
   "jupyterlab>=4.2,<5",
   "matplotlib>=3.9,<4",
+  "pandas>=2.2,<3",
 ]
 optimizer = [
+  "catboost>=1.2.8,<2",
   "joblib>=1.4,<2",
   "optuna>=4.4,<5",
   "scikit-learn>=1.5,<2",

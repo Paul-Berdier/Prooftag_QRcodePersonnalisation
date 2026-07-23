@@ -168,6 +168,32 @@ def _decode_latent(pipeline: Any, latent: Any) -> tuple[Any, Image.Image]:
     return decoded, image
 
 
+def _module_error_for_canvas(
+    image: Image.Image,
+    blueprint: QRBlueprint,
+    *,
+    crop_padding_px: int,
+) -> float:
+    """Measure modules on the same core crop used by the differentiable objective."""
+    if crop_padding_px == 0:
+        return module_error_rate(image, blueprint)
+    core_image = image.crop(
+        (
+            crop_padding_px,
+            crop_padding_px,
+            image.width - crop_padding_px,
+            image.height - crop_padding_px,
+        )
+    )
+    core_blueprint = _core_blueprint(
+        blueprint,
+        height=core_image.height,
+        width=core_image.width,
+        strip_border=blueprint.border > 0,
+    )
+    return module_error_rate(core_image, core_blueprint)
+
+
 def _validation_values(values: Mapping[str, Any] | None) -> dict[str, Any]:
     values = values or {}
     passed = int(values.get("passed", 0))
@@ -312,7 +338,11 @@ def run_srmpgd(
                 surrogate_module_error_rate=float(
                     diagnostics["module_error_rate"].detach().cpu()
                 ),
-                actual_module_error_rate=module_error_rate(image, blueprint),
+                actual_module_error_rate=_module_error_for_canvas(
+                    image,
+                    blueprint,
+                    crop_padding_px=config.crop_padding_px,
+                ),
                 gradient_rms=gradient_rms,
                 next_step_rms=next_step_rms,
                 **validation,
@@ -336,6 +366,10 @@ def run_srmpgd(
         selected_iteration=selected_step.iteration,
         stop_reason=stop_reason,
         duration_s=time.perf_counter() - started,
-        initial_module_error_rate=module_error_rate(reference_image, blueprint),
+        initial_module_error_rate=_module_error_for_canvas(
+            reference_image,
+            blueprint,
+            crop_padding_px=config.crop_padding_px,
+        ),
         final_module_error_rate=selected_step.actual_module_error_rate,
     )

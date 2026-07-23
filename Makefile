@@ -1,4 +1,4 @@
-.PHONY: install test lint run notebook notebook-search notebook-optimize notebook-controlnet build build-notebook deploy status benchmark benchmark-e004 benchmark-e005 notebook-start notebook-stop pause-vllm resume-vllm
+.PHONY: install test lint run notebook notebook-search notebook-optimize notebook-controlnet notebook-e013 build build-notebook deploy status benchmark benchmark-e004 benchmark-e005 notebook-start notebook-stop pause-vllm resume-vllm
 
 install:
 	python -m pip install -e '.[dev]'
@@ -23,6 +23,9 @@ notebook-optimize:
 
 notebook-controlnet:
 	python -m jupyter lab notebooks/05_controlnet_model_bakeoff.ipynb
+
+notebook-e013:
+	python -m jupyter lab notebooks/10_exact_geometry_sd15_sd21_policy.ipynb
 
 build:
 	docker build -t prooftag-qr:dev .

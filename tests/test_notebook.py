@@ -291,3 +291,43 @@ def test_e012_uses_exact_stage2_latent_original_qr_and_paper_srmpgd_objective():
     assert "Le proxy QArt de" not in source
     assert "latent_from_image" not in source
     assert "SRMPGD_LR = 0.1" not in source
+
+
+def test_e013_compares_exact_geometry_sd15_sd21_and_builds_policy_dataset():
+    source = Path("notebooks/10_exact_geometry_sd15_sd21_policy.ipynb").read_text(
+        encoding="utf-8"
+    )
+
+    assert "e013-exact-geometry-sd15-sd21-policy-v1" in source
+    assert "generate_aligned_qr" in source
+    assert "'canvas': 744" in source
+    assert "'canvas': 768" in source
+    assert "'module_size': 16" in source
+    assert "'module_size': 20" in source
+    assert "padding=(canvas - core_modules*module_size)/2; no QR resize" in source
+    assert "aligned_module_diagnostics" in source
+    assert "assert original_passed == len(originals)" in source
+    assert "DiffQRCoderPipeline" in source
+    assert "monster-labs/control_v1p_sd15_qrcode_monster" in source
+    assert "DionTimmer/controlnet_qrcode-control_v11p_sd21" in source
+    assert "StableDiffusionControlNetImg2ImgPipeline" in source
+    assert "UPSTREAM_SRMPGD_LR = 0.1" in source
+    assert "step_size=1000.0" in source
+    assert "lpips_weight=0.01" in source
+    assert "output_type='latent'" in source
+    assert "srmpgd_num_iteration=UPSTREAM_SRMPGD_ITERATIONS" in source
+    assert "TPESampler(" in source
+    assert "paper_step_size" in source
+    assert "negative_profile" in source
+    assert "control_start" in source
+    assert "constraints_func=constraints_func" in source
+    assert "directions=['maximize', 'maximize', 'maximize', 'minimize']" in source
+    assert "policy-dataset.csv" in source
+    assert "CatBoostClassifier" in source
+    assert "GroupKFold" in source
+    assert "POLICY_MIN_ROWS = 100" in source
+    assert "deliverable_candidate" in source
+    assert "DELIVERY_TARGET = 0.999" in source
+    assert "physical-validation.csv" in source
+    assert "{step_index:03d}.jpg" in source
+    assert "RESUME_RUN_NAME" in source

@@ -114,6 +114,28 @@ class CLIPQualityScorer:
             text_embedding[0].cpu().numpy(),
         )
 
+    def text_embedding(self, prompt: str) -> np.ndarray:
+        """Return a normalized CLIP text vector without processing a dummy image."""
+        import torch
+        import torch.nn.functional as functional
+
+        model, processor, _ = self._load()
+        inputs = processor(
+            text=[prompt],
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+        )
+        text_inputs = {
+            key: value.to(self.device)
+            for key, value in inputs.items()
+            if key in {"input_ids", "attention_mask"}
+        }
+        with torch.inference_mode():
+            embedding = model.get_text_features(**text_inputs)
+            embedding = functional.normalize(embedding.float(), dim=-1)
+        return embedding[0].cpu().numpy()
+
     def score(self, image: Image.Image, prompt: str) -> CLIPQualityScore:
         import torch
 

@@ -653,3 +653,24 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   baseline et l'expérience fonctionnelle E013a.
 - **État :** implémenté et testé statiquement ; campagne RTX requise, aucun taux inventé. Voir
   [`docs/e012-faithful-srmpgd.md`](e012-faithful-srmpgd.md).
+
+## E013 - géométrie exacte, SD 2.1 et politique contextuelle
+
+- **Déclencheur :** l'audit E012 a montré une interaction très forte entre prompt et nombre de pas,
+  tandis que SR-MPGD sélectionnait le plus souvent l'itération zéro.
+- **Erreur géométrique identifiée :** le QR 740 px était ramené à 736 px alors que SRL supposait
+  des modules de 20 px. Le cœur v3 n'était donc pas parfaitement aligné.
+- **Correction :** cœur 29 × 20 = 580 px placé sans interpolation sur 744 px (padding 82) ou
+  768 px (padding 94). Les métriques de modules utilisent ces bornes exactes.
+- **Fondations :** DiffQRCoder SD 1.5 / QR Monster v2 contre SD 2.1 /
+  `DionTimmer/controlnet_qrcode-control_v11p_sd21`.
+- **Corrections séparées :** SR-MPGD papier et comportement du dépôt public ne sont plus agrégés
+  sous un même nom.
+- **Recherche :** Optuna TPE multiobjectif contraint, confirmation des meilleures recettes sur les
+  quatre prompts, puis export d'un dataset de politique.
+- **Garde ML :** CatBoost n'est entraîné qu'à partir de 100 observations et 12 succès stricts,
+  avec validation groupée par prompt.
+- **Livraison :** seule une image 26/26 peut être livrée ; sinon la politique essaie un autre
+  candidat dans un budget plafonné, puis rejette.
+- **Référence complète :**
+  [`docs/e013-exact-geometry-sd21-policy.md`](e013-exact-geometry-sd21-policy.md).

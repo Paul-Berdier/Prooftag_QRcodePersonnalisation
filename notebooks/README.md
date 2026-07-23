@@ -19,6 +19,32 @@ Les neuf notebooks n'ont pas le même rôle :
   un QR partagé, DiffQRCoder-paper et reproduction publique QRBTF, puis SR-MPGD sur les deux.
 - `09_diffqrcoder_faithful_srmpgd.ipynb` est la référence corrective E012 : DiffQRCoder sur quatre
   prompts, Stage 2 à 40 puis 100 pas, latent final exact et SR-MPGD conforme aux équations 12-14.
+- `10_exact_geometry_sd15_sd21_policy.ipynb` est l'expérience E013 : QR aligné sans
+  redimensionnement, comparaison DiffQRCoder SD 1.5 / ControlNet QR SD 2.1, SR-MPGD papier et
+  amont séparés, Optuna contraint, confirmation multi-prompts et dataset pour le sélecteur
+  CatBoost.
+
+## E013 recommandé : géométrie, modèle et recette adaptative
+
+E013 corrige la cause géométrique découverte après E012. Un QR v3 a un cœur de 29 modules. Avec
+20 pixels par module, ce cœur mesure exactement 580 pixels. Le notebook utilise donc :
+
+- 744 pixels avec 82 pixels de quiet zone de chaque côté pour SD 1.5 ;
+- 768 pixels avec 94 pixels de quiet zone de chaque côté pour SD 2.1.
+
+Il ne redimensionne jamais un QR complet de 740 à 736 pixels. Les contrôles M, Q et H sont décodés
+avant le chargement du modèle. Les images intermédiaires de la baseline sont enregistrées à chaque
+pas. La recherche Optuna conserve seulement les points d'observation nécessaires afin de ne pas
+doubler inutilement le temps de calcul et le volume disque.
+
+Lancer depuis PowerShell après reconstruction de l'image distante :
+
+```powershell
+.\scripts\notebook-remote.ps1 -Notebook 10_exact_geometry_sd15_sd21_policy.ipynb
+```
+
+La procédure complète, les objectifs, les limites et la stratégie de livraison sont documentés
+dans [`../docs/e013-exact-geometry-sd21-policy.md`](../docs/e013-exact-geometry-sd21-policy.md).
 
 ## E012 recommandé : SR-MPGD corrigé et auditable
 
