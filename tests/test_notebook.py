@@ -392,6 +392,10 @@ def test_e015_is_an_aesthetic_reference_comparison_not_a_qr_model_claim():
     assert "stabilityai/stable-diffusion-xl-base-1.0" in source
     assert "black-forest-labs/FLUX.1-schnell" in source
     assert "enable_model_cpu_offload" in source
+    assert "enable_sequential_cpu_offload" in source
+    assert "pipeline.vae.enable_slicing()" in source
+    assert "pipeline.vae.enable_tiling()" in source
+    assert "'offload_mode': 'sequential_cpu'" in source
     assert "resolved-model-revisions.json" in source
     assert "model_info(spec['repo'], token=HF_TOKEN).sha" in source
     assert "check_model_access" in source

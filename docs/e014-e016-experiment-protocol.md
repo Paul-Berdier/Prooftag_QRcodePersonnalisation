@@ -111,8 +111,13 @@ n'est lancée. E015 répond donc à « quelle référence est la plus utile/esth
 « quel modèle remplace DiffQRCoder ? ». Une migration SDXL ou FLUX nécessitera un mécanisme de
 contrôle compatible et une expérience dédiée.
 
-FLUX utilise l'offload CPU sur la carte 20 Go. Le premier lancement peut surtout être limité par le
-téléchargement et l'espace du cache Hugging Face. Les modèles sont libérés entre familles.
+FLUX utilise l'offload CPU **séquentiel** sur la carte 20 Go, avec slicing et tiling du VAE.
+L'offload par modèle ne convient pas ici : il tente de déplacer le Transformer 12B BF16 entier sur
+le GPU et occupe les 19,67 Gio avant même le premier pas. L'offload séquentiel ne charge que le
+sous-module actif ; il est nettement plus lent mais conserve les poids BF16 et permet à E015 de
+mesurer la référence sans quantification. Le mode exact est enregistré dans chaque ligne.
+Le premier lancement peut surtout être limité par le téléchargement et l'espace du cache Hugging
+Face. Les modèles sont libérés entre familles.
 Son encodeur T5 exige `sentencepiece==0.2.0` et `protobuf==5.29.3`. Ces deux dépendances sont
 installées et contrôlées pendant la construction de l'image notebook ; E015 les importe avant tout
 téléchargement de modèle afin qu'une image obsolète échoue immédiatement.

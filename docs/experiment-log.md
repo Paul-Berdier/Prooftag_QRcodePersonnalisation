@@ -726,6 +726,10 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   du tokenizer T5 a échoué faute de `sentencepiece` et `protobuf`. Les versions `0.2.0` et `5.29.3`
   sont maintenant figées dans l'extra notebook, contrôlées pendant le build Docker et importées
   par E015 avant tout téléchargement. Les fichiers FLUX déjà reçus restent dans le PVC de cache.
+- **Incident E015-03 :** `enable_model_cpu_offload()` a chargé le Transformer FLUX 12B BF16 entier
+  sur la RTX, saturant 19,66/19,67 Gio avant le premier pas. E015 suit désormais le profil officiel
+  bas VRAM : `enable_sequential_cpu_offload()`, slicing et tiling VAE. Ce choix plus lent, mais sans
+  quantification, est enregistré comme `offload_mode=sequential_cpu`.
 - **E016 :** labels demandés à OpenCV, ZBar et ZXing-cpp sur les dégradations réelles, split
   groupé anti-fuite, CNN multi-sorties, calibration et audit du gradient avec les vrais décodeurs.
 - **État :** notebooks et protocole implémentés ; résultats RTX à produire, aucun taux inventé.

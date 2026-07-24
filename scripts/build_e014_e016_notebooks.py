@@ -1442,17 +1442,17 @@ MODEL_SPECS = [
         'name': 'sd15_cetus', 'kind': 'sd15',
         'repo': 'fp16-guy/Cetus-Mix_Whalefall_fp16_cleaned',
         'filename': 'cetusMix_Whalefall2_fp16.safetensors',
-        'steps': 30, 'guidance': 7.5,
+        'steps': 30, 'guidance': 7.5, 'offload_mode': 'none',
     }},
     {{
         'name': 'sdxl_base_1_0', 'kind': 'sdxl',
         'repo': 'stabilityai/stable-diffusion-xl-base-1.0',
-        'steps': 30, 'guidance': 7.0,
+        'steps': 30, 'guidance': 7.0, 'offload_mode': 'model_cpu',
     }},
     {{
         'name': 'flux_1_schnell', 'kind': 'flux',
         'repo': 'black-forest-labs/FLUX.1-schnell',
-        'steps': 4, 'guidance': 0.0,
+        'steps': 4, 'guidance': 0.0, 'offload_mode': 'sequential_cpu',
     }},
 ]
 
@@ -1532,7 +1532,11 @@ def load_pipeline(spec):
             torch_dtype=torch.bfloat16, cache_dir='/cache/huggingface',
             token=HF_TOKEN,
         )
-        pipeline.enable_model_cpu_offload()
+        # FLUX 12B BF16 ne tient pas comme un bloc sur la RTX 20 Gio.
+        # L'offload séquentiel charge seulement le sous-module en cours sur le GPU.
+        pipeline.enable_sequential_cpu_offload()
+        pipeline.vae.enable_slicing()
+        pipeline.vae.enable_tiling()
     else:
         raise ValueError(spec['kind'])
     if hasattr(pipeline, 'enable_attention_slicing'):
@@ -1697,6 +1701,7 @@ for spec in resolved_specs:
             'resolved_revision': spec['revision'],
             'prompt_id': case['id'], 'prompt': case['text'], 'seed': case['seed'],
             'steps': spec['steps'], 'guidance': spec['guidance'],
+            'offload_mode': spec['offload_mode'],
             'load_seconds': load_seconds, 'generation_seconds': generation_seconds,
             'peak_vram_gib': peak_vram, **quality,
             'adaptive_minimum_fraction': minimum_fraction,
