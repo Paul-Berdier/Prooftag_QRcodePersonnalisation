@@ -162,13 +162,14 @@ git pull
 Puis, après E014A :
 
 ```powershell
-.\scripts\notebook-remote.ps1 -Stop
-.\scripts\notebook-remote.ps1 -Notebook 12_e014b_freeqr_latent_fusion.ipynb
+.\scripts\notebook-remote.ps1 -Reset -Notebook 12_e014b_freeqr_latent_fusion.ipynb
 ```
 
 E015 et E016 se lancent avec les noms `13_e015_aesthetic_backbone_reference.ipynb` et
-`14_e016_differentiable_scan_surrogate.ipynb`. Toujours arrêter la session avant de changer de
-notebook afin de restituer le GPU à l'API/vLLM.
+`14_e016_differentiable_scan_surrogate.ipynb`. `-Reset` supprime le pod Jupyter et tous ses
+kernels, attend la libération réelle de la VRAM, recrée le pod et ouvre le notebook suivant, sans
+restaurer temporairement l'API/vLLM. À la fin de toute la session, utiliser `-Stop` pour leur
+restituer le GPU.
 
 ## Portes de décision
 

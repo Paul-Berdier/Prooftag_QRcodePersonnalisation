@@ -253,6 +253,14 @@ le gabarit `physical-validation-template.csv` pour les trois meilleurs modèles.
 .\scripts\notebook-remote.ps1 -Stop
 ```
 
+Entre deux notebooks GPU, ne pas conserver l'ancien kernel : il garde presque toute la VRAM.
+La commande suivante supprime le pod Jupyter et tous ses kernels, attend la libération du GPU,
+recrée le pod puis ouvre directement le notebook suivant, sans restaurer temporairement vLLM/API :
+
+```powershell
+.\scripts\notebook-remote.ps1 -Reset -Notebook 12_e014b_freeqr_latent_fusion.ipynb
+```
+
 ## Première installation ou mise à jour sur le serveur
 
 ```bash

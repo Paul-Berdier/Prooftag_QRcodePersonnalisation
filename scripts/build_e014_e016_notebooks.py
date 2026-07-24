@@ -264,6 +264,20 @@ def make_gif(folder, output):
         frame.close()
 
 
+def release_stage2_guidance(pipeline):
+    guidance = getattr(pipeline, 'srpg', None)
+    if guidance is not None:
+        try:
+            guidance.to('cpu')
+        except Exception:
+            pass
+        pipeline.srpg = None
+        del guidance
+    gc.collect()
+    torch.cuda.empty_cache()
+    torch.cuda.synchronize()
+
+
 def diffusion_callback(pipeline, aligned, label, steps, folder):
     folder.mkdir(parents=True, exist_ok=True)
     trace = []
@@ -634,6 +648,7 @@ if RUN_STAGE2:
                 pipe, aligned, f"{{prompt_id}} / {{blueprint_name}}",
                 STAGE2_STEPS, output_dir / 'frames',
             )
+            release_stage2_guidance(pipe)
             initial = paired_stage2_latents(
                 pipe, stage1['tensor'], prompt_case['seed'] + 10000, STAGE2_STEPS
             )
@@ -684,6 +699,7 @@ if RUN_STAGE2:
             append_jsonl(RESULTS_PATH, row)
             print(prompt_id, blueprint_name, validation['passed'], '/', validation['total'])
             del result, final_latent, initial
+            release_stage2_guidance(pipe)
             gc.collect()
             torch.cuda.empty_cache()
 """
@@ -849,6 +865,17 @@ class PaperLPIPSLoss(torch.nn.Module):
 upstream_srpg.PerceptualLoss = PaperLPIPSLoss
 assert torch.cuda.is_available()
 print(torch.cuda.get_device_name(0))
+free_gib, total_gib = torch.cuda.mem_get_info()
+free_gib /= 2**30
+total_gib /= 2**30
+print(f'VRAM avant modèle : {free_gib:.2f} / {total_gib:.2f} Gio libres')
+if free_gib < 18.0:
+    raise RuntimeError(
+        f'Seulement {free_gib:.2f} Gio libres avant le modèle. '
+        'Un ancien kernel Jupyter utilise encore la RTX. Depuis PowerShell : '
+        r'.\\scripts\\notebook-remote.ps1 -Reset '
+        r'-Notebook 12_e014b_freeqr_latent_fusion.ipynb'
+    )
 """
     ),
     markdown("## 1. Reprendre un résultat E014A sans deviner sa géométrie"),
@@ -938,6 +965,8 @@ for component in [pipe.unet, pipe.controlnet, pipe.vae, pipe.text_encoder]:
     component.requires_grad_(False).eval()
 pipe.enable_attention_slicing('max')
 pipe.enable_vae_slicing()
+pipe.unet.enable_gradient_checkpointing()
+pipe.controlnet.enable_gradient_checkpointing()
 stage1_tensor = stage1_tensor.to('cuda', dtype=torch.float16)
 
 
@@ -1140,12 +1169,27 @@ def make_gif(folder, output):
         frame.close()
 
 
+def release_stage2_guidance():
+    guidance = getattr(pipe, 'srpg', None)
+    if guidance is not None:
+        try:
+            guidance.to('cpu')
+        except Exception:
+            pass
+        pipe.srpg = None
+        del guidance
+    gc.collect()
+    torch.cuda.empty_cache()
+    torch.cuda.synchronize()
+
+
 def run_config(config):
     if config['name'] in completed_names():
         print('SKIP', config['name'])
         return
     output_dir = RUN_DIR / config['name']
     output_dir.mkdir(parents=True, exist_ok=True)
+    release_stage2_guidance()
     callback, trace = callback_for(config, output_dir)
     started = time.perf_counter()
     result = pipe._run_stage2(
@@ -1183,6 +1227,7 @@ def run_config(config):
     append_row(row)
     print(config['name'], validation['passed'], '/', validation['total'])
     del result, final_latent
+    release_stage2_guidance()
     gc.collect()
     torch.cuda.empty_cache()
 

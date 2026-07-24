@@ -18,6 +18,7 @@ param(
         "14_e016_differentiable_scan_surrogate.ipynb"
     )]
     [string]$Notebook = "02_generate_live_on_gpu.ipynb",
+    [switch]$Reset,
     [switch]$Stop
 )
 
@@ -60,6 +61,10 @@ function Assert-LocalPortAvailable {
     }
 }
 
+if ($Stop -and $Reset) {
+    throw "Utiliser soit -Stop, soit -Reset, pas les deux."
+}
+
 if ($Stop) {
     Stop-LocalTunnel
     Stop-RemoteNotebook
@@ -72,7 +77,8 @@ Assert-LocalPortAvailable
 $remoteStarted = $false
 $tunnel = $null
 try {
-    $remoteOutput = & ssh $Server "cd $RemoteRepository && bash scripts/notebook-server.sh start"
+    $remoteAction = if ($Reset) { "reset" } else { "start" }
+    $remoteOutput = & ssh $Server "cd $RemoteRepository && bash scripts/notebook-server.sh $remoteAction"
     if ($LASTEXITCODE -ne 0) {
         throw "Impossible de demarrer le notebook distant."
     }
@@ -116,6 +122,9 @@ try {
                 -Headers $headers -TimeoutSec 1 | Out-Null
             Start-Process $url
             Write-Host "Notebook GPU ouvert sur le PC : $url"
+            if ($Reset) {
+                Write-Host "Tous les anciens kernels ont ete supprimes et la VRAM a ete liberee."
+            }
             Write-Host "Pour arreter et restaurer le GPU : .\scripts\notebook-remote.ps1 -Stop"
             exit 0
         }

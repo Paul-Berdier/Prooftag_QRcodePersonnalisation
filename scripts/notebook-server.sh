@@ -82,6 +82,19 @@ case "$command_name" in
     trap - ERR
     print_token
     ;;
+  reset)
+    ensure_token
+    notebook_replicas="$(replicas_or_zero "$notebook_deployment" "$namespace")"
+    if [[ "$notebook_replicas" -lt 1 ]]; then
+      echo "Le notebook n'est pas actif. Utiliser start pour mémoriser et arrêter les charges GPU." >&2
+      exit 1
+    fi
+    kubectl scale "deployment/${notebook_deployment}" -n "$namespace" --replicas=0 >/dev/null
+    wait_for_pods_to_stop "$namespace" prooftag-qr-notebook
+    kubectl scale "deployment/${notebook_deployment}" -n "$namespace" --replicas=1 >/dev/null
+    kubectl rollout status "deployment/${notebook_deployment}" -n "$namespace" --timeout=1200s
+    print_token
+    ;;
   stop)
     restore_previous_state
     ;;
@@ -89,7 +102,7 @@ case "$command_name" in
     kubectl get deployment,pod,service -n "$namespace" -l app=prooftag-qr-notebook
     ;;
   *)
-    echo "Usage: $0 {start|stop|status}" >&2
+    echo "Usage: $0 {start|reset|stop|status}" >&2
     exit 2
     ;;
 esac

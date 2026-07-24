@@ -77,6 +77,9 @@ def test_remote_gpu_notebook_has_an_isolated_kubernetes_runtime():
     assert "mountPath: /workspace/results" in manifest
     assert "restore_previous_state" in server
     assert "JUPYTER_TARGET" in server
+    assert "[switch]$Reset" in launcher
+    assert "bash scripts/notebook-server.sh $remoteAction" in launcher
+    assert "reset)" in server
 
 
 def test_parameter_search_notebook_has_reproducible_screen_and_confirmation():
@@ -373,6 +376,9 @@ def test_e014b_factorizes_channel_timestep_alpha_and_decoder_gradient_audit():
     assert "differentiable_module_loss" in source
     assert "baseline_no_fusion" in source
     assert "FreeQR-inspired channel/timestep reconstruction" in source
+    assert "free_gib < 18.0" in source
+    assert "release_stage2_guidance" in source
+    assert "pipe.unet.enable_gradient_checkpointing()" in source
 
 
 def test_e015_is_an_aesthetic_reference_comparison_not_a_qr_model_claim():
