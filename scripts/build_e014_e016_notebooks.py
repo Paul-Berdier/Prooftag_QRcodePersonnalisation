@@ -1392,6 +1392,7 @@ architectures ; la comparaison est appariée par prompt, pas pixel-à-pixel.
 
 import gc
 import json
+import os
 import shutil
 import time
 from dataclasses import asdict
@@ -1401,9 +1402,12 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import sentencepiece
 import torch
 from diffusers import FluxPipeline, StableDiffusionPipeline, StableDiffusionXLPipeline
+from google.protobuf import __version__ as protobuf_version
 from huggingface_hub import hf_hub_download, model_info
+from huggingface_hub.utils import GatedRepoError, HfHubHTTPError
 from IPython.display import display
 from PIL import Image
 
@@ -1414,6 +1418,7 @@ from prooftag_qr.validation import QRValidator, summarize_validation_records
 
 assert torch.cuda.is_available(), 'Lancer dans le pod GPU.'
 print(torch.cuda.get_device_name(0))
+print('Dépendances FLUX : sentencepiece', sentencepiece.__version__, '/ protobuf', protobuf_version)
 """
     ),
     markdown("## 1. Contrat, modèles et reprise"),
@@ -1429,6 +1434,8 @@ CANVAS_SIZE = 768
 QR_VERSION = 3
 QR_MODULE_SIZE = 20
 QR_ECC = 'M'
+REQUIRE_ALL_MODELS = True
+HF_TOKEN = os.environ.get('HF_TOKEN') or os.environ.get('HUGGING_FACE_HUB_TOKEN')
 
 MODEL_SPECS = [
     {{
@@ -1476,13 +1483,32 @@ print('Sortie :', RUN_DIR)
 
 def resolve_spec(spec, revision=None):
     resolved = dict(spec)
-    resolved['revision'] = revision or model_info(spec['repo']).sha
+    resolved['revision'] = revision or model_info(
+        spec['repo'], token=HF_TOKEN
+    ).sha
     if spec['kind'] == 'sd15':
         resolved['local_model'] = hf_hub_download(
             repo_id=spec['repo'], filename=spec['filename'],
             revision=resolved['revision'], cache_dir='/cache/huggingface',
+            token=HF_TOKEN,
         )
     return resolved
+
+
+def check_model_access(spec, revision):
+    filename = spec.get('filename', 'model_index.json')
+    try:
+        hf_hub_download(
+            repo_id=spec['repo'], filename=filename, revision=revision,
+            cache_dir='/cache/huggingface', token=HF_TOKEN,
+        )
+        return {'available': True, 'reason': None}
+    except (GatedRepoError, HfHubHTTPError) as exc:
+        status = getattr(getattr(exc, 'response', None), 'status_code', None)
+        return {
+            'available': False,
+            'reason': f'{type(exc).__name__} (HTTP {status or "inconnu"})',
+        }
 
 
 def load_pipeline(spec):
@@ -1497,13 +1523,14 @@ def load_pipeline(spec):
         pipeline = StableDiffusionXLPipeline.from_pretrained(
             spec['repo'], revision=spec['revision'],
             torch_dtype=torch.float16, variant='fp16',
-            cache_dir='/cache/huggingface', use_safetensors=True,
+            cache_dir='/cache/huggingface', use_safetensors=True, token=HF_TOKEN,
         )
         pipeline.enable_model_cpu_offload()
     elif spec['kind'] == 'flux':
         pipeline = FluxPipeline.from_pretrained(
             spec['repo'], revision=spec['revision'],
             torch_dtype=torch.bfloat16, cache_dir='/cache/huggingface',
+            token=HF_TOKEN,
         )
         pipeline.enable_model_cpu_offload()
     else:
@@ -1519,7 +1546,9 @@ def generate_reference(pipeline, spec, case):
     kwargs = {
         'prompt': case['text'], 'height': CANVAS_SIZE, 'width': CANVAS_SIZE,
         'num_inference_steps': spec['steps'],
-        'generator': torch.Generator(device='cuda').manual_seed(case['seed']),
+        'generator': torch.Generator(
+            device='cpu' if spec['kind'] == 'flux' else 'cuda'
+        ).manual_seed(case['seed']),
     }
     if spec['kind'] == 'flux':
         kwargs.update({'guidance_scale': spec['guidance'], 'max_sequence_length': 256})
@@ -1582,13 +1611,42 @@ if RESOLVED_PATH.exists():
     saved_revisions = json.loads(RESOLVED_PATH.read_text(encoding='utf-8'))
 else:
     saved_revisions = {
-        spec['name']: model_info(spec['repo']).sha for spec in MODEL_SPECS
+        spec['name']: model_info(spec['repo'], token=HF_TOKEN).sha
+        for spec in MODEL_SPECS
     }
     RESOLVED_PATH.write_text(
         json.dumps(saved_revisions, indent=2), encoding='utf-8'
     )
+access_report = {
+    spec['name']: check_model_access(spec, saved_revisions[spec['name']])
+    for spec in MODEL_SPECS
+}
+(RUN_DIR / 'model-access.json').write_text(
+    json.dumps(access_report, indent=2), encoding='utf-8'
+)
+unavailable = [
+    spec for spec in MODEL_SPECS
+    if not access_report[spec['name']]['available']
+]
+if unavailable:
+    details = ', '.join(
+        f"{spec['repo']} [{access_report[spec['name']]['reason']}]"
+        for spec in unavailable
+    )
+    message = (
+        'Accès Hugging Face absent pour : ' + details + '. '
+        'Pour FLUX.1-schnell, accepter d abord les conditions sur la page du modèle, '
+        'créer le secret Kubernetes prooftag-huggingface avec une clé token, '
+        'puis recréer le pod avec notebook-remote.ps1 -Reset.'
+    )
+    if REQUIRE_ALL_MODELS:
+        raise RuntimeError(message)
+    print('AVERTISSEMENT :', message)
+
 resolved_specs = [
-    resolve_spec(spec, saved_revisions[spec['name']]) for spec in MODEL_SPECS
+    resolve_spec(spec, saved_revisions[spec['name']])
+    for spec in MODEL_SPECS
+    if access_report[spec['name']]['available']
 ]
 
 for spec in resolved_specs:

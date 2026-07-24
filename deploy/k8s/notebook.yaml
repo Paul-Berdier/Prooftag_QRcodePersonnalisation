@@ -52,6 +52,12 @@ spec:
                 secretKeyRef:
                   name: prooftag-qr-notebook
                   key: token
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: prooftag-huggingface
+                  key: token
+                  optional: true
           resources:
             requests:
               cpu: "2"

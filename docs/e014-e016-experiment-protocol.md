@@ -113,6 +113,28 @@ contrôle compatible et une expérience dédiée.
 
 FLUX utilise l'offload CPU sur la carte 20 Go. Le premier lancement peut surtout être limité par le
 téléchargement et l'espace du cache Hugging Face. Les modèles sont libérés entre familles.
+Son encodeur T5 exige `sentencepiece==0.2.0` et `protobuf==5.29.3`. Ces deux dépendances sont
+installées et contrôlées pendant la construction de l'image notebook ; E015 les importe avant tout
+téléchargement de modèle afin qu'une image obsolète échoue immédiatement.
+
+`black-forest-labs/FLUX.1-schnell` reste publiquement visible mais ses fichiers sont restreints.
+Avant E015, le compte Hugging Face doit accepter les conditions sur la page du modèle. Créer
+ensuite le secret sans placer le jeton dans Git ni dans l'historique de commande :
+
+```bash
+read -rsp "Jeton Hugging Face : " HF_ACCESS_TOKEN
+echo
+kubectl create secret generic prooftag-huggingface -n qr-core \
+  --from-literal=token="$HF_ACCESS_TOKEN" \
+  --dry-run=client -o yaml | kubectl apply -f -
+unset HF_ACCESS_TOKEN
+```
+
+Le Deployment injecte ce secret de façon optionnelle sous `HF_TOKEN`. E015 teste l'accès aux trois
+modèles avant leur chargement, enregistre seulement le résultat dans `model-access.json` et
+n'écrit jamais le jeton. Après création ou remplacement du secret, recréer le pod avec
+`notebook-remote.ps1 -Reset` ; un simple redémarrage du kernel ne met pas à jour l'environnement du
+pod.
 
 ## E016 — surrogate différentiable
 

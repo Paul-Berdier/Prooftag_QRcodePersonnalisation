@@ -385,13 +385,25 @@ def test_e015_is_an_aesthetic_reference_comparison_not_a_qr_model_claim():
     source = Path("notebooks/13_e015_aesthetic_backbone_reference.ipynb").read_text(
         encoding="utf-8"
     )
+    dockerfile = Path("Dockerfile.notebook").read_text(encoding="utf-8")
+    pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
 
     assert "sd15_cetus" in source
     assert "stabilityai/stable-diffusion-xl-base-1.0" in source
     assert "black-forest-labs/FLUX.1-schnell" in source
     assert "enable_model_cpu_offload" in source
     assert "resolved-model-revisions.json" in source
-    assert "model_info(spec['repo']).sha" in source
+    assert "model_info(spec['repo'], token=HF_TOKEN).sha" in source
+    assert "check_model_access" in source
+    assert "model-access.json" in source
+    assert "REQUIRE_ALL_MODELS = True" in source
+    assert "device='cpu' if spec['kind'] == 'flux' else 'cuda'" in source
+    assert "import sentencepiece" in source
+    assert "from google.protobuf import __version__ as protobuf_version" in source
+    assert '"sentencepiece==0.2.0"' in pyproject
+    assert '"protobuf==5.29.3"' in pyproject
+    assert "sentencepiece.__version__" in dockerfile
+    assert "protobuf_version" in dockerfile
     assert "CLIPQualityScorer" in source
     assert "selection_scope" in source
     assert "no claim about QR diffusion compatibility" in source

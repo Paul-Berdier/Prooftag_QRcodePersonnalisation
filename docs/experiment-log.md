@@ -718,6 +718,14 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   car le callback intervient après le pas DDIM.
 - **E015 :** SD 1.5, SDXL et FLUX comparés comme références esthétiques uniquement. Aucun résultat
   ne sera interprété comme une compatibilité ControlNet QR.
+- **Incident E015-01 :** le premier chargement FLUX a échoué en HTTP 401 après SD 1.5 et SDXL.
+  `FLUX.1-schnell` est visible publiquement mais ses fichiers exigent l'acceptation des conditions
+  et un jeton personnel. Le Deployment accepte désormais le secret Kubernetes optionnel
+  `prooftag-huggingface`, et E015 contrôle les trois accès avant les chargements lourds.
+- **Incident E015-02 :** après authentification et téléchargement des 23 fichiers, la construction
+  du tokenizer T5 a échoué faute de `sentencepiece` et `protobuf`. Les versions `0.2.0` et `5.29.3`
+  sont maintenant figées dans l'extra notebook, contrôlées pendant le build Docker et importées
+  par E015 avant tout téléchargement. Les fichiers FLUX déjà reçus restent dans le PVC de cache.
 - **E016 :** labels demandés à OpenCV, ZBar et ZXing-cpp sur les dégradations réelles, split
   groupé anti-fuite, CNN multi-sorties, calibration et audit du gradient avec les vrais décodeurs.
 - **État :** notebooks et protocole implémentés ; résultats RTX à produire, aucun taux inventé.

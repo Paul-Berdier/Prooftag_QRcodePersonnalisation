@@ -39,7 +39,7 @@ RUN pip install --upgrade pip \
         torchvision==0.21.0
 
 RUN qart help >/dev/null \
-    && python -c "import importlib.metadata, zxingcpp, kornia; print('QArt/ZXing/Kornia stack OK:', '$QART_COMMIT', importlib.metadata.version('zxing-cpp'), kornia.__version__)"
+    && python -c "import importlib.metadata, sentencepiece, zxingcpp, kornia; from google.protobuf import __version__ as protobuf_version; print('Notebook dependency stack OK:', '$QART_COMMIT', importlib.metadata.version('zxing-cpp'), kornia.__version__, sentencepiece.__version__, protobuf_version)"
 
 RUN git clone https://github.com/jwliao1209/DiffQRCoder.git /opt/DiffQRCoder \
     && git -C /opt/DiffQRCoder checkout "$DIFFQRCODER_COMMIT" \

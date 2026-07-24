@@ -48,6 +48,9 @@ notebook = [
   "kornia>=0.8,<1",
   "matplotlib>=3.9,<4",
   "pandas>=2.2,<3",
+  # Required by the T5 tokenizer embedded in FLUX pipelines.
+  "protobuf==5.29.3",
+  "sentencepiece==0.2.0",
 ]
 optimizer = [
   "catboost>=1.2.8,<2",
