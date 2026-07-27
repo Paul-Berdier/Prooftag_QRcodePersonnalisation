@@ -766,6 +766,22 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   Python, NumPy, PyTorch CPU/CUDA, cuDNN et cuBLAS sont configurés avant chaque branche. Un binaire
   dupliqué, exclu de la sélection, contrôle les hashes de condition, latent initial, latent final
   et image finale dans `determinism-audit.json`. Les versions exactes du runtime sont manifestées.
+- **Résultat E014A v2 :** archive
+  `20260727T085645Z-e014a-deterministic-blueprint-pairing-v2.tar.gz`, SHA-256
+  `E939E53ACD1E3253E276B4F58B29476E6CEE90D92BF8B0E0D2CC3CD37FA344FE`. Les 20 branches et leurs
+  artefacts sont complets, mais les quatre contrôles dupliqués échouent : condition et latent
+  initial identiques, latents finaux et images finales différents. La divergence commence au
+  premier pas de Stage 2. Les MAE finales valent 5,2247, 2,1709, 0,1385 et 2,7721 pixels.
+- **Performance E014A v2 :** aucune sortie à 39/39 ni à 3/3 sur l'original. L'adaptatif obtient
+  20/156 validations, le meilleur masque et le duplicata 18/156, le binaire 17/156 et QArt 10/156.
+  Le gain global de l'adaptatif est trop proche du bruit du contrôle pour être causal. Seul p3
+  fournit un signal à confirmer : 10/39 pour l'adaptatif contre 0/39 pour les trois conditions
+  exactes classiques.
+- **Incident E014A-04 — non-déterminisme interne à Stage 2 :** les RNG et le latent initial sont
+  innocentés. `_run_stage2` combine plusieurs chemins CUDA avec gradient en FP16 ; le mode
+  déterministe n'était qu'en `warn_only=True`. Avant E014B complet ou E016, un diagnostic de 2 à
+  5 pas doit exécuter le mode strict et ablater SRL, LPIPS, gradient checkpointing, précision du
+  gradient et réutilisation de la pipeline. Les comparaisons par paire unique restent suspendues.
 - **Observation QArt :** les trois répétitions d'un seuil produisent le même SHA-256 dans les
   quatre contextes. Le CLI se comporte donc de façon déterministe dans cette image Docker ; cinq
   seuils donnent cinq candidats uniques par prompt.

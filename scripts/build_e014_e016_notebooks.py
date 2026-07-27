@@ -2627,8 +2627,517 @@ print('Archive :', archive)
     ),
 ]
 
+E014C_CELLS = [
+    markdown(
+        r"""# E014C — localiser le non-déterminisme de DiffQRCoder Stage 2
+
+E014A v2 a démontré que deux branches strictement identiques ont la même condition QR et le même
+latent initial, mais divergent dès le premier pas de Stage 2. Ce notebook ne cherche **ni une
+meilleure image, ni de nouveaux paramètres**. Il localise le premier composant non reproductible.
+
+Il réutilise les artefacts persistés par E014A v2 et exécute chaque profil deux fois, avec le même
+prompt, la même seed et le même latent :
+
+1. aucune guidance SRPG ;
+2. Scanning Robust Loss seule ;
+3. LPIPS seule ;
+4. SRL + LPIPS, checkpointing désactivé ;
+5. SRL + LPIPS, checkpointing activé.
+
+Le test utilise 5 pas par défaut. `torch.use_deterministic_algorithms(..., warn_only=False)` est
+volontaire : une opération CUDA non déterministe doit arrêter **uniquement son profil**, être
+enregistrée avec sa traceback, puis laisser les autres ablations continuer.
+"""
+    ),
+    markdown(
+        r"""## Lecture du résultat
+
+```text
+latent E014A figé
+       │
+       ├── zéro guidance × 2 ──► hashes par pas
+       ├── SRL seule × 2 ──────► hashes par pas
+       ├── LPIPS seule × 2 ────► hashes par pas
+       ├── combinée sans GC × 2
+       └── combinée avec GC × 2
+                                  │
+                    première erreur ou divergence
+                                  │
+                    composant à corriger / remplacer
+```
+
+Ne pas lancer ce notebook en même temps qu'un autre kernel GPU. Utiliser `-Reset` avant de
+l'ouvrir. Une campagne complète E014B ou E016 reste suspendue tant que ce contrôle n'est pas vert.
+"""
+    ),
+    code(
+        """from __future__ import annotations
+
+import gc
+import hashlib
+import json
+import os
+import random
+import sys
+import time
+import traceback
+from datetime import datetime, timezone
+from pathlib import Path
+
+os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':4096:8'
+
+import lpips
+import numpy as np
+import pandas as pd
+import torch
+from diffusers import ControlNetModel, DDIMScheduler
+from IPython.display import display
+from PIL import Image
+from safetensors.torch import load_file
+
+UPSTREAM_ROOT = Path('/opt/DiffQRCoder')
+if not (UPSTREAM_ROOT / 'diffqrcoder' / 'pipeline_diffqrcoder.py').exists():
+    raise RuntimeError('DiffQRCoder absent : reconstruire Dockerfile.notebook.')
+sys.path.insert(0, str(UPSTREAM_ROOT))
+
+from diffqrcoder import DiffQRCoderPipeline  # noqa: E402
+from diffqrcoder.losses import ScanningRobustLoss  # noqa: E402
+import diffqrcoder.pipeline_diffqrcoder as pipeline_module  # noqa: E402
+import diffqrcoder.srpg as upstream_srpg  # noqa: E402
+from prooftag_qr.geometry import AlignedQR  # noqa: E402
+
+
+class PaperLPIPSLoss(torch.nn.Module):
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+        self.model = lpips.LPIPS(net='vgg', verbose=False)
+        self.model.requires_grad_(False).eval()
+
+    def forward(self, x, y):
+        return self.model(x * 2 - 1, y * 2 - 1).mean()
+
+
+upstream_srpg.PerceptualLoss = PaperLPIPSLoss
+assert torch.cuda.is_available(), 'Lancer ce notebook dans le pod GPU.'
+print('GPU :', torch.cuda.get_device_name(0))
+"""
+    ),
+    markdown("## 1. Sélectionner le run E014A v2 et figer le cas diagnostique"),
+    code(
+        """EXPERIMENT_NAME = 'e014c-stage2-determinism-isolation-v1'
+SOURCE_RUN_DIR = None  # ex. Path('/data/notebook-runs/20260727T085645Z-e014a-deterministic-blueprint-pairing-v2')
+PROMPT_ID = 'p1_simple'
+DIAGNOSTIC_STEPS = 5  # 2 pour un smoke test très court, 5 pour le diagnostic officiel
+REPEATS = 2
+RUN_FRESH_PIPELINE_CONTROL = False  # seulement si toutes les ablations précédentes restent ambiguës
+
+BASE_MODEL_URL = 'https://huggingface.co/fp16-guy/Cetus-Mix_Whalefall_fp16_cleaned/blob/main/cetusMix_Whalefall2_fp16.safetensors'
+CONTROLNET_MODEL = 'monster-labs/control_v1p_sd15_qrcode_monster'
+CONTROLNET_SUBFOLDER = 'v2'
+NEGATIVE_PROMPT = 'easynegative, unreadable text, letters, watermark'
+GUIDANCE_SCALE = 7.5
+CONTROLNET_SCALE = 1.35
+SCANNING_GUIDANCE = 500.0
+PERCEPTUAL_GUIDANCE = 3.0
+
+if SOURCE_RUN_DIR is None:
+    candidates = sorted(Path('/data/notebook-runs').glob('*-e014a-deterministic-blueprint-pairing-v2'))
+    if not candidates:
+        raise FileNotFoundError('Aucun run E014A v2 trouvé sous /data/notebook-runs.')
+    SOURCE_RUN_DIR = candidates[-1]
+SOURCE_RUN_DIR = Path(SOURCE_RUN_DIR)
+source_manifest = json.loads((SOURCE_RUN_DIR / 'manifest.json').read_text(encoding='utf-8'))
+prompt_case = next(item for item in source_manifest['prompts'] if item['id'] == PROMPT_ID)
+prompt_dir = SOURCE_RUN_DIR / PROMPT_ID
+required = [
+    prompt_dir / 'stage1.safetensors',
+    prompt_dir / 'stage1-reference.png',
+    prompt_dir / 'blueprints' / 'binary_mask4_m' / 'condition.png',
+    prompt_dir / 'blueprints' / 'binary_mask4_m' / 'matrix.npy',
+    prompt_dir / 'blueprints' / 'binary_mask4_m' / 'metadata.json',
+]
+missing = [str(path) for path in required if not path.exists()]
+if missing:
+    raise FileNotFoundError('Artefacts E014A manquants : ' + ', '.join(missing))
+
+RUN_DIR = Path('/data/notebook-runs') / (
+    datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + EXPERIMENT_NAME
+)
+RUN_DIR.mkdir(parents=True)
+print('Source :', SOURCE_RUN_DIR)
+print('Sortie :', RUN_DIR)
+print('Prompt :', prompt_case)
+"""
+    ),
+    code(
+        """def tensor_sha256(tensor):
+    value = tensor.detach().to('cpu').contiguous()
+    return hashlib.sha256(value.numpy().tobytes()).hexdigest()
+
+
+def seed_everything(seed):
+    random.seed(seed)
+    np.random.seed(seed % (2**32))
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+
+metadata = json.loads(required[4].read_text(encoding='utf-8'))
+aligned = AlignedQR(
+    image=Image.open(required[2]).convert('RGB'),
+    core_matrix=np.load(required[3]).astype(np.uint8),
+    version=metadata['version'],
+    error_correction=metadata['ecc'],
+    mask_pattern=metadata['mask_pattern'],
+    module_size=metadata['module_size'],
+    padding_px=metadata['padding_px'],
+    canvas_size=metadata['canvas_size'],
+    payload=metadata['payload'],
+)
+stage1_tensor_cpu = load_file(str(required[0]), device='cpu')['stage1']
+branch_seed = int(prompt_case['seed']) + 10000
+print('Condition SHA-256 :', hashlib.sha256(required[2].read_bytes()).hexdigest())
+print('Stage 1 SHA-256 :', tensor_sha256(stage1_tensor_cpu))
+print('Seed Stage 2 :', branch_seed)
+display(aligned.image.resize((384, 384)))
+"""
+    ),
+    markdown("## 2. Charger la pipeline sans lancer de génération complète"),
+    code(
+        """def load_pipeline():
+    controlnet = ControlNetModel.from_pretrained(
+        CONTROLNET_MODEL, subfolder=CONTROLNET_SUBFOLDER,
+        torch_dtype=torch.float16, cache_dir='/cache/huggingface',
+    )
+    pipeline = DiffQRCoderPipeline.from_single_file(
+        BASE_MODEL_URL, controlnet=controlnet, torch_dtype=torch.float16,
+        cache_dir='/cache/huggingface', safety_checker=None, use_safetensors=True,
+    )
+    pipeline.scheduler = DDIMScheduler.from_config(pipeline.scheduler.config)
+    pipeline = pipeline.to('cuda')
+    for component in [pipeline.unet, pipeline.controlnet, pipeline.vae, pipeline.text_encoder]:
+        component.requires_grad_(False).eval()
+    pipeline.enable_attention_slicing('max')
+    pipeline.enable_vae_slicing()
+    return pipeline
+
+
+def set_checkpointing(pipeline, enabled):
+    method = 'enable_gradient_checkpointing' if enabled else 'disable_gradient_checkpointing'
+    for component in [pipeline.unet, pipeline.controlnet]:
+        callback = getattr(component, method, None)
+        if callback is not None:
+            callback()
+
+
+def release_guidance(pipeline):
+    guidance = getattr(pipeline, 'srpg', None)
+    if guidance is not None:
+        guidance.to('cpu')
+        del pipeline.srpg
+    gc.collect()
+    torch.cuda.empty_cache()
+
+
+pipe = load_pipeline()
+stage1_tensor = stage1_tensor_cpu.to('cuda', dtype=torch.float16)
+print('VRAM allouée GiB :', round(torch.cuda.memory_allocated() / 2**30, 3))
+"""
+    ),
+    markdown("## 3. Définir des guidances réellement séparées"),
+    code(
+        """GRADIENT_SCALE = 100.0
+ORIGINAL_GUIDANCE_CLASS = pipeline_module.ScanningRobustPerceptualGuidance
+
+
+class ZeroGuidance(torch.nn.Module):
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+
+    def compute_score(self, latents, image, qrcode, ref_image):
+        return torch.zeros_like(latents)
+
+    def compute_loss(self, image, qrcode, ref_image):
+        return image.sum() * 0
+
+
+class ScanningOnlyGuidance(torch.nn.Module):
+    def __init__(self, module_size=20, scanning_robust_guidance_scale=500, **kwargs):
+        super().__init__()
+        self.scale = scanning_robust_guidance_scale
+        self.loss_fn = ScanningRobustLoss(module_size=module_size)
+
+    def compute_loss(self, image, qrcode, ref_image):
+        return self.scale * self.loss_fn(image, qrcode) * GRADIENT_SCALE
+
+    def compute_score(self, latents, image, qrcode, ref_image):
+        return torch.autograd.grad(
+            self.compute_loss(image, qrcode, ref_image), latents
+        )[0] / GRADIENT_SCALE
+
+
+class PerceptualOnlyGuidance(torch.nn.Module):
+    def __init__(self, perceptual_guidance_scale=3, **kwargs):
+        super().__init__()
+        self.scale = perceptual_guidance_scale
+        self.loss_fn = PaperLPIPSLoss()
+
+    def compute_loss(self, image, qrcode, ref_image):
+        return self.scale * self.loss_fn(image, ref_image) * GRADIENT_SCALE
+
+    def compute_score(self, latents, image, qrcode, ref_image):
+        return torch.autograd.grad(
+            self.compute_loss(image, qrcode, ref_image), latents
+        )[0] / GRADIENT_SCALE
+
+
+PROFILES = [
+    {'name': 'no_guidance_gc_off', 'guidance_class': ZeroGuidance, 'checkpointing': False},
+    {'name': 'srl_only_gc_off', 'guidance_class': ScanningOnlyGuidance, 'checkpointing': False},
+    {'name': 'lpips_only_gc_off', 'guidance_class': PerceptualOnlyGuidance, 'checkpointing': False},
+    {'name': 'combined_gc_off', 'guidance_class': ORIGINAL_GUIDANCE_CLASS, 'checkpointing': False},
+    {'name': 'combined_gc_on', 'guidance_class': ORIGINAL_GUIDANCE_CLASS, 'checkpointing': True},
+]
+print(pd.DataFrame([{k: v for k, v in item.items() if k != 'guidance_class'} for item in PROFILES]))
+"""
+    ),
+    markdown(
+        """## 4. Exécuter deux copies strictes de chaque profil
+
+Les callbacks enregistrent le hash du latent après chaque pas. Une erreur de déterminisme est
+conservée dans `error.txt` et `results.jsonl`, puis le notebook continue avec le profil suivant.
+"""
+    ),
+    code(
+        """@torch.no_grad()
+def paired_initial_latent(pipeline):
+    normalized = stage1_tensor * 2 - 1
+    encoded = (
+        pipeline.vae.encode(normalized).latent_dist.mode()
+        * pipeline.vae.config.scaling_factor
+    )
+    generator = torch.Generator(device='cuda').manual_seed(branch_seed)
+    noise = torch.randn(
+        encoded.shape, generator=generator, device='cuda', dtype=encoded.dtype
+    )
+    pipeline.scheduler.set_timesteps(DIAGNOSTIC_STEPS, device='cuda')
+    return pipeline.scheduler.add_noise(
+        encoded, noise, pipeline.scheduler.timesteps[:1]
+    ).detach()
+
+
+def run_once(pipeline, profile, repeat):
+    output_dir = RUN_DIR / profile['name'] / f'repeat-{repeat}'
+    output_dir.mkdir(parents=True, exist_ok=True)
+    seed_everything(branch_seed)
+    set_checkpointing(pipeline, profile['checkpointing'])
+    release_guidance(pipeline)
+    pipeline_module.ScanningRobustPerceptualGuidance = profile['guidance_class']
+    initial = paired_initial_latent(pipeline)
+    trace = []
+
+    def callback(_pipeline, step_index, timestep, callback_kwargs):
+        current = callback_kwargs['latents'].detach()
+        trace.append({
+            'step': int(step_index), 'timestep': int(timestep),
+            'latent_sha256': tensor_sha256(current),
+        })
+        return callback_kwargs
+
+    started = time.perf_counter()
+    try:
+        result = pipeline._run_stage2(
+            prompt=prompt_case['text'], qrcode=aligned.image,
+            qrcode_module_size=aligned.module_size, qrcode_padding=aligned.padding_px,
+            ref_image=stage1_tensor, negative_prompt=NEGATIVE_PROMPT,
+            num_inference_steps=DIAGNOSTIC_STEPS, guidance_scale=GUIDANCE_SCALE,
+            eta=0.0,
+            generator=torch.Generator(device='cuda').manual_seed(branch_seed),
+            latents=initial.clone(),
+            controlnet_conditioning_scale=CONTROLNET_SCALE,
+            scanning_robust_guidance_scale=SCANNING_GUIDANCE,
+            perceptual_guidance_scale=PERCEPTUAL_GUIDANCE,
+            callback_on_step_end=callback,
+            callback_on_step_end_tensor_inputs=['latents'],
+            output_type='latent',
+        )
+        final = result.images.detach()
+        row = {
+            'profile': profile['name'], 'repeat': repeat, 'status': 'ok',
+            'checkpointing': profile['checkpointing'],
+            'initial_latent_sha256': tensor_sha256(initial),
+            'final_latent_sha256': tensor_sha256(final),
+            'duration_s': time.perf_counter() - started,
+            'trace': trace, 'error': None,
+        }
+        torch.save(final.cpu(), output_dir / 'final-latent.pt')
+        del result, final
+    except Exception as exc:
+        detail = traceback.format_exc()
+        (output_dir / 'error.txt').write_text(detail, encoding='utf-8')
+        row = {
+            'profile': profile['name'], 'repeat': repeat, 'status': 'error',
+            'checkpointing': profile['checkpointing'],
+            'initial_latent_sha256': tensor_sha256(initial),
+            'final_latent_sha256': None,
+            'duration_s': time.perf_counter() - started,
+            'trace': trace,
+            'error': f'{type(exc).__name__}: {exc}',
+        }
+        print(profile['name'], 'repeat', repeat, 'ERREUR :', row['error'])
+    (output_dir / 'trace.json').write_text(json.dumps(trace, indent=2), encoding='utf-8')
+    del initial
+    release_guidance(pipeline)
+    gc.collect()
+    torch.cuda.empty_cache()
+    return row
+
+
+torch.backends.cudnn.benchmark = False
+torch.backends.cudnn.deterministic = True
+torch.use_deterministic_algorithms(True, warn_only=False)
+
+rows = []
+for profile in PROFILES:
+    for repeat in range(1, REPEATS + 1):
+        row = run_once(pipe, profile, repeat)
+        rows.append(row)
+        with (RUN_DIR / 'results.jsonl').open('a', encoding='utf-8') as stream:
+            stream.write(json.dumps(row, ensure_ascii=False) + '\\n')
+        if row['status'] == 'error':
+            break
+
+if RUN_FRESH_PIPELINE_CONTROL:
+    fresh_profile = {
+        'name': 'combined_fresh_pipeline',
+        'guidance_class': ORIGINAL_GUIDANCE_CLASS,
+        'checkpointing': False,
+    }
+    PROFILES.append(fresh_profile)
+    release_guidance(pipe)
+    pipe.to('cpu')
+    del pipe
+    pipe = None
+    gc.collect()
+    torch.cuda.empty_cache()
+    for repeat in range(1, REPEATS + 1):
+        fresh_pipe = load_pipeline()
+        row = run_once(fresh_pipe, fresh_profile, repeat)
+        rows.append(row)
+        with (RUN_DIR / 'results.jsonl').open('a', encoding='utf-8') as stream:
+            stream.write(json.dumps(row, ensure_ascii=False) + '\\n')
+        release_guidance(fresh_pipe)
+        fresh_pipe.to('cpu')
+        del fresh_pipe
+        gc.collect()
+        torch.cuda.empty_cache()
+        if row['status'] == 'error':
+            break
+
+pipeline_module.ScanningRobustPerceptualGuidance = ORIGINAL_GUIDANCE_CLASS
+"""
+    ),
+    markdown("## 5. Comparer les hashes et décider"),
+    code(
+        """audit = []
+for profile in PROFILES:
+    subset = [row for row in rows if row['profile'] == profile['name']]
+    successful = [row for row in subset if row['status'] == 'ok']
+    item = {
+        'profile': profile['name'],
+        'checkpointing': profile['checkpointing'],
+        'runs_requested': REPEATS,
+        'runs_ok': len(successful),
+        'error': next((row['error'] for row in subset if row['status'] == 'error'), None),
+        'initial_equal': (
+            len(successful) == REPEATS
+            and len({row['initial_latent_sha256'] for row in successful}) == 1
+        ),
+        'step_hashes_equal': (
+            len(successful) == REPEATS
+            and len({json.dumps(row['trace'], sort_keys=True) for row in successful}) == 1
+        ),
+        'final_equal': (
+            len(successful) == REPEATS
+            and len({row['final_latent_sha256'] for row in successful}) == 1
+        ),
+    }
+    audit.append(item)
+
+audit_frame = pd.DataFrame(audit)
+audit_frame.to_csv(RUN_DIR / 'determinism-isolation.csv', index=False)
+(RUN_DIR / 'determinism-isolation.json').write_text(
+    json.dumps(audit, indent=2), encoding='utf-8'
+)
+display(audit_frame)
+
+first_failure = next(
+    (item for item in audit if item['error'] or not item['step_hashes_equal']),
+    None,
+)
+if first_failure is None:
+    decision = (
+        'Tous les profils sont reproductibles en mode strict. Activer ensuite '
+        'RUN_FRESH_PIPELINE_CONTROL pour rechercher un état mutable entre pipelines.'
+    )
+elif first_failure['error']:
+    decision = (
+        f"Première erreur stricte : {first_failure['profile']}. "
+        'Lire son error.txt : l opération indiquée est la première cible de correction.'
+    )
+else:
+    decision = (
+        f"Première divergence sans exception : {first_failure['profile']}. "
+        'Comparer les traces pour trouver le premier pas divergent.'
+    )
+print(decision)
+(RUN_DIR / 'DECISION.txt').write_text(decision + '\\n', encoding='utf-8')
+
+manifest = {
+    'experiment': EXPERIMENT_NAME,
+    'source_run': str(SOURCE_RUN_DIR),
+    'prompt_id': PROMPT_ID,
+    'prompt': prompt_case['text'],
+    'seed': prompt_case['seed'],
+    'branch_seed': branch_seed,
+    'steps': DIAGNOSTIC_STEPS,
+    'strict_deterministic_algorithms': True,
+    'cublas_workspace_config': os.environ['CUBLAS_WORKSPACE_CONFIG'],
+    'profiles': [
+        {k: v for k, v in profile.items() if k != 'guidance_class'}
+        for profile in PROFILES
+    ],
+    'decision': decision,
+}
+(RUN_DIR / 'manifest.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
+"""
+    ),
+    markdown("## 6. Libérer la VRAM et créer l'archive"),
+    code(
+        """pipeline_module.ScanningRobustPerceptualGuidance = ORIGINAL_GUIDANCE_CLASS
+if pipe is not None:
+    release_guidance(pipe)
+    pipe.to('cpu')
+    del pipe
+del stage1_tensor
+gc.collect()
+torch.cuda.empty_cache()
+torch.cuda.synchronize()
+print('VRAM allouée après nettoyage GiB :', torch.cuda.memory_allocated() / 2**30)
+
+import shutil
+archive = shutil.make_archive(str(RUN_DIR), 'gztar', RUN_DIR.parent, RUN_DIR.name)
+print('Archive à envoyer :', archive)
+print('Serveur Linux : POD=$(kubectl get pod -n qr-core -l app=prooftag-qr-notebook -o jsonpath="{.items[0].metadata.name}")')
+print(f'Serveur Linux : kubectl cp -n qr-core "$POD:{archive}" "$HOME/{Path(archive).name}"')
+print(f'PowerShell PC : scp paul@pcIA:~/{Path(archive).name} "$HOME/Downloads/"')
+"""
+    ),
+]
+
 
 write_notebook("11_e014a_qart_blueprint_bakeoff.ipynb", E014A_CELLS)
 write_notebook("12_e014b_freeqr_latent_fusion.ipynb", E014B_CELLS)
 write_notebook("13_e015_aesthetic_backbone_reference.ipynb", E015_CELLS)
 write_notebook("14_e016_differentiable_scan_surrogate.ipynb", E016_CELLS)
+write_notebook("15_e014c_stage2_determinism_diagnostic.ipynb", E014C_CELLS)

@@ -216,7 +216,18 @@ git pull
 .\scripts\notebook-remote.ps1 -Notebook 11_e014a_qart_blueprint_bakeoff.ipynb
 ```
 
-Puis, après E014A :
+Après l'échec du contrôle dupliqué E014A v2, la prochaine étape n'est plus E014B. Lancer le
+diagnostic court E014C :
+
+```powershell
+.\scripts\notebook-remote.ps1 -Reset -Notebook 15_e014c_stage2_determinism_diagnostic.ipynb
+```
+
+Il réutilise les artefacts E014A persistés et exécute au maximum dix Stage 2 de cinq pas. Il
+compare zéro guidance, SRL seule, LPIPS seule et la guidance combinée avec/sans checkpointing sous
+`warn_only=False`. Envoyer l'archive `e014c-stage2-determinism-isolation-v1` avant de poursuivre.
+
+E014B ne sera lancé qu'après correction ou caractérisation de la divergence :
 
 ```powershell
 .\scripts\notebook-remote.ps1 -Reset -Notebook 12_e014b_freeqr_latent_fusion.ipynb

@@ -15,7 +15,8 @@ param(
         "11_e014a_qart_blueprint_bakeoff.ipynb",
         "12_e014b_freeqr_latent_fusion.ipynb",
         "13_e015_aesthetic_backbone_reference.ipynb",
-        "14_e016_differentiable_scan_surrogate.ipynb"
+        "14_e016_differentiable_scan_surrogate.ipynb",
+        "15_e014c_stage2_determinism_diagnostic.ipynb"
     )]
     [string]$Notebook = "02_generate_live_on_gpu.ipynb",
     [switch]$Reset,

@@ -471,3 +471,25 @@ def test_e016_labels_with_real_decoders_prevents_leakage_and_audits_gradients():
     assert "num_workers=2" not in source
     assert "mountPath: /dev/shm" in deployment
     assert "sizeLimit: 2Gi" in deployment
+
+
+def test_e014c_isolates_stage2_nondeterminism_before_more_campaigns():
+    source = Path(
+        "notebooks/15_e014c_stage2_determinism_diagnostic.ipynb"
+    ).read_text(encoding="utf-8")
+    launcher = Path("scripts/notebook-remote.ps1").read_text(encoding="utf-8")
+
+    assert "e014c-stage2-determinism-isolation-v1" in source
+    assert "*-e014a-deterministic-blueprint-pairing-v2" in source
+    assert "DIAGNOSTIC_STEPS = 5" in source
+    assert "torch.use_deterministic_algorithms(True, warn_only=False)" in source
+    assert "ZeroGuidance" in source
+    assert "ScanningOnlyGuidance" in source
+    assert "PerceptualOnlyGuidance" in source
+    assert "combined_gc_off" in source
+    assert "combined_gc_on" in source
+    assert "initial_latent_sha256" in source
+    assert "latent_sha256" in source
+    assert "determinism-isolation.json" in source
+    assert "error.txt" in source
+    assert "15_e014c_stage2_determinism_diagnostic.ipynb" in launcher
