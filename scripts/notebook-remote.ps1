@@ -17,7 +17,8 @@ param(
         "13_e015_aesthetic_backbone_reference.ipynb",
         "14_e016_differentiable_scan_surrogate.ipynb",
         "15_e014c_stage2_determinism_diagnostic.ipynb",
-        "16_e014b_statistical_freeqr_confirmation.ipynb"
+        "16_e014b_statistical_freeqr_confirmation.ipynb",
+        "17_e014b_multicontext_generalization.ipynb"
     )]
     [string]$Notebook = "02_generate_live_on_gpu.ipynb",
     [switch]$Reset,

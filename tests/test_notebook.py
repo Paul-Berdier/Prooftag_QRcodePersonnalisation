@@ -527,3 +527,32 @@ def test_e014b_v2_uses_balanced_repetitions_and_statistical_promotion():
     assert "DECISION.json" in source
     assert "39/39" in source
     assert "16_e014b_statistical_freeqr_confirmation.ipynb" in launcher
+
+
+def test_e014b_v3_confirms_generalization_with_corrected_gates():
+    source = Path(
+        "notebooks/17_e014b_multicontext_generalization.ipynb"
+    ).read_text(encoding="utf-8")
+    launcher = Path("scripts/notebook-remote.ps1").read_text(encoding="utf-8")
+
+    assert "e014b-multicontext-generalization-v3" in source
+    assert "CONTEXT_IDS = ['p1_simple', 'p2_medium', 'p4_complex']" in source
+    assert "REPEATS = 4" in source
+    assert "['baseline', 'fusion_all']" in source
+    assert "['fusion_all', 'baseline']" in source
+    assert "'channel': 1, 'alpha': 0.15" in source
+    assert "fresh_pipeline_per_block" in source
+    assert "Bloc {context_id}/{repeat} partiel" in source
+    assert "Latent initial variable entre les blocs" in source
+    assert "original_3of3_required_in_every_repeat" in source
+    assert "(fusion.original_passed == fusion.original_total).all()" in source
+    assert "MIN_MEAN_GAIN = 3 / 39" in source
+    assert "production_candidate" in source
+    assert "generalized_not_strict" in source
+    assert "decoder-results.csv" in source
+    assert "scenario-results.csv" in source
+    assert "resolved-model-revisions.json" in source
+    assert "diffqrcoder_commit" in source
+    assert "pipeline_source_sha256" in source
+    assert "physical-validation-template.csv" in source
+    assert "17_e014b_multicontext_generalization.ipynb" in launcher

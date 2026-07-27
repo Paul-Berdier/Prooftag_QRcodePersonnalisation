@@ -240,6 +240,18 @@ E014B v2 utilise `p3_detailed`, quatre recettes figées et quatre répétitions 
 charge une pipeline fraîche. Une reprise n'est autorisée qu'à la frontière d'une répétition
 complète ; reprendre un bloc partiel changerait l'historique et est explicitement refusé.
 
+Après la promotion de `fusion_all`, lancer la confirmation multi-contexte :
+
+```powershell
+.\scripts\notebook-remote.ps1 -Reset -Notebook 17_e014b_multicontext_generalization.ipynb
+```
+
+E014B v3 compare uniquement la baseline et la recette figée sur `p1`, `p2` et `p4`, quatre blocs
+appariés par contexte. Les ordres baseline→fusion et fusion→baseline apparaissent chacun deux
+fois. La porte exige 3/3 sur l'original dans toutes les répétitions, un gain moyen d'au moins
+3/39 et aucune baisse du pire SSR. Seul 39/39 sur les douze sorties fusionnées autorise le statut
+`production_candidate`.
+
 E015 et E016 se lancent avec les noms `13_e015_aesthetic_backbone_reference.ipynb` et
 `14_e016_differentiable_scan_surrogate.ipynb`. `-Reset` supprime le pod Jupyter et tous ses
 kernels, attend la libération réelle de la VRAM, recrée le pod et ouvre le notebook suivant, sans

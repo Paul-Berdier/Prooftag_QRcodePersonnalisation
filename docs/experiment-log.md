@@ -830,6 +830,36 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   un gain moyen supérieur à l'étendue observée de la baseline, ne jamais réduire son pire SSR et
   perdre au maximum 0,5 point de CLIP-aesthetic. À défaut, aucune confirmation multi-contexte
   n'est lancée. Ceci est un protocole enregistré, pas encore un résultat.
+- **Résultat E014B v2 :** archive
+  `20260727T123551Z-e014b-statistical-freeqr-confirmation-v2.tar.gz`, SHA-256
+  `34A9E3164CAA54AD7AD63C0CB48AC7A731D33D336DE13D2E0EAC9B64AE4CD270`. Les seize runs, seize
+  latents, seize validations, seize GIF et 144 frames sont complets. Les quatre répétitions
+  partagent le même latent initial.
+- **Gain E014B v2 :** sur `p3_detailed`, la baseline reste à 2/39 et 0/3 original. La fusion
+  canal 1 alpha 0,15 sur quarante pas obtient 31/39 et 3/3 original dans quatre répétitions sur
+  quatre. CLIP-aesthetic progresse de 4,578 à 5,418, tandis que CLIPScore recule de 0,630 à 0,571.
+  Aucune sortie ne franchit encore 39/39.
+- **Faiblesses E014B v2 :** `print_dot_loss` échoue pour les trois décodeurs ; OpenCV échoue aussi
+  sous JPEG 90, luminosité basse/haute et contraste faible, et ZBar sous bruit gaussien. La
+  fusion complète atteint 8/13 OpenCV, 11/13 ZBar et 12/13 ZXing-C++.
+- **Incident E014B-01 — gradient sans effet :** la variante gradient calcule dix losses et ajoute
+  environ 10,3 secondes, mais produit exactement les mêmes pixels que la fusion simple commune.
+  Instrumenter norme et delta avant toute nouvelle tentative ; conserver la fusion simple.
+- **Incident E014B-02 — porte trop permissive :** `fusion_early` est marquée promue malgré 0/3
+  original. Le vainqueur reste correctement `fusion_all`, mais toute prochaine porte doit exiger
+  la lecture originale par tous les décodeurs.
+- **Historique E014B v2 :** la première `fusion_all`, placée après la baseline, diverge au pas 33
+  des trois autres, avec seulement 0,099/255 de MAE finale et aucun changement de métrique. Le
+  signal 2/39 vers 31/39 est donc robuste à cette variation.
+- **Protocole E014B v3 :** le notebook 17 fige `fusion_all` canal 1, alpha 0,15, quarante pas et
+  la compare à la baseline sur `p1_simple`, `p2_medium` et `p4_complex`. Quatre blocs appariés
+  par contexte alternent deux fois chaque ordre, avec une pipeline fraîche par bloc, soit
+  vingt-quatre diffusions.
+- **Portes E014B v3 :** chaque contexte doit gagner dans au moins trois blocs, gagner en moyenne
+  au moins 3/39, conserver son pire SSR, passer l'original 3/3 dans les quatre blocs et perdre au
+  maximum 0,75 point de CLIP-aesthetic. Le statut production exige 39/39 sur les douze sorties
+  fusionnées. Les révisions des modèles, le commit DiffQRCoder et le hash du pipeline sont
+  manifestés.
 - **Observation QArt :** les trois répétitions d'un seuil produisent le même SHA-256 dans les
   quatre contextes. Le CLI se comporte donc de façon déterministe dans cette image Docker ; cinq
   seuils donnent cinq candidats uniques par prompt.

@@ -279,6 +279,23 @@ il faut créer un nouveau run afin de ne pas modifier l'historique d'exécution 
 fichier final `DECISION.json` indique si une fusion mérite une confirmation sur les trois autres
 prompts. L'ancien notebook 12 reste exploratoire et ne doit pas servir à promouvoir une recette.
 
+## Généralisation multi-contexte E014B v3
+
+Après la promotion de `fusion_all` par E014B v2, le notebook 17 fige cette recette et la compare
+à la baseline sur `p1_simple`, `p2_medium` et `p4_complex`. Il exécute quatre blocs appariés par
+contexte, avec une pipeline fraîche par bloc et les deux ordres répétés deux fois. Il ne contient
+aucune recherche de paramètres.
+
+```powershell
+.\scripts\notebook-remote.ps1 -Reset -Notebook 17_e014b_multicontext_generalization.ipynb
+```
+
+La campagne effectue 24 diffusions et prend typiquement 50 à 60 minutes sur la RTX 4000 Ada. La
+porte corrigée exige la lecture originale 3/3 dans les quatre répétitions de chaque contexte.
+Seul le statut `production_candidate` signifie que les douze sorties fusionnées ont franchi
+39/39 ; `generalized_not_strict` signifie seulement que le gain se généralise. Les identifiants,
+révisions des modèles et le hash du pipeline DiffQRCoder sont conservés dans le manifeste.
+
 ## Première installation ou mise à jour sur le serveur
 
 ```bash
