@@ -479,20 +479,20 @@ def test_e014c_isolates_stage2_nondeterminism_before_more_campaigns():
     ).read_text(encoding="utf-8")
     launcher = Path("scripts/notebook-remote.ps1").read_text(encoding="utf-8")
 
-    assert "e014c-stage2-determinism-isolation-v2" in source
+    assert "e014c-stage2-divergence-ablation-v3" in source
     assert "*-e014a-deterministic-blueprint-pairing-v2" in source
-    assert "FAST_STEPS = 5" in source
     assert "REPRO_STEPS = 40" in source
+    assert "STOP_AFTER_STEP = 7" in source
     assert "torch.use_deterministic_algorithms(True, warn_only=False)" in source
     assert "ZeroGuidance" in source
+    assert "torch.autograd.grad(image.sum() * 0.0, latents)" in source
     assert "ScanningOnlyGuidance" in source
     assert "PerceptualOnlyGuidance" in source
-    assert "no_guidance_gc_on_5" in source
-    assert "srl_only_gc_on_5" in source
-    assert "lpips_only_gc_on_5" in source
-    assert "combined_gc_on_40_hash" in source
-    assert "combined_gc_on_40_e014a_callback" in source
-    assert "aligned_module_diagnostics" in source
+    assert "zero_connected_gc_on_40_stop7" in source
+    assert "srl_only_gc_on_40_stop7" in source
+    assert "lpips_only_gc_on_40_stop7" in source
+    assert "combined_gc_on_40_stop7" in source
+    assert "_pipeline._interrupt = True" in source
     assert "OutOfMemoryError" in source
     assert "initial_latent_sha256" in source
     assert "latent_sha256" in source

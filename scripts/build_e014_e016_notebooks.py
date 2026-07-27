@@ -2638,16 +2638,15 @@ meilleure image, ni de nouveaux paramètres**. Il localise le premier composant 
 Il réutilise les artefacts persistés par E014A v2 et exécute chaque profil deux fois, avec le même
 prompt, la même seed et le même latent :
 
-1. aucune guidance SRPG, checkpointing activé ;
-2. Scanning Robust Loss seule, checkpointing activé ;
-3. LPIPS seule, checkpointing activé ;
-4. SRL + LPIPS à 5 pas ;
-5. SRL + LPIPS à 40 pas avec callback de hashes seulement ;
-6. SRL + LPIPS à 40 pas avec le décodage d'aperçu d'E014A.
+1. gradient nul connecté au graphe, pour tester le cœur sans correction SRPG ;
+2. Scanning Robust Loss seule ;
+3. LPIPS seule ;
+4. SRL + LPIPS.
 
-La v1 a montré que désactiver le checkpointing dépasse 20 Go avant le premier pas : ce n'est pas
-un test de déterminisme exploitable sur la RTX 4000 Ada. La v2 conserve donc le checkpointing pour
-toutes les ablations et reproduit le planning de 40 pas d'E014A.
+La v2 a localisé la bifurcation à l'étape 7, timestep 801, du planning à 40 pas. Le callback
+d'E014A est innocenté. La v3 conserve exactement ce planning mais interrompt chaque exécution
+après l'étape 7 : les trente-deux pas suivants ne peuvent plus apporter d'information causale.
+Le checkpointing reste obligatoire sur la RTX 4000 Ada 20 Go.
 
 `torch.use_deterministic_algorithms(..., warn_only=False)` est volontaire : une opération CUDA
 non déterministe doit arrêter **uniquement son profil**, être enregistrée avec sa traceback, puis
@@ -2660,12 +2659,13 @@ laisser les autres ablations continuer.
 ```text
 latent E014A figé
        │
-       ├── zéro guidance, GC × 2 ──► 5 hashes
-       ├── SRL seule, GC × 2 ──────► 5 hashes
-       ├── LPIPS seule, GC × 2 ────► 5 hashes
-       ├── combinée, GC × 2 ───────► 5 hashes
-       ├── combinée, GC × 2 ───────► 40 hashes
-       └── combinée + callback E014A × 2
+       ├── gradient nul connecté × 2
+       ├── SRL seule × 2
+       ├── LPIPS seule × 2
+       └── combinée × 2
+                       │
+             planning DDIM 40 pas
+             arrêt après étape 7
                                   │
                     première erreur ou divergence
                                   │
@@ -2730,11 +2730,11 @@ print('GPU :', torch.cuda.get_device_name(0))
     ),
     markdown("## 1. Sélectionner le run E014A v2 et figer le cas diagnostique"),
     code(
-        """EXPERIMENT_NAME = 'e014c-stage2-determinism-isolation-v2'
+        """EXPERIMENT_NAME = 'e014c-stage2-divergence-ablation-v3'
 SOURCE_RUN_DIR = None  # ex. Path('/data/notebook-runs/20260727T085645Z-e014a-deterministic-blueprint-pairing-v2')
 PROMPT_ID = 'p1_simple'
-FAST_STEPS = 5
 REPRO_STEPS = 40
+STOP_AFTER_STEP = 7
 REPEATS = 2
 RUN_FRESH_PIPELINE_CONTROL = False  # seulement si toutes les ablations précédentes restent ambiguës
 
@@ -2862,7 +2862,9 @@ class ZeroGuidance(torch.nn.Module):
         super().__init__()
 
     def compute_score(self, latents, image, qrcode, ref_image):
-        return torch.zeros_like(latents)
+        # Un zéro direct laisse tout le graphe UNet/VAE vivant et dépasse 20 Go.
+        # Ce gradient consomme le graphe comme SRPG tout en restant mathématiquement nul.
+        return torch.autograd.grad(image.sum() * 0.0, latents)[0]
 
     def compute_loss(self, image, qrcode, ref_image):
         return image.sum() * 0
@@ -2900,29 +2902,20 @@ class PerceptualOnlyGuidance(torch.nn.Module):
 
 PROFILES = [
     {
-        'name': 'no_guidance_gc_on_5', 'guidance_class': ZeroGuidance,
-        'checkpointing': True, 'steps': FAST_STEPS, 'callback_mode': 'hash',
-    },
-    {
-        'name': 'srl_only_gc_on_5', 'guidance_class': ScanningOnlyGuidance,
-        'checkpointing': True, 'steps': FAST_STEPS, 'callback_mode': 'hash',
-    },
-    {
-        'name': 'lpips_only_gc_on_5', 'guidance_class': PerceptualOnlyGuidance,
-        'checkpointing': True, 'steps': FAST_STEPS, 'callback_mode': 'hash',
-    },
-    {
-        'name': 'combined_gc_on_5', 'guidance_class': ORIGINAL_GUIDANCE_CLASS,
-        'checkpointing': True, 'steps': FAST_STEPS, 'callback_mode': 'hash',
-    },
-    {
-        'name': 'combined_gc_on_40_hash', 'guidance_class': ORIGINAL_GUIDANCE_CLASS,
+        'name': 'zero_connected_gc_on_40_stop7', 'guidance_class': ZeroGuidance,
         'checkpointing': True, 'steps': REPRO_STEPS, 'callback_mode': 'hash',
     },
     {
-        'name': 'combined_gc_on_40_e014a_callback',
-        'guidance_class': ORIGINAL_GUIDANCE_CLASS,
-        'checkpointing': True, 'steps': REPRO_STEPS, 'callback_mode': 'decode',
+        'name': 'srl_only_gc_on_40_stop7', 'guidance_class': ScanningOnlyGuidance,
+        'checkpointing': True, 'steps': REPRO_STEPS, 'callback_mode': 'hash',
+    },
+    {
+        'name': 'lpips_only_gc_on_40_stop7', 'guidance_class': PerceptualOnlyGuidance,
+        'checkpointing': True, 'steps': REPRO_STEPS, 'callback_mode': 'hash',
+    },
+    {
+        'name': 'combined_gc_on_40_stop7', 'guidance_class': ORIGINAL_GUIDANCE_CLASS,
+        'checkpointing': True, 'steps': REPRO_STEPS, 'callback_mode': 'hash',
     },
 ]
 print(pd.DataFrame([{k: v for k, v in item.items() if k != 'guidance_class'} for item in PROFILES]))
@@ -2987,6 +2980,8 @@ def run_once(pipeline, profile, repeat):
             item.update(diagnostics)
             preview.save(output_dir / f'{step_index:03d}.jpg', quality=88)
         trace.append(item)
+        if step_index >= STOP_AFTER_STEP:
+            _pipeline._interrupt = True
         return callback_kwargs
 
     started = time.perf_counter()
@@ -3011,6 +3006,7 @@ def run_once(pipeline, profile, repeat):
             'profile': profile['name'], 'repeat': repeat, 'status': 'ok',
             'checkpointing': profile['checkpointing'],
             'steps': profile['steps'], 'callback_mode': profile['callback_mode'],
+            'stop_after_step': STOP_AFTER_STEP,
             'initial_latent_sha256': tensor_sha256(initial),
             'final_latent_sha256': tensor_sha256(final),
             'duration_s': time.perf_counter() - started,
@@ -3025,6 +3021,7 @@ def run_once(pipeline, profile, repeat):
             'profile': profile['name'], 'repeat': repeat, 'status': 'error',
             'checkpointing': profile['checkpointing'],
             'steps': profile['steps'], 'callback_mode': profile['callback_mode'],
+            'stop_after_step': STOP_AFTER_STEP,
             'initial_latent_sha256': tensor_sha256(initial),
             'final_latent_sha256': None,
             'duration_s': time.perf_counter() - started,
@@ -3099,6 +3096,7 @@ for profile in PROFILES:
         'callback_mode': profile['callback_mode'],
         'runs_requested': REPEATS,
         'runs_ok': len(successful),
+        'trace_lengths': [len(row['trace']) for row in successful],
         'error': next((row['error'] for row in subset if row['status'] == 'error'), None),
         'initial_equal': (
             len(successful) == REPEATS
@@ -3149,9 +3147,17 @@ if strict_errors:
     )
 elif divergences:
     first_failure = divergences[0]
+    if first_failure['profile'].startswith('zero_connected'):
+        cause = 'cœur ControlNet/UNet/VAE/DDIM ou checkpointing, avant toute loss QR'
+    elif first_failure['profile'].startswith('srl_only'):
+        cause = 'chemin Scanning Robust Loss'
+    elif first_failure['profile'].startswith('lpips_only'):
+        cause = 'chemin perceptuel LPIPS'
+    else:
+        cause = 'interaction SRL + LPIPS'
     decision = (
         f"Première divergence de hashes : {first_failure['profile']}. "
-        'Comparer les traces pour trouver le premier pas divergent.'
+        f'Cause localisée : {cause}.'
     )
 elif incomplete:
     decision = 'Diagnostic incomplet : certains profils n ont pas produit leurs deux répétitions.'
@@ -3175,8 +3181,8 @@ manifest = {
     'prompt': prompt_case['text'],
     'seed': prompt_case['seed'],
     'branch_seed': branch_seed,
-    'fast_steps': FAST_STEPS,
     'reproduction_steps': REPRO_STEPS,
+    'stop_after_step': STOP_AFTER_STEP,
     'strict_deterministic_algorithms': True,
     'cublas_workspace_config': os.environ['CUBLAS_WORKSPACE_CONFIG'],
     'profiles': [

@@ -794,6 +794,20 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   deux contrôles complets à 40 pas : callback de hashes minimal, puis callback E014A avec décodage
   VAE, diagnostics et JPEG à chaque pas. Les OOM sont classées comme inconclusives et ne peuvent
   plus devenir automatiquement la « première erreur déterministe ».
+- **Résultat E014C v2 :** archive
+  `20260727T105243Z-e014c-stage2-determinism-isolation-v2.tar.gz`, SHA-256
+  `FD80E48067D89E196996CC3489B43E8C336D12956FD11E4F5E50033525EBAD94`. SRL seule, LPIPS seule et
+  leur combinaison sont exactes sur cinq pas. Les deux contrôles à quarante pas divergent tous
+  deux à l'étape 7, timestep 801, après sept hashes identiques.
+- **Callback E014A innocenté :** le contrôle minimal et le callback avec décodage VAE produisent
+  les deux mêmes latents finaux A/B dans un ordre inversé. A et B diffèrent sur 36 282/36 864
+  valeurs FP16, avec MAE 0,0361, RMS 0,0969 et maximum 2,4639.
+- **Interprétation E014C v2 :** le timestep 801 est déterministe lorsqu'il est le premier pas du
+  planning à cinq pas. La bifurcation exige donc l'historique des sept pas précédents ou un état
+  interne alternant entre appels. Le mode PyTorch strict ne signale aucune opération fautive.
+- **E014C v3 :** conserver le planning quarante pas mais interrompre après l'étape 7. Comparer un
+  gradient nul connecté au graphe, SRL seule, LPIPS seule et la combinaison. Cette ablation
+  localise le chemin fautif sans calculer les trente-deux pas suivants.
 - **Observation QArt :** les trois répétitions d'un seuil produisent le même SHA-256 dans les
   quatre contextes. Le CLI se comporte donc de façon déterministe dans cette image Docker ; cinq
   seuils donnent cinq candidats uniques par prompt.

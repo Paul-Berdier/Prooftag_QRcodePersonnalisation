@@ -223,10 +223,10 @@ diagnostic court E014C :
 .\scripts\notebook-remote.ps1 -Reset -Notebook 15_e014c_stage2_determinism_diagnostic.ipynb
 ```
 
-Il réutilise les artefacts E014A persistés. E014C v2 exécute huit diagnostics de cinq pas avec
-checkpointing, puis quatre contrôles de quarante pas : guidance complète avec callback minimal,
-puis avec le callback de décodage E014A. Le mode strict reste `warn_only=False`. Envoyer l'archive
-`e014c-stage2-determinism-isolation-v2` avant de poursuivre.
+Il réutilise les artefacts E014A persistés. E014C v3 conserve le planning de quarante pas, mais
+interrompt chaque run après l'étape 7 où v2 a localisé la bifurcation. Il compare deux répétitions
+du gradient nul connecté, de SRL seule, de LPIPS seule et de leur combinaison. Le mode strict
+reste `warn_only=False`. Envoyer l'archive `e014c-stage2-divergence-ablation-v3` avant de poursuivre.
 
 E014B ne sera lancé qu'après correction ou caractérisation de la divergence :
 
