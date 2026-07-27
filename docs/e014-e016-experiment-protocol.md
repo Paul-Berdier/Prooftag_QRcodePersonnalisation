@@ -216,23 +216,29 @@ git pull
 .\scripts\notebook-remote.ps1 -Notebook 11_e014a_qart_blueprint_bakeoff.ipynb
 ```
 
-Après l'échec du contrôle dupliqué E014A v2, la prochaine étape n'est plus E014B. Lancer le
-diagnostic court E014C :
+Après l'échec du contrôle dupliqué E014A v2, E014C a été exécuté jusqu'à la v3 :
 
 ```powershell
 .\scripts\notebook-remote.ps1 -Reset -Notebook 15_e014c_stage2_determinism_diagnostic.ipynb
 ```
 
-Il réutilise les artefacts E014A persistés. E014C v3 conserve le planning de quarante pas, mais
-interrompt chaque run après l'étape 7 où v2 a localisé la bifurcation. Il compare deux répétitions
-du gradient nul connecté, de SRL seule, de LPIPS seule et de leur combinaison. Le mode strict
-reste `warn_only=False`. Envoyer l'archive `e014c-stage2-divergence-ablation-v3` avant de poursuivre.
+E014C v3 a montré que les quatre chemins sont reproductibles jusqu'à l'étape 7 lorsque le premier
+run est interrompu. La bifurcation dépend de l'état laissé par la fin d'un run complet. L'audit
+bit-à-bit est clos : E014B reprend avec au moins trois répétitions par recette, ordre alterné et
+contrôle dupliqué.
 
-E014B ne sera lancé qu'après correction ou caractérisation de la divergence :
+Le notebook E014B existant reste une expérience de découverte sur un seul contexte. Il ne doit
+pas être relancé tel quel pour conclure. La prochaine campagne doit confirmer des recettes figées
+sur un cas difficile, puis seulement sur plusieurs contextes :
 
 ```powershell
-.\scripts\notebook-remote.ps1 -Reset -Notebook 12_e014b_freeqr_latent_fusion.ipynb
+.\scripts\notebook-remote.ps1 -Reset -Notebook 16_e014b_statistical_freeqr_confirmation.ipynb
 ```
+
+E014B v2 utilise `p3_detailed`, quatre recettes figées et quatre répétitions dans un carré latin
+équilibré de Williams. Il équilibre donc la position et la recette précédente. Chaque répétition
+charge une pipeline fraîche. Une reprise n'est autorisée qu'à la frontière d'une répétition
+complète ; reprendre un bloc partiel changerait l'historique et est explicitement refusé.
 
 E015 et E016 se lancent avec les noms `13_e015_aesthetic_backbone_reference.ipynb` et
 `14_e016_differentiable_scan_surrogate.ipynb`. `-Reset` supprime le pod Jupyter et tous ses

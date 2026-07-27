@@ -258,8 +258,26 @@ La commande suivante supprime le pod Jupyter et tous ses kernels, attend la lib�
 recrée le pod puis ouvre directement le notebook suivant, sans restaurer temporairement vLLM/API :
 
 ```powershell
-.\scripts\notebook-remote.ps1 -Reset -Notebook 12_e014b_freeqr_latent_fusion.ipynb
+.\scripts\notebook-remote.ps1 -Reset -Notebook 16_e014b_statistical_freeqr_confirmation.ipynb
 ```
+
+## Confirmation statistique E014B v2
+
+Le notebook 16 est la suite utile après l'audit E014C. Il ne relance pas une grande recherche de
+paramètres : il compare quatre recettes figées sur le cas difficile `p3_detailed`. Chaque recette
+est répétée quatre fois, dans un carré latin équilibré de Williams qui neutralise la position et
+la recette précédente, avec une pipeline DiffQRCoder fraîche par répétition. Il mesure la
+scannabilité sur 39 tests, CLIPScore, CLIP-aesthetic, le temps et la variabilité du contrôle.
+
+```powershell
+.\scripts\notebook-remote.ps1 -Reset -Notebook 16_e014b_statistical_freeqr_confirmation.ipynb
+```
+
+Lancer ensuite **Run > Run All Cells** une seule fois. Les 16 diffusions prennent typiquement
+30 à 45 minutes sur la RTX 4000 Ada. Une répétition interrompue n'est volontairement pas reprise :
+il faut créer un nouveau run afin de ne pas modifier l'historique d'exécution de la pipeline. Le
+fichier final `DECISION.json` indique si une fusion mérite une confirmation sur les trois autres
+prompts. L'ancien notebook 12 reste exploratoire et ne doit pas servir à promouvoir une recette.
 
 ## Première installation ou mise à jour sur le serveur
 

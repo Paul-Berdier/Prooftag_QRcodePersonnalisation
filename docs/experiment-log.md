@@ -808,6 +808,28 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
 - **E014C v3 :** conserver le planning quarante pas mais interrompre après l'étape 7. Comparer un
   gradient nul connecté au graphe, SRL seule, LPIPS seule et la combinaison. Cette ablation
   localise le chemin fautif sans calculer les trente-deux pas suivants.
+- **Résultat E014C v3 :** archive
+  `20260727T120751Z-e014c-stage2-divergence-ablation-v3.tar.gz`, SHA-256
+  `E1A8F1A866BD5AE63D9E327EE0300863A6944ED0A9C825B487561F6752526BBC`. Les quatre profils sont
+  bit-à-bit identiques sur leurs deux répétitions jusqu'à l'étape 7. La combinaison retrouve deux
+  fois l'état A de v2 et jamais l'état B.
+- **Cause pratique E014C :** v2 termine le premier run complet avant le second, tandis que v3
+  interrompt le premier après l'étape 7. Un état laissé par les étapes 8–39 influence donc l'appel
+  suivant. Aucun chemin isolé — cœur, SRL, LPIPS ou combinaison — ne diverge par lui-même dans v3.
+- **Décision E014C :** clôturer l'audit bit-à-bit. Les comparaisons ordinaires emploieront au moins
+  trois répétitions, un ordre alterné/randomisé, un duplicata de contrôle et des intervalles de
+  confiance. Une branche en processus/pod frais reste disponible pour les audits causaux rares.
+  E014B peut reprendre selon ce protocole statistique.
+- **Protocole E014B v2 :** le notebook 16 fixe quatre recettes — baseline DiffQRCoder, fusion
+  canal 1 sur toute la trajectoire, fusion early et fusion avec petit gradient central — sur
+  `p3_detailed`. Il exécute quatre répétitions dans un carré latin équilibré de Williams, afin
+  d'équilibrer la position et la recette précédente, puis recharge une pipeline fraîche au début
+  de chaque répétition. Chaque résultat conserve son latent, ses frames, les 39 validations,
+  CLIPScore, CLIP-aesthetic et son temps.
+- **Porte E014B v2 :** une fusion doit battre la baseline dans au moins trois répétitions, avoir
+  un gain moyen supérieur à l'étendue observée de la baseline, ne jamais réduire son pire SSR et
+  perdre au maximum 0,5 point de CLIP-aesthetic. À défaut, aucune confirmation multi-contexte
+  n'est lancée. Ceci est un protocole enregistré, pas encore un résultat.
 - **Observation QArt :** les trois répétitions d'un seuil produisent le même SHA-256 dans les
   quatre contextes. Le CLI se comporte donc de façon déterministe dans cette image Docker ; cinq
   seuils donnent cinq candidats uniques par prompt.

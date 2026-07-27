@@ -499,3 +499,31 @@ def test_e014c_isolates_stage2_nondeterminism_before_more_campaigns():
     assert "determinism-isolation.json" in source
     assert "error.txt" in source
     assert "15_e014c_stage2_determinism_diagnostic.ipynb" in launcher
+
+
+def test_e014b_v2_uses_balanced_repetitions_and_statistical_promotion():
+    source = Path(
+        "notebooks/16_e014b_statistical_freeqr_confirmation.ipynb"
+    ).read_text(encoding="utf-8")
+    launcher = Path("scripts/notebook-remote.ps1").read_text(encoding="utf-8")
+
+    assert "e014b-statistical-freeqr-confirmation-v2" in source
+    assert "PROMPT_ID = 'p3_detailed'" in source
+    assert "REPEATS = 4" in source
+    assert "LATIN_ORDERS" in source
+    assert "WILLIAMS_FIRST_ROW = [0, 1, 3, 2]" in source
+    assert "len(transitions) == len(set(transitions)) == 12" in source
+    assert "baseline" in source
+    assert "fusion_all" in source
+    assert "fusion_early" in source
+    assert "fusion_gradient" in source
+    assert "fresh_pipeline_per_repeat" in source
+    assert "Répétition {repeat} partielle" in source
+    assert "paired_differences" in source
+    assert "bootstrap_mean_ci" in source
+    assert "exceeds_baseline_span" in source
+    assert "positive_repeats'] >= 3" in source
+    assert "aesthetic_drop'] <= 0.5" in source
+    assert "DECISION.json" in source
+    assert "39/39" in source
+    assert "16_e014b_statistical_freeqr_confirmation.ipynb" in launcher
