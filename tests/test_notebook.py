@@ -350,6 +350,21 @@ def test_e014a_uses_real_qart_and_keeps_exact_payload_claims_separate():
     assert "canonical_url_match" in source
     assert "exact_payload_mask_search_m" in source
     assert "adaptive_exact_payload_m" in source
+    assert "e014a-deterministic-blueprint-pairing-v2" in source
+    assert "SEED_OFFSET = 30000" in source
+    assert "Seeds effectives" in source
+    assert "seed_everything" in source
+    assert "torch.cuda.manual_seed_all(seed)" in source
+    assert "CUBLAS_WORKSPACE_CONFIG" in source
+    assert "torch.use_deterministic_algorithms(True, warn_only=True)" in source
+    assert "binary_mask4_m_duplicate" in source
+    assert "'selection_eligible': False" in source
+    assert "initial_latent_sha256" in source
+    assert "final_latent_sha256" in source
+    assert "final_image_sha256" in source
+    assert "determinism-audit.json" in source
+    assert "fully_reproducible" in source
+    assert "RUNTIME_VERSIONS" in source
     assert "all_mask_costs" in source
     assert "QART_REPEATS = 3" in source
     assert "qart-screening.json" in source
@@ -384,6 +399,7 @@ def test_e014b_factorizes_channel_timestep_alpha_and_decoder_gradient_audit():
     assert "free_gib < 18.0" in source
     assert "release_stage2_guidance" in source
     assert "pipe.unet.enable_gradient_checkpointing()" in source
+    assert "*-e014a-deterministic-blueprint-pairing-v2" in source
 
 
 def test_e015_is_an_aesthetic_reference_comparison_not_a_qr_model_claim():
@@ -425,6 +441,9 @@ def test_e016_labels_with_real_decoders_prevents_leakage_and_audits_gradients():
     deployment = Path("deploy/k8s/notebook.yaml").read_text(encoding="utf-8")
 
     assert "DEFAULT_SCENARIOS" in source
+    assert "*-e014a-deterministic-blueprint-pairing-v2" in source
+    assert "decode_safely" in source
+    assert "error_{decoder.name}" in source
     assert "len(decoder_names) < 3" in source
     assert "source_id" in source
     assert "source_relative_path" in source

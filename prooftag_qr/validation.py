@@ -45,6 +45,17 @@ class Decoder(ABC):
         raise NotImplementedError
 
 
+def decode_safely(decoder: Decoder, image: Image.Image) -> tuple[str, dict[str, str] | None]:
+    """Treat a native decoder failure as an unreadable sample, while preserving diagnostics."""
+    try:
+        return decoder.decode(image), None
+    except Exception as exc:
+        return "", {
+            "type": type(exc).__name__,
+            "message": str(exc)[:500],
+        }
+
+
 class OpenCVDecoder(Decoder):
     name = "opencv"
 
@@ -209,7 +220,7 @@ class QRValidator:
             transformed = scenario.apply(image)
             for decoder in self.decoders:
                 started = time.perf_counter()
-                decoded = decoder.decode(transformed)
+                decoded, decoder_error = decode_safely(decoder, transformed)
                 elapsed_ms = (time.perf_counter() - started) * 1000
                 exact = comparator(decoded, expected_payload)
                 records.append(
@@ -226,6 +237,7 @@ class QRValidator:
                             **scenario.parameters,
                             "expected_hash": expected_hash,
                             "match_mode": match_mode,
+                            "decoder_error": decoder_error,
                         },
                     )
                 )

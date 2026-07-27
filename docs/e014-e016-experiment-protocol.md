@@ -65,6 +65,23 @@ Artefacts essentiels, par prompt :
 La sélection E014B n'accepte que les variantes exact-payload. L'ordre est : porte stricte, SSR,
 pire décodeur, pire scénario, CLIP-aesthetic, CLIPScore, visibilité de grille.
 
+### Protocole déterministe E014A v2
+
+La répétition du 27 juillet a montré que deux branches alimentées par le même PNG pouvaient
+diverger. E014A v2 ajoute donc un cinquième passage, `binary_mask4_m_duplicate`, strictement
+identique au binaire mais inéligible à la sélection. Avant Stage 1 et chaque Stage 2, le notebook
+réinitialise Python, NumPy, PyTorch CPU et tous les générateurs CUDA. cuDNN déterministe et les
+algorithmes déterministes PyTorch sont activés, avec la configuration cuBLAS enregistrée.
+
+Chaque ligne conserve les SHA-256 du tensor Stage 1, de son image, de la condition, du latent
+initial, du latent final et de l'image finale. `determinism-audit.json` compare le binaire et son
+duplicata. Si les hashes finaux divergent, la porte échoue et l'expérience doit être interprétée
+comme stochastique, jamais comme une comparaison appariée exacte.
+
+`SEED_OFFSET = 30000` transforme automatiquement les seeds de base en
+`31101/32202/33303/34404`. Il ne faut plus modifier manuellement les quatre dictionnaires dans
+Jupyter. L'offset et les seeds effectives sont inscrits dans le manifeste.
+
 ## E014B — fusion latente inspirée de FreeQR
 
 Notebook :

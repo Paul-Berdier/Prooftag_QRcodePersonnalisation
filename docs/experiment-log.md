@@ -750,6 +750,25 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   sorties QArt brutes. Les traces et résultats finaux restent interprétables, mais pas les
   anciennes animations. Les fichiers sont désormais numérotés et `qart-screening.json` conserve
   chaque candidat.
+- **Incident E014A-02 :** OpenCV 4.13 peut lever une exception native lorsque les quatre points
+  détectés forment un contour d'aire nulle. Cette situation signifie « QR illisible » et ne doit
+  pas arrêter la campagne. Le validateur convertit désormais toute exception d'un décodeur en
+  lecture échouée et conserve son type/message dans `decoder_error`.
+- **Répétition E014A du 27 juillet :** archive complète avec 800 frames JPEG, seize traces,
+  seize GIF et soixante PNG QArt. Les seeds sont toutefois restées celles du premier lot. Une
+  seule sortie est stricte : `p1_simple / exact_payload_mask_search_m`, 39/39.
+- **Incident E014A-03 — appariement non déterministe :** le binaire et le meilleur masque ont la
+  même condition PNG dans les quatre contextes, mais produisent des sorties différentes. Deux
+  runs avec les mêmes seeds ne sont pas non plus bit-à-bit identiques. Le prochain protocole doit
+  réinitialiser tous les RNG avant chaque branche et inclure un contrôle dupliqué ; sinon les
+  différences doivent être estimées sur plusieurs répétitions.
+- **Correction E014A v2 :** `SEED_OFFSET=30000` fournit automatiquement quatre nouveaux contextes.
+  Python, NumPy, PyTorch CPU/CUDA, cuDNN et cuBLAS sont configurés avant chaque branche. Un binaire
+  dupliqué, exclu de la sélection, contrôle les hashes de condition, latent initial, latent final
+  et image finale dans `determinism-audit.json`. Les versions exactes du runtime sont manifestées.
+- **Observation QArt :** les trois répétitions d'un seuil produisent le même SHA-256 dans les
+  quatre contextes. Le CLI se comporte donc de façon déterministe dans cette image Docker ; cinq
+  seuils donnent cinq candidats uniques par prompt.
 - **Incident E016-02 — invalidation :** la clé d'image omettait la variante source. Quatre lignes
   pointaient donc vers le même JPEG écrasé ; 93/156 images avaient des labels contradictoires.
   Les QArt canoniques étaient en plus étiquetés contre le payload exact. Le TorchScript archivé

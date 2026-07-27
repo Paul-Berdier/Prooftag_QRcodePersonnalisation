@@ -87,8 +87,9 @@ QR binaire fixe ──► DiffQRCoder Stage 1 ──► référence artistique c
                     SSR robuste → CLIP-aes → CLIPScore → grille visible
 ```
 
-Le premier lancement complet prend du temps : 4 prompts × 4 Stage 2 × 40 pas. Mettre
-`PROMPT_LIMIT = 1` pour un test de plomberie, puis revenir à `None` pour l'expérience officielle.
+Le premier lancement complet prend du temps : 4 prompts × 5 Stage 2 × 40 pas. La cinquième branche
+est un duplicata binaire qui mesure le déterminisme réel. Mettre `PROMPT_LIMIT = 1` pour un test
+de plomberie, puis revenir à `None` pour l'expérience officielle.
 """
     ),
     code(
@@ -96,7 +97,11 @@ Le premier lancement complet prend du temps : 4 prompts × 4 Stage 2 × 40 pas. 
 
 import gc
 import hashlib
+import importlib.metadata
 import json
+import os
+import platform
+import random
 import shutil
 import subprocess
 import sys
@@ -115,6 +120,7 @@ from IPython.display import Markdown, clear_output, display
 from PIL import Image
 from safetensors.torch import load_file, save_file
 
+os.environ.setdefault('CUBLAS_WORKSPACE_CONFIG', ':4096:8')
 UPSTREAM_ROOT = Path('/opt/DiffQRCoder')
 DIFFQRCODER_COMMIT = 'e24ea73ee2e13c7e6e87cb422e8b11784e70ae00'
 QART_COMMIT = '6e0e00804a1994db7098432c19fadfc552071e30'
@@ -147,6 +153,9 @@ class PaperLPIPSLoss(torch.nn.Module):
 
 upstream_srpg.PerceptualLoss = PaperLPIPSLoss
 assert torch.cuda.is_available(), 'Lancer dans le pod GPU, pas avec Python Windows.'
+torch.backends.cudnn.benchmark = False
+torch.backends.cudnn.deterministic = True
+torch.use_deterministic_algorithms(True, warn_only=True)
 print('GPU :', torch.cuda.get_device_name(0))
 print('DiffQRCoder :', DIFFQRCODER_COMMIT)
 print('QArt :', QART_COMMIT)
@@ -154,12 +163,19 @@ print('QArt :', QART_COMMIT)
     ),
     markdown("## 1. Contrat expérimental et dossier reprenable"),
     code(
-        f"""EXPERIMENT_NAME = 'e014a-real-qart-exact-adaptive-v1'
+        f"""EXPERIMENT_NAME = 'e014a-deterministic-blueprint-pairing-v2'
 RESUME_RUN_NAME = None
 PAYLOAD = 'https://ptag.io/t/e014'
 PROMPT_LIMIT = None  # 1 = smoke test ; None = campagne officielle sur les quatre prompts
 RUN_STAGE2 = True
+SEED_OFFSET = 30000  # nouveau lot automatique : 31101, 32202, 33303, 34404
 {COMMON_PROMPTS}
+BASE_PROMPTS = PROMPTS
+PROMPTS = []
+for item in BASE_PROMPTS:
+    adjusted = dict(item)
+    adjusted['seed'] = int(item['seed']) + SEED_OFFSET
+    PROMPTS.append(adjusted)
 ACTIVE_PROMPTS = PROMPTS[:PROMPT_LIMIT] if PROMPT_LIMIT else PROMPTS
 
 QR_VERSION = 3
@@ -182,7 +198,7 @@ QART_REPEATS = 3  # le CLI public n'expose pas de seed : quantifier sa variabili
 DISPLAY_EVERY = 5
 SAVE_EVERY_STEP = True
 BLUEPRINT_NAMES = [
-    'binary_mask4_m', 'qart_fragment_l',
+    'binary_mask4_m', 'binary_mask4_m_duplicate', 'qart_fragment_l',
     'exact_payload_mask_search_m', 'adaptive_exact_payload_m',
 ]
 
@@ -197,7 +213,11 @@ else:
     RUN_DIR.mkdir(parents=True)
 RESULTS_PATH = RUN_DIR / 'results.jsonl'
 print('Sortie :', RUN_DIR)
-print('Exécutions Stage 2 prévues :', len(ACTIVE_PROMPTS) * 4 if RUN_STAGE2 else 0)
+print('Seeds effectives :', [(item['id'], item['seed']) for item in ACTIVE_PROMPTS])
+print(
+    'Exécutions Stage 2 prévues :',
+    len(ACTIVE_PROMPTS) * len(BLUEPRINT_NAMES) if RUN_STAGE2 else 0,
+)
 """
     ),
     markdown("## 2. Fonctions d'audit : validation, reprise, frames et géométrie"),
@@ -206,6 +226,47 @@ print('Exécutions Stage 2 prévues :', len(ACTIVE_PROMPTS) * 4 if RUN_STAGE2 el
 print('Décodeurs actifs :', [decoder.name for decoder in validator.decoders])
 if len(validator.decoders) < 3:
     print('AVERTISSEMENT : moins de trois décodeurs. Vérifier zbar et zxing-cpp.')
+
+
+def seed_everything(seed):
+    seed = int(seed)
+    random.seed(seed)
+    np.random.seed(seed % (2**32))
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+
+def tensor_sha256(tensor):
+    array = tensor.detach().cpu().contiguous().numpy()
+    return hashlib.sha256(array.tobytes()).hexdigest()
+
+
+def image_sha256(image):
+    return hashlib.sha256(np.asarray(image.convert('RGB')).tobytes()).hexdigest()
+
+
+def package_version(name):
+    try:
+        return importlib.metadata.version(name)
+    except importlib.metadata.PackageNotFoundError:
+        return None
+
+
+RUNTIME_VERSIONS = {
+    'python': platform.python_version(),
+    'torch': torch.__version__,
+    'cuda': torch.version.cuda,
+    'cudnn': torch.backends.cudnn.version(),
+    'diffusers': package_version('diffusers'),
+    'transformers': package_version('transformers'),
+    'opencv': package_version('opencv-python-headless') or package_version('opencv-python'),
+    'gpu': torch.cuda.get_device_name(0),
+    'cublas_workspace_config': os.environ.get('CUBLAS_WORKSPACE_CONFIG'),
+    'deterministic_algorithms': torch.are_deterministic_algorithms_enabled(),
+    'cudnn_deterministic': torch.backends.cudnn.deterministic,
+    'cudnn_benchmark': torch.backends.cudnn.benchmark,
+}
+print('Runtime déterministe :', RUNTIME_VERSIONS)
 
 
 def append_jsonl(path, row):
@@ -338,7 +399,7 @@ print('Pipeline prête ; VRAM allouée GiB :', torch.cuda.memory_allocated() / 2
 """
     ),
     markdown(
-        """## 4. Stage 1 puis construction des quatre blueprints
+        """## 4. Stage 1 puis construction des quatre blueprints et du témoin dupliqué
 
 La condition Stage 1 reste le même QR binaire v3/M/masque 4. QArt reçoit ensuite **l'image Stage 1**
 comme image cible. Sa sortie 980×980 contient une bordure de dix modules : elle est recadrée sur le
@@ -368,6 +429,8 @@ def save_target(prompt_dir, name, aligned, mode, extra):
         'ecc': aligned.error_correction, 'mask_pattern': aligned.mask_pattern,
         'module_size': aligned.module_size, 'padding_px': aligned.padding_px,
         'canvas_size': aligned.canvas_size, 'payload': PAYLOAD,
+        'condition_sha256': image_sha256(aligned.image),
+        'selection_eligible': extra.get('selection_eligible', True),
         'grid_visibility': grid_visibility_score(aligned.image, aligned),
         **validation, **extra,
     }
@@ -419,6 +482,8 @@ for prompt_case in ACTIVE_PROMPTS:
         stage1_states[prompt_case['id']] = {
             'tensor': stage1_tensor, 'image': stage1_image,
             'duration_s': stage1_duration,
+            'tensor_sha256': tensor_sha256(stage1_tensor),
+            'image_sha256': image_sha256(stage1_image),
         }
         target_states[prompt_case['id']] = {
             name: load_saved_target(prompt_dir, name) for name in BLUEPRINT_NAMES
@@ -465,6 +530,7 @@ for prompt_case in ACTIVE_PROMPTS:
     callback, trace = diffusion_callback(
         pipe, stage1_control, f"{prompt_case['id']} / Stage 1", STAGE1_STEPS, stage1_folder
     )
+    seed_everything(prompt_case['seed'])
     started = time.perf_counter()
     result = pipe._run_stage1(
         prompt=prompt_case['text'], qrcode=stage1_control.image, negative_prompt=NEGATIVE_PROMPT,
@@ -489,12 +555,24 @@ for prompt_case in ACTIVE_PROMPTS:
     stage1_states[prompt_case['id']] = {
         'tensor': stage1_tensor, 'image': stage1_image,
         'duration_s': stage1_duration,
+        'tensor_sha256': tensor_sha256(stage1_tensor),
+        'image_sha256': image_sha256(stage1_image),
     }
 
     targets = {}
     targets['binary_mask4_m'] = save_target(
         prompt_dir, 'binary_mask4_m', baseline, 'exact',
         {'algorithm': 'standard QR, fixed mask 4', 'reference_cost': reference_cost(baseline.image, stage1_image)},
+    )
+    targets['binary_mask4_m_duplicate'] = save_target(
+        prompt_dir, 'binary_mask4_m_duplicate', baseline, 'exact',
+        {
+            'algorithm': 'determinism control: exact duplicate of binary_mask4_m',
+            'reference_cost': reference_cost(baseline.image, stage1_image),
+            'selection_eligible': False,
+            'experimental_role': 'determinism_control',
+            'duplicates': 'binary_mask4_m',
+        },
     )
 
     exact_candidates = exact_mask_candidates(
@@ -623,10 +701,11 @@ for prompt_case in ACTIVE_PROMPTS:
     markdown(
         """## 5. Comparaison Stage 2 appariée
 
-Les quatre branches réutilisent le même tensor Stage 1, le même latent initial DDIM, la même seed,
-le même prompt et les mêmes poids. Seule l'image de condition QR change. Une frame décodée et ses
-diagnostics sont écrits à chaque pas. Le QArt est évalué en URL canonique ; les trois autres en
-égalité stricte du payload.
+Les cinq branches réutilisent le même tensor Stage 1, le même latent initial DDIM, la même seed,
+le même prompt et les mêmes poids. Le binaire est exécuté deux fois avec une condition strictement
+identique : leurs hashes doivent être égaux avant d'attribuer les différences aux blueprints.
+Une frame décodée et ses diagnostics sont écrits à chaque pas. Le QArt est évalué en URL
+canonique ; les quatre autres en égalité stricte du payload.
 """
     ),
     code(
@@ -657,16 +736,19 @@ if RUN_STAGE2:
                 STAGE2_STEPS, output_dir / 'frames',
             )
             release_stage2_guidance(pipe)
+            branch_seed = prompt_case['seed'] + 10000
+            seed_everything(branch_seed)
             initial = paired_stage2_latents(
-                pipe, stage1['tensor'], prompt_case['seed'] + 10000, STAGE2_STEPS
+                pipe, stage1['tensor'], branch_seed, STAGE2_STEPS
             )
+            initial_latent_sha256 = tensor_sha256(initial)
             started = time.perf_counter()
             result = pipe._run_stage2(
                 prompt=prompt_case['text'], qrcode=aligned.image,
                 qrcode_module_size=aligned.module_size, qrcode_padding=aligned.padding_px,
                 ref_image=stage1['tensor'], negative_prompt=NEGATIVE_PROMPT,
                 num_inference_steps=STAGE2_STEPS, guidance_scale=GUIDANCE_SCALE, eta=0.0,
-                generator=torch.Generator(device='cuda').manual_seed(prompt_case['seed'] + 10000),
+                generator=torch.Generator(device='cuda').manual_seed(branch_seed),
                 latents=initial.clone(), controlnet_conditioning_scale=CONTROLNET_SCALE,
                 scanning_robust_guidance_scale=SCANNING_GUIDANCE,
                 perceptual_guidance_scale=PERCEPTUAL_GUIDANCE,
@@ -675,6 +757,8 @@ if RUN_STAGE2:
             )
             final_latent = result.images.detach()
             image = decode_latents(pipe, final_latent)
+            final_latent_sha256 = tensor_sha256(final_latent)
+            final_image_sha256 = image_sha256(image)
             duration = time.perf_counter() - started
             image.save(output_dir / 'final.png')
             save_file(
@@ -697,8 +781,16 @@ if RUN_STAGE2:
             row = {
                 'prompt_id': prompt_id, 'prompt': prompt_case['text'],
                 'seed': prompt_case['seed'], 'blueprint': blueprint_name,
+                'branch_seed': branch_seed,
                 'payload_contract': mode, 'stage1_duration_s': stage1['duration_s'],
                 'stage2_duration_s': duration,
+                'selection_eligible': state['metadata'].get('selection_eligible', True),
+                'condition_sha256': state['metadata']['condition_sha256'],
+                'stage1_tensor_sha256': stage1['tensor_sha256'],
+                'stage1_image_sha256': stage1['image_sha256'],
+                'initial_latent_sha256': initial_latent_sha256,
+                'final_latent_sha256': final_latent_sha256,
+                'final_image_sha256': final_image_sha256,
                 **validation, **quality, **aligned_module_diagnostics(image, aligned),
                 'grid_visibility': grid_visibility_score(image, aligned),
                 'blueprint_reference_cost': state['metadata']['reference_cost'],
@@ -729,6 +821,58 @@ if not frame.empty:
          'clip_score', 'grid_visibility', 'stage2_duration_s']
     ])
 
+    row_by_key = {
+        (row['prompt_id'], row['blueprint']): row for row in rows
+    }
+    determinism_audit = []
+    for prompt_case in ACTIVE_PROMPTS:
+        prompt_id = prompt_case['id']
+        primary = row_by_key.get((prompt_id, 'binary_mask4_m'))
+        duplicate = row_by_key.get((prompt_id, 'binary_mask4_m_duplicate'))
+        if primary is None or duplicate is None:
+            continue
+        primary_image = np.asarray(Image.open(
+            RUN_DIR / prompt_id / 'stage2' / 'binary_mask4_m' / 'final.png'
+        ).convert('RGB'), dtype=np.int16)
+        duplicate_image = np.asarray(Image.open(
+            RUN_DIR / prompt_id / 'stage2' / 'binary_mask4_m_duplicate' / 'final.png'
+        ).convert('RGB'), dtype=np.int16)
+        item = {
+            'prompt_id': prompt_id,
+            'condition_hash_equal': (
+                primary['condition_sha256'] == duplicate['condition_sha256']
+            ),
+            'initial_latent_hash_equal': (
+                primary['initial_latent_sha256'] == duplicate['initial_latent_sha256']
+            ),
+            'final_latent_hash_equal': (
+                primary['final_latent_sha256'] == duplicate['final_latent_sha256']
+            ),
+            'final_image_hash_equal': (
+                primary['final_image_sha256'] == duplicate['final_image_sha256']
+            ),
+            'final_image_mae': float(
+                np.abs(primary_image - duplicate_image).mean()
+            ),
+        }
+        item['fully_reproducible'] = all([
+            item['condition_hash_equal'],
+            item['initial_latent_hash_equal'],
+            item['final_latent_hash_equal'],
+            item['final_image_hash_equal'],
+        ])
+        determinism_audit.append(item)
+    (RUN_DIR / 'determinism-audit.json').write_text(
+        json.dumps(determinism_audit, indent=2), encoding='utf-8'
+    )
+    if determinism_audit:
+        display(pd.DataFrame(determinism_audit))
+        if not all(item['fully_reproducible'] for item in determinism_audit):
+            print(
+                'PORTE DÉTERMINISME ÉCHOUÉE : interpréter les branches comme '
+                'des répétitions stochastiques, pas comme des paires exactes.'
+            )
+
     aggregate = frame.groupby('blueprint').agg(
         contexts=('prompt_id', 'nunique'),
         strict_contexts=('strict_all', 'sum'),
@@ -747,7 +891,11 @@ if not frame.empty:
 
     for prompt_case in ACTIVE_PROMPTS:
         prompt_rows = [row for row in rows if row['prompt_id'] == prompt_case['id']]
-        exact_rows = [row for row in prompt_rows if row['payload_contract'] == 'exact']
+        exact_rows = [
+            row for row in prompt_rows
+            if row['payload_contract'] == 'exact'
+            and row.get('selection_eligible', True)
+        ]
         winner = max(exact_rows, key=rank_row)
         source = RUN_DIR / prompt_case['id'] / 'blueprints' / winner['blueprint']
         destination = RUN_DIR / prompt_case['id']
@@ -770,14 +918,25 @@ if not frame.empty:
 manifest = {
     'experiment': EXPERIMENT_NAME, 'created_at': datetime.now(timezone.utc).isoformat(),
     'diffqrcoder_commit': DIFFQRCODER_COMMIT, 'qart_commit': QART_COMMIT,
-    'payload': PAYLOAD, 'prompts': ACTIVE_PROMPTS, 'canvas_size': CANVAS_SIZE,
+    'payload': PAYLOAD, 'seed_offset': SEED_OFFSET, 'prompts': ACTIVE_PROMPTS,
+    'canvas_size': CANVAS_SIZE,
     'module_size': QR_MODULE_SIZE, 'stage1_steps': STAGE1_STEPS,
     'stage2_steps': STAGE2_STEPS, 'decoders': [decoder.name for decoder in validator.decoders],
+    'runtime_versions': RUNTIME_VERSIONS,
+    'determinism_audit': determinism_audit if not frame.empty else [],
+    'stage1_hashes': {
+        prompt_id: {
+            'tensor_sha256': state['tensor_sha256'],
+            'image_sha256': state['image_sha256'],
+        }
+        for prompt_id, state in stage1_states.items()
+    },
     'scientific_limits': [
         'QArt public appends a fragment and uses ECC L; it is canonical-URL, not exact-payload.',
         'QArt public exposes no deterministic seed; repeated outputs and SHA-256 are persisted.',
         'Exact-payload mask search uses standard QR masks and is not labelled QArt.',
         'Adaptive blueprint is a Prooftag engineering method, not a paper reproduction.',
+        'Duplicate binary control must pass determinism-audit.json before paired attribution.',
         'Software validation is not physical SSR.',
     ],
 }
@@ -894,7 +1053,10 @@ PROMPT_ID = 'p1_simple'  # répéter ensuite p2/p3/p4 pour la confirmation
 RESUME_RUN_NAME = None
 
 if E014A_RUN_DIR is None:
-    candidates = sorted(Path('/data/notebook-runs').glob('*-e014a-real-qart-exact-adaptive-v1'))
+    candidates = sorted([
+        *Path('/data/notebook-runs').glob('*-e014a-deterministic-blueprint-pairing-v2'),
+        *Path('/data/notebook-runs').glob('*-e014a-real-qart-exact-adaptive-v1'),
+    ])
     if not candidates:
         raise FileNotFoundError('Aucun E014A : exécuter le notebook 11 avant E014B.')
     E014A_RUN_DIR = candidates[-1]
@@ -1850,7 +2012,7 @@ from sklearn.calibration import calibration_curve
 from sklearn.metrics import average_precision_score, brier_score_loss, roc_auc_score
 from torch.utils.data import DataLoader, Dataset
 
-from prooftag_qr.validation import DEFAULT_SCENARIOS, QRValidator
+from prooftag_qr.validation import DEFAULT_SCENARIOS, QRValidator, decode_safely
 
 assert torch.cuda.is_available(), 'Le CNN peut tourner sur CPU, mais le pod GPU est recommandé.'
 DEVICE = torch.device('cuda')
@@ -1886,7 +2048,11 @@ DATASET_IMAGE_DIR = RUN_DIR / 'labelled-images'
 DATASET_IMAGE_DIR.mkdir()
 
 if not SOURCE_RUNS:
-    patterns = ['*-e014a-real-qart-exact-adaptive-v1', '*-e014b-freeqr-latent-channel-timestep-v1']
+    patterns = [
+        '*-e014a-deterministic-blueprint-pairing-v2',
+        '*-e014a-real-qart-exact-adaptive-v1',
+        '*-e014b-freeqr-latent-channel-timestep-v1',
+    ]
     for pattern in patterns:
         matches = sorted(Path('/data/notebook-runs').glob(pattern))
         if matches:
@@ -2041,9 +2207,10 @@ for run_dir in SOURCE_RUNS:
                 **source_meta,
             }
             for decoder in validator.decoders:
-                decoded = decoder.decode(transformed)
+                decoded, decoder_error = decode_safely(decoder, transformed)
                 row[f'label_{decoder.name}'] = int(decoded == expected_payload)
                 row[f'detected_{decoder.name}'] = int(bool(decoded))
+                row[f'error_{decoder.name}'] = decoder_error
             records.append(row)
 
 physical_count = 0
@@ -2067,9 +2234,10 @@ if PHYSICAL_CSV.exists():
             'expected_payload_hash': hashlib.sha256(expected_payload.encode()).hexdigest(),
         }
         for decoder in validator.decoders:
-            decoded = decoder.decode(image)
+            decoded, decoder_error = decode_safely(decoder, image)
             row[f'label_{decoder.name}'] = int(decoded == expected_payload)
             row[f'detected_{decoder.name}'] = int(bool(decoded))
+            row[f'error_{decoder.name}'] = decoder_error
         records.append(row)
         physical_count += 1
 
