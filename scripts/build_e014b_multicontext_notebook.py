@@ -175,7 +175,7 @@ else:
         json.dumps(resolved_revisions, indent=2), encoding='utf-8'
     )
 BASE_MODEL_URL = (
-    f"https://huggingface.co/{BASE_MODEL_REPO}/resolve/"
+    f"https://huggingface.co/{BASE_MODEL_REPO}/blob/"
     f"{resolved_revisions['base_model']}/{BASE_MODEL_FILE}"
 )
 

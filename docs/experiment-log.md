@@ -860,6 +860,11 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   maximum 0,75 point de CLIP-aesthetic. Le statut production exige 39/39 sur les douze sorties
   fusionnées. Les révisions des modèles, le commit DiffQRCoder et le hash du pipeline sont
   manifestés.
+- **Incident E014B-03 — URL single-file :** la première exécution v3 s'arrête avant tout run.
+  Une URL `/resolve/<commit>/fichier` est réinterprétée par Diffusers comme un nom de fichier,
+  produisant `/resolve/main/resolve/<commit>/fichier` et une 404. L'URL épinglée utilise désormais
+  `/blob/<commit>/fichier`, format compris par `from_single_file`. Aucun résultat partiel n'a été
+  écrit.
 - **Observation QArt :** les trois répétitions d'un seuil produisent le même SHA-256 dans les
   quatre contextes. Le CLI se comporte donc de façon déterministe dans cette image Docker ; cinq
   seuils donnent cinq candidats uniques par prompt.

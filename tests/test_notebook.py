@@ -552,6 +552,7 @@ def test_e014b_v3_confirms_generalization_with_corrected_gates():
     assert "decoder-results.csv" in source
     assert "scenario-results.csv" in source
     assert "resolved-model-revisions.json" in source
+    assert "/blob/" in source
     assert "diffqrcoder_commit" in source
     assert "pipeline_source_sha256" in source
     assert "physical-validation-template.csv" in source
