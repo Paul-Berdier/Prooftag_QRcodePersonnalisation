@@ -782,6 +782,18 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   déterministe n'était qu'en `warn_only=True`. Avant E014B complet ou E016, un diagnostic de 2 à
   5 pas doit exécuter le mode strict et ablater SRL, LPIPS, gradient checkpointing, précision du
   gradient et réutilisation de la pipeline. Les comparaisons par paire unique restent suspendues.
+- **Résultat E014C v1 :** archive
+  `20260727T100629Z-e014c-stage2-determinism-isolation-v1.tar.gz`, SHA-256
+  `D66811E796BB2575A3493CE82687B52545951343CE20829D690DCE1E4132E9B1`. Les quatre profils sans
+  checkpointing sont inconclusifs : OOM dans `torch.baddbmm` de l'attention UNet avant le premier
+  pas, avec seulement 75 à 119 Mio libres. Ce n'est pas une erreur de déterminisme.
+- **Signal E014C v1 :** la guidance complète avec checkpointing activé exécute deux répétitions de
+  cinq pas en mode strict. Le latent initial, chacun des cinq hashes et le latent final sont
+  bit-à-bit identiques ; aucune opération CUDA non déterministe n'est signalée.
+- **Correction E014C v2 :** toutes les ablations conservent le checkpointing. La campagne ajoute
+  deux contrôles complets à 40 pas : callback de hashes minimal, puis callback E014A avec décodage
+  VAE, diagnostics et JPEG à chaque pas. Les OOM sont classées comme inconclusives et ne peuvent
+  plus devenir automatiquement la « première erreur déterministe ».
 - **Observation QArt :** les trois répétitions d'un seuil produisent le même SHA-256 dans les
   quatre contextes. Le CLI se comporte donc de façon déterministe dans cette image Docker ; cinq
   seuils donnent cinq candidats uniques par prompt.

@@ -2638,15 +2638,20 @@ meilleure image, ni de nouveaux paramètres**. Il localise le premier composant 
 Il réutilise les artefacts persistés par E014A v2 et exécute chaque profil deux fois, avec le même
 prompt, la même seed et le même latent :
 
-1. aucune guidance SRPG ;
-2. Scanning Robust Loss seule ;
-3. LPIPS seule ;
-4. SRL + LPIPS, checkpointing désactivé ;
-5. SRL + LPIPS, checkpointing activé.
+1. aucune guidance SRPG, checkpointing activé ;
+2. Scanning Robust Loss seule, checkpointing activé ;
+3. LPIPS seule, checkpointing activé ;
+4. SRL + LPIPS à 5 pas ;
+5. SRL + LPIPS à 40 pas avec callback de hashes seulement ;
+6. SRL + LPIPS à 40 pas avec le décodage d'aperçu d'E014A.
 
-Le test utilise 5 pas par défaut. `torch.use_deterministic_algorithms(..., warn_only=False)` est
-volontaire : une opération CUDA non déterministe doit arrêter **uniquement son profil**, être
-enregistrée avec sa traceback, puis laisser les autres ablations continuer.
+La v1 a montré que désactiver le checkpointing dépasse 20 Go avant le premier pas : ce n'est pas
+un test de déterminisme exploitable sur la RTX 4000 Ada. La v2 conserve donc le checkpointing pour
+toutes les ablations et reproduit le planning de 40 pas d'E014A.
+
+`torch.use_deterministic_algorithms(..., warn_only=False)` est volontaire : une opération CUDA
+non déterministe doit arrêter **uniquement son profil**, être enregistrée avec sa traceback, puis
+laisser les autres ablations continuer.
 """
     ),
     markdown(
@@ -2655,11 +2660,12 @@ enregistrée avec sa traceback, puis laisser les autres ablations continuer.
 ```text
 latent E014A figé
        │
-       ├── zéro guidance × 2 ──► hashes par pas
-       ├── SRL seule × 2 ──────► hashes par pas
-       ├── LPIPS seule × 2 ────► hashes par pas
-       ├── combinée sans GC × 2
-       └── combinée avec GC × 2
+       ├── zéro guidance, GC × 2 ──► 5 hashes
+       ├── SRL seule, GC × 2 ──────► 5 hashes
+       ├── LPIPS seule, GC × 2 ────► 5 hashes
+       ├── combinée, GC × 2 ───────► 5 hashes
+       ├── combinée, GC × 2 ───────► 40 hashes
+       └── combinée + callback E014A × 2
                                   │
                     première erreur ou divergence
                                   │
@@ -2704,7 +2710,7 @@ from diffqrcoder import DiffQRCoderPipeline  # noqa: E402
 from diffqrcoder.losses import ScanningRobustLoss  # noqa: E402
 import diffqrcoder.pipeline_diffqrcoder as pipeline_module  # noqa: E402
 import diffqrcoder.srpg as upstream_srpg  # noqa: E402
-from prooftag_qr.geometry import AlignedQR  # noqa: E402
+from prooftag_qr.geometry import AlignedQR, aligned_module_diagnostics  # noqa: E402
 
 
 class PaperLPIPSLoss(torch.nn.Module):
@@ -2724,10 +2730,11 @@ print('GPU :', torch.cuda.get_device_name(0))
     ),
     markdown("## 1. Sélectionner le run E014A v2 et figer le cas diagnostique"),
     code(
-        """EXPERIMENT_NAME = 'e014c-stage2-determinism-isolation-v1'
+        """EXPERIMENT_NAME = 'e014c-stage2-determinism-isolation-v2'
 SOURCE_RUN_DIR = None  # ex. Path('/data/notebook-runs/20260727T085645Z-e014a-deterministic-blueprint-pairing-v2')
 PROMPT_ID = 'p1_simple'
-DIAGNOSTIC_STEPS = 5  # 2 pour un smoke test très court, 5 pour le diagnostic officiel
+FAST_STEPS = 5
+REPRO_STEPS = 40
 REPEATS = 2
 RUN_FRESH_PIPELINE_CONTROL = False  # seulement si toutes les ablations précédentes restent ambiguës
 
@@ -2892,11 +2899,31 @@ class PerceptualOnlyGuidance(torch.nn.Module):
 
 
 PROFILES = [
-    {'name': 'no_guidance_gc_off', 'guidance_class': ZeroGuidance, 'checkpointing': False},
-    {'name': 'srl_only_gc_off', 'guidance_class': ScanningOnlyGuidance, 'checkpointing': False},
-    {'name': 'lpips_only_gc_off', 'guidance_class': PerceptualOnlyGuidance, 'checkpointing': False},
-    {'name': 'combined_gc_off', 'guidance_class': ORIGINAL_GUIDANCE_CLASS, 'checkpointing': False},
-    {'name': 'combined_gc_on', 'guidance_class': ORIGINAL_GUIDANCE_CLASS, 'checkpointing': True},
+    {
+        'name': 'no_guidance_gc_on_5', 'guidance_class': ZeroGuidance,
+        'checkpointing': True, 'steps': FAST_STEPS, 'callback_mode': 'hash',
+    },
+    {
+        'name': 'srl_only_gc_on_5', 'guidance_class': ScanningOnlyGuidance,
+        'checkpointing': True, 'steps': FAST_STEPS, 'callback_mode': 'hash',
+    },
+    {
+        'name': 'lpips_only_gc_on_5', 'guidance_class': PerceptualOnlyGuidance,
+        'checkpointing': True, 'steps': FAST_STEPS, 'callback_mode': 'hash',
+    },
+    {
+        'name': 'combined_gc_on_5', 'guidance_class': ORIGINAL_GUIDANCE_CLASS,
+        'checkpointing': True, 'steps': FAST_STEPS, 'callback_mode': 'hash',
+    },
+    {
+        'name': 'combined_gc_on_40_hash', 'guidance_class': ORIGINAL_GUIDANCE_CLASS,
+        'checkpointing': True, 'steps': REPRO_STEPS, 'callback_mode': 'hash',
+    },
+    {
+        'name': 'combined_gc_on_40_e014a_callback',
+        'guidance_class': ORIGINAL_GUIDANCE_CLASS,
+        'checkpointing': True, 'steps': REPRO_STEPS, 'callback_mode': 'decode',
+    },
 ]
 print(pd.DataFrame([{k: v for k, v in item.items() if k != 'guidance_class'} for item in PROFILES]))
 """
@@ -2910,7 +2937,19 @@ conservée dans `error.txt` et `results.jsonl`, puis le notebook continue avec l
     ),
     code(
         """@torch.no_grad()
-def paired_initial_latent(pipeline):
+def decode_latents(pipeline, latents):
+    dtype = next(pipeline.vae.parameters()).dtype
+    decoded = pipeline.vae.decode(
+        latents.detach().to(dtype=dtype) / pipeline.vae.config.scaling_factor,
+        return_dict=False,
+    )[0]
+    return pipeline.image_processor.postprocess(
+        decoded.detach(), output_type='pil'
+    )[0].convert('RGB')
+
+
+@torch.no_grad()
+def paired_initial_latent(pipeline, steps):
     normalized = stage1_tensor * 2 - 1
     encoded = (
         pipeline.vae.encode(normalized).latent_dist.mode()
@@ -2920,7 +2959,7 @@ def paired_initial_latent(pipeline):
     noise = torch.randn(
         encoded.shape, generator=generator, device='cuda', dtype=encoded.dtype
     )
-    pipeline.scheduler.set_timesteps(DIAGNOSTIC_STEPS, device='cuda')
+    pipeline.scheduler.set_timesteps(steps, device='cuda')
     return pipeline.scheduler.add_noise(
         encoded, noise, pipeline.scheduler.timesteps[:1]
     ).detach()
@@ -2933,15 +2972,21 @@ def run_once(pipeline, profile, repeat):
     set_checkpointing(pipeline, profile['checkpointing'])
     release_guidance(pipeline)
     pipeline_module.ScanningRobustPerceptualGuidance = profile['guidance_class']
-    initial = paired_initial_latent(pipeline)
+    initial = paired_initial_latent(pipeline, profile['steps'])
     trace = []
 
     def callback(_pipeline, step_index, timestep, callback_kwargs):
         current = callback_kwargs['latents'].detach()
-        trace.append({
+        item = {
             'step': int(step_index), 'timestep': int(timestep),
             'latent_sha256': tensor_sha256(current),
-        })
+        }
+        if profile['callback_mode'] == 'decode':
+            preview = decode_latents(pipeline, current)
+            diagnostics = aligned_module_diagnostics(preview, aligned)
+            item.update(diagnostics)
+            preview.save(output_dir / f'{step_index:03d}.jpg', quality=88)
+        trace.append(item)
         return callback_kwargs
 
     started = time.perf_counter()
@@ -2950,7 +2995,7 @@ def run_once(pipeline, profile, repeat):
             prompt=prompt_case['text'], qrcode=aligned.image,
             qrcode_module_size=aligned.module_size, qrcode_padding=aligned.padding_px,
             ref_image=stage1_tensor, negative_prompt=NEGATIVE_PROMPT,
-            num_inference_steps=DIAGNOSTIC_STEPS, guidance_scale=GUIDANCE_SCALE,
+            num_inference_steps=profile['steps'], guidance_scale=GUIDANCE_SCALE,
             eta=0.0,
             generator=torch.Generator(device='cuda').manual_seed(branch_seed),
             latents=initial.clone(),
@@ -2965,6 +3010,7 @@ def run_once(pipeline, profile, repeat):
         row = {
             'profile': profile['name'], 'repeat': repeat, 'status': 'ok',
             'checkpointing': profile['checkpointing'],
+            'steps': profile['steps'], 'callback_mode': profile['callback_mode'],
             'initial_latent_sha256': tensor_sha256(initial),
             'final_latent_sha256': tensor_sha256(final),
             'duration_s': time.perf_counter() - started,
@@ -2978,6 +3024,7 @@ def run_once(pipeline, profile, repeat):
         row = {
             'profile': profile['name'], 'repeat': repeat, 'status': 'error',
             'checkpointing': profile['checkpointing'],
+            'steps': profile['steps'], 'callback_mode': profile['callback_mode'],
             'initial_latent_sha256': tensor_sha256(initial),
             'final_latent_sha256': None,
             'duration_s': time.perf_counter() - started,
@@ -3011,7 +3058,9 @@ if RUN_FRESH_PIPELINE_CONTROL:
     fresh_profile = {
         'name': 'combined_fresh_pipeline',
         'guidance_class': ORIGINAL_GUIDANCE_CLASS,
-        'checkpointing': False,
+        'checkpointing': True,
+        'steps': REPRO_STEPS,
+        'callback_mode': 'hash',
     }
     PROFILES.append(fresh_profile)
     release_guidance(pipe)
@@ -3046,6 +3095,8 @@ for profile in PROFILES:
     item = {
         'profile': profile['name'],
         'checkpointing': profile['checkpointing'],
+        'steps': profile['steps'],
+        'callback_mode': profile['callback_mode'],
         'runs_requested': REPEATS,
         'runs_ok': len(successful),
         'error': next((row['error'] for row in subset if row['status'] == 'error'), None),
@@ -3055,7 +3106,10 @@ for profile in PROFILES:
         ),
         'step_hashes_equal': (
             len(successful) == REPEATS
-            and len({json.dumps(row['trace'], sort_keys=True) for row in successful}) == 1
+            and len({
+                tuple(item['latent_sha256'] for item in row['trace'])
+                for row in successful
+            }) == 1
         ),
         'final_equal': (
             len(successful) == REPEATS
@@ -3071,24 +3125,45 @@ audit_frame.to_csv(RUN_DIR / 'determinism-isolation.csv', index=False)
 )
 display(audit_frame)
 
-first_failure = next(
-    (item for item in audit if item['error'] or not item['step_hashes_equal']),
-    None,
-)
-if first_failure is None:
+oom_profiles = [
+    item['profile'] for item in audit
+    if item['error'] and 'OutOfMemoryError' in item['error']
+]
+strict_errors = [
+    item for item in audit
+    if item['error'] and 'OutOfMemoryError' not in item['error']
+]
+divergences = [
+    item for item in audit
+    if item['runs_ok'] == REPEATS and not item['step_hashes_equal']
+]
+incomplete = [
+    item for item in audit
+    if item['runs_ok'] < REPEATS and not item['error']
+]
+if strict_errors:
+    first_failure = strict_errors[0]
     decision = (
-        'Tous les profils sont reproductibles en mode strict. Activer ensuite '
-        'RUN_FRESH_PIPELINE_CONTROL pour rechercher un état mutable entre pipelines.'
+        f"Première erreur déterministe : {first_failure['profile']}. "
+        'Lire son error.txt : l opération indiquée est la cible de correction.'
     )
-elif first_failure['error']:
+elif divergences:
+    first_failure = divergences[0]
     decision = (
-        f"Première erreur stricte : {first_failure['profile']}. "
-        'Lire son error.txt : l opération indiquée est la première cible de correction.'
+        f"Première divergence de hashes : {first_failure['profile']}. "
+        'Comparer les traces pour trouver le premier pas divergent.'
+    )
+elif incomplete:
+    decision = 'Diagnostic incomplet : certains profils n ont pas produit leurs deux répétitions.'
+elif oom_profiles:
+    decision = (
+        'Les profils exécutables sont reproductibles, mais certains profils sont inconclusifs '
+        'par manque de VRAM : ' + ', '.join(oom_profiles)
     )
 else:
     decision = (
-        f"Première divergence sans exception : {first_failure['profile']}. "
-        'Comparer les traces pour trouver le premier pas divergent.'
+        'Tous les profils, y compris les deux contrôles à 40 pas, sont bit-à-bit '
+        'reproductibles en mode strict.'
     )
 print(decision)
 (RUN_DIR / 'DECISION.txt').write_text(decision + '\\n', encoding='utf-8')
@@ -3100,7 +3175,8 @@ manifest = {
     'prompt': prompt_case['text'],
     'seed': prompt_case['seed'],
     'branch_seed': branch_seed,
-    'steps': DIAGNOSTIC_STEPS,
+    'fast_steps': FAST_STEPS,
+    'reproduction_steps': REPRO_STEPS,
     'strict_deterministic_algorithms': True,
     'cublas_workspace_config': os.environ['CUBLAS_WORKSPACE_CONFIG'],
     'profiles': [

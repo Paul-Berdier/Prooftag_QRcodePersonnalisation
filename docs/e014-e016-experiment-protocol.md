@@ -223,9 +223,10 @@ diagnostic court E014C :
 .\scripts\notebook-remote.ps1 -Reset -Notebook 15_e014c_stage2_determinism_diagnostic.ipynb
 ```
 
-Il réutilise les artefacts E014A persistés et exécute au maximum dix Stage 2 de cinq pas. Il
-compare zéro guidance, SRL seule, LPIPS seule et la guidance combinée avec/sans checkpointing sous
-`warn_only=False`. Envoyer l'archive `e014c-stage2-determinism-isolation-v1` avant de poursuivre.
+Il réutilise les artefacts E014A persistés. E014C v2 exécute huit diagnostics de cinq pas avec
+checkpointing, puis quatre contrôles de quarante pas : guidance complète avec callback minimal,
+puis avec le callback de décodage E014A. Le mode strict reste `warn_only=False`. Envoyer l'archive
+`e014c-stage2-determinism-isolation-v2` avant de poursuivre.
 
 E014B ne sera lancé qu'après correction ou caractérisation de la divergence :
 
