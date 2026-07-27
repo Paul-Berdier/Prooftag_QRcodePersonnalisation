@@ -46,7 +46,9 @@ Le binaire `qart` est construit depuis `andrewyur/qart` au commit
 obtenir des degrés de liberté Reed–Solomon et suppose une correction L. Elle est donc testée en
 comparant l'URL après suppression du fragment. Elle n'est jamais présentée comme exact-payload.
 Son CLI n'expose pas de seed déterministe : E014A exécute trois répétitions pour chacun des cinq
-seuils, conserve les SHA-256 et ne régénère jamais ces blueprints pendant une reprise.
+seuils, conserve les quinze PNG, leurs SHA-256 et leur tableau `qart-screening.json`, et ne
+régénère jamais ces blueprints pendant une reprise. Chaque frame de diffusion possède également
+son propre numéro de pas ; ces deux invariants sont couverts par des tests de non-régression.
 
 La variante exacte recherche les huit masques permis par la norme. L'adaptatif part du meilleur
 masque et calcule, module par module, la plus petite zone centrale noire ou blanche nécessaire
@@ -146,16 +148,27 @@ pod.
 Notebook :
 [`14_e016_differentiable_scan_surrogate.ipynb`](../notebooks/14_e016_differentiable_scan_surrogate.ipynb)
 
-E016 prend les PNG finaux d'E014A/E014B, applique chaque scénario réel, puis demande à OpenCV,
-ZBar et ZXing-cpp si le payload exact est lu. Une ligne contient l'image réellement transformée et
-un label par décodeur. Le split train/validation/test est groupé par image source : deux variantes
-dégradées d'une même image ne peuvent pas être réparties entre entraînement et test.
+E016 prend uniquement les PNG finaux dont le contrat est `exact`, applique chaque scénario réel,
+puis demande à OpenCV, ZBar et ZXing-cpp si le payload exact est lu. Les sources QArt à URL
+canonique sont exclues et consignées. Une ligne contient l'image réellement transformée et un
+label par décodeur. Son nom de fichier dépend du run, du chemin relatif, de la variante et du
+SHA-256 source ; toute collision arrête le notebook. Le split train/validation/test est groupé par
+contexte `(payload, prompt, seed)` : deux variantes dégradées d'un même contexte ne peuvent pas
+être réparties entre entraînement et test.
 
 Le CNN multi-sorties s'entraîne seulement si les seuils de volume, de groupes et de classes sont
-atteints. Les métriques holdout sont AUCPR, ROC-AUC lorsque les deux classes existent, Brier et
+atteints à la fois par ligne et par groupe. Une recherche déterministe sélectionne seulement un
+split où chaque décodeur possède les deux classes dans train, validation et test ; sinon le
+notebook demande de nouveaux prompts/seeds. Les métriques holdout sont AUCPR, ROC-AUC, Brier et
 calibration. L'audit final optimise une image holdout avec le gradient du CNN sous une contrainte
 de `±8/255`, puis mesure les vrais décodeurs avant/après. Si seul le CNN progresse, le surrogate a
-été trompé et la porte échoue.
+été trompé, la porte échoue et aucun TorchScript n'est exporté.
+
+Le `DataLoader` adapte ses workers à la mémoire partagée réellement disponible. Avec le `/dev/shm`
+Docker historique d'environ 64 Mio, il utilise zéro worker et charge dans le processus principal.
+Le Deployment notebook monte désormais un `emptyDir` mémoire de 2 Gio sur `/dev/shm` ; dans ce
+profil, E016 utilise deux workers, un seul lot préchargé par worker et inscrit cette configuration
+dans `surrogate-card.json`. Cela évite qu'un worker meure par `SIGBUS` au milieu d'une époque.
 
 Un groupe correspond à un contexte `(payload, prompt, seed)`, et non à un simple fichier. Les
 quatre contextes initiaux d'E014A ne suffisent donc volontairement pas au seuil par défaut de douze
@@ -209,3 +222,6 @@ restituer le GPU.
 
 Seulement après ces portes, le dataset contiendra une cible suffisamment stable pour entraîner un
 ControlLoRA/ControlNet Prooftag et un sélecteur de paramètres sans apprendre les erreurs du pipeline.
+
+Les résultats et l'audit forensique des six premières archives sont consignés dans
+[`e014-e016-results-audit-2026-07-27.md`](e014-e016-results-audit-2026-07-27.md).

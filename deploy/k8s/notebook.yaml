@@ -74,6 +74,8 @@ spec:
               mountPath: /workspace/results
             - name: model-cache
               mountPath: /cache
+            - name: shared-memory
+              mountPath: /dev/shm
           readinessProbe:
             tcpSocket:
               port: jupyter
@@ -91,6 +93,10 @@ spec:
         - name: model-cache
           persistentVolumeClaim:
             claimName: prooftag-qr-model-cache
+        - name: shared-memory
+          emptyDir:
+            medium: Memory
+            sizeLimit: 2Gi
 ---
 apiVersion: v1
 kind: Service

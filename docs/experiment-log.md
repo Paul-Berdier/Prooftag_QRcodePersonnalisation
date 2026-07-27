@@ -732,5 +732,34 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   quantification, est enregistré comme `offload_mode=sequential_cpu`.
 - **E016 :** labels demandés à OpenCV, ZBar et ZXing-cpp sur les dégradations réelles, split
   groupé anti-fuite, CNN multi-sorties, calibration et audit du gradient avec les vrais décodeurs.
-- **État :** notebooks et protocole implémentés ; résultats RTX à produire, aucun taux inventé.
-  Voir [`docs/e014-e016-experiment-protocol.md`](e014-e016-experiment-protocol.md).
+- **Incident E016-01 :** deux workers `DataLoader` avec des lots 32×3×256×256 ont saturé le
+  `/dev/shm` Docker historique et l'un d'eux est mort par `SIGBUS` pendant `optimizer.step()`.
+  E016 choisit désormais zéro worker sous 256 Mio libres ou deux workers avec préchargement borné.
+  Le pod notebook fournit un `emptyDir` mémoire de 2 Gio monté sur `/dev/shm`, et le mode réellement
+  utilisé est conservé dans la carte du surrogate.
+- **Résultat E014A :** douze contextes et 48 sorties Stage 2. Tous les blueprints passent 39/39
+  avant diffusion. Après diffusion, l'adaptatif exact obtient 1/12 strict, 32,69 % de SSR moyen
+  et 2/12 originaux lus par les trois moteurs. Il gagne environ 8 points sur les deux baselines
+  exactes, mais peut aussi les dégrader fortement selon la seed.
+- **Résultat E014B :** sur l'unique contexte facile déjà à 39/39, le canal latent 1 conserve 39/39
+  et fait passer CLIP-aesthetic de 5,645 à 6,397. Cette expérience ne prouve pas encore une
+  réparation ; elle doit être confirmée sur les onze contextes difficiles.
+- **Résultat E015 :** Cetus SD 1.5 obtient le meilleur CLIP-aesthetic moyen (6,829), SDXL le
+  meilleur CLIPScore (0,889) et FLUX 0,886. Ce sont des références esthétiques sans Stage 2 QR.
+- **Incident E014A-01 :** deux f-strings échappées écrasaient les frames successives et les quinze
+  sorties QArt brutes. Les traces et résultats finaux restent interprétables, mais pas les
+  anciennes animations. Les fichiers sont désormais numérotés et `qart-screening.json` conserve
+  chaque candidat.
+- **Incident E016-02 — invalidation :** la clé d'image omettait la variante source. Quatre lignes
+  pointaient donc vers le même JPEG écrasé ; 93/156 images avaient des labels contradictoires.
+  Les QArt canoniques étaient en plus étiquetés contre le payload exact. Le TorchScript archivé
+  est rejeté.
+- **Incident E016-03 :** OpenCV n'avait que deux groupes positifs sur douze et aucun positif dans
+  le test retenu. E016 contrôle désormais les classes par groupe et recherche un split où les
+  trois partitions contiennent les deux classes pour chaque décodeur. Aucun modèle n'est exporté
+  si les portes échouent.
+- **Décision :** conserver l'adaptatif et la fusion canal 1 comme hypothèses, rejouer la fusion sur
+  les cas difficiles, puis reconstruire E016 avec au moins 24 contextes et six groupes positifs et
+  négatifs par moteur avant tout fine-tuning.
+- **Rapport :**
+  [`docs/e014-e016-results-audit-2026-07-27.md`](e014-e016-results-audit-2026-07-27.md).

@@ -292,13 +292,13 @@ def diffusion_callback(pipeline, aligned, label, steps, folder):
                 'elapsed_s': time.perf_counter() - started, **diagnostics,
             }
             trace.append(row)
-            preview.save(folder / f'{{step_index:03d}}.jpg', quality=88)
+            preview.save(folder / f'{step_index:03d}.jpg', quality=88)
             if step_index % DISPLAY_EVERY == 0 or step_index == steps - 1:
                 clear_output(wait=True)
                 display(Markdown(
-                    f"**{{label}} — {{step_index + 1}}/{{steps}} — "
-                    f"MER {{diagnostics['module_error_rate']:.2%}} — "
-                    f"marge {{diagnostics['minimum_threshold_margin']:.3f}}**"
+                    f"**{label} — {step_index + 1}/{steps} — "
+                    f"MER {diagnostics['module_error_rate']:.2%} — "
+                    f"marge {diagnostics['minimum_threshold_margin']:.3f}**"
                 ))
                 display(preview.resize((430, 430)))
         return callback_kwargs
@@ -463,7 +463,7 @@ for prompt_case in ACTIVE_PROMPTS:
     stage1_control.image.save(prompt_dir / 'stage1-control.png')
     stage1_folder = prompt_dir / 'frames-stage1'
     callback, trace = diffusion_callback(
-        pipe, stage1_control, f"{{prompt_case['id']}} / Stage 1", STAGE1_STEPS, stage1_folder
+        pipe, stage1_control, f"{prompt_case['id']} / Stage 1", STAGE1_STEPS, stage1_folder
     )
     started = time.perf_counter()
     result = pipe._run_stage1(
@@ -562,7 +562,7 @@ for prompt_case in ACTIVE_PROMPTS:
     qart_errors = []
     for threshold in QART_THRESHOLDS:
         for repeat in range(QART_REPEATS):
-            raw_path = prompt_dir / f'qart-raw-threshold-{{threshold}}-repeat-{{repeat}}.png'
+            raw_path = prompt_dir / f'qart-raw-threshold-{threshold}-repeat-{repeat}.png'
             try:
                 provenance = run_qart(prompt_dir / 'stage1-reference.png', raw_path, threshold)
                 aligned_qart = align_qart_output(
@@ -576,17 +576,25 @@ for prompt_case in ACTIVE_PROMPTS:
                     'reference_cost': reference_cost(aligned_qart.image, stage1_image),
                     'provenance': provenance,
                     'sha256': hashlib.sha256(raw_path.read_bytes()).hexdigest(),
+                    'raw_path': raw_path.name,
                 })
             except Exception as exc:
                 qart_errors.append({
                     'threshold': threshold, 'repeat': repeat,
-                    'error': f'{{type(exc).__name__}}: {{exc}}',
+                    'error': f'{type(exc).__name__}: {exc}',
                 })
     (prompt_dir / 'qart-errors.json').write_text(
         json.dumps(qart_errors, indent=2), encoding='utf-8'
     )
     if not qart_rows:
         raise RuntimeError('Tous les essais QArt ont échoué ; voir qart-errors.json.')
+    (prompt_dir / 'qart-screening.json').write_text(
+        json.dumps([
+            {key: value for key, value in row.items() if key != 'aligned'}
+            for row in qart_rows
+        ], indent=2),
+        encoding='utf-8',
+    )
     qart_rows.sort(
         key=lambda row: (
             row['validation']['strict_all'], row['validation']['pass_rate'],
@@ -645,7 +653,7 @@ if RUN_STAGE2:
             output_dir = RUN_DIR / prompt_id / 'stage2' / blueprint_name
             output_dir.mkdir(parents=True, exist_ok=True)
             callback, trace = diffusion_callback(
-                pipe, aligned, f"{{prompt_id}} / {{blueprint_name}}",
+                pipe, aligned, f"{prompt_id} / {blueprint_name}",
                 STAGE2_STEPS, output_dir / 'frames',
             )
             release_stage2_guidance(pipe)
@@ -685,7 +693,7 @@ if RUN_STAGE2:
                 quality_error = None
             except Exception as exc:
                 quality = {'clip_similarity': None, 'clip_score': None, 'clip_aesthetic': None}
-                quality_error = f'{{type(exc).__name__}}: {{exc}}'
+                quality_error = f'{type(exc).__name__}: {exc}'
             row = {
                 'prompt_id': prompt_id, 'prompt': prompt_case['text'],
                 'seed': prompt_case['seed'], 'blueprint': blueprint_name,
@@ -1840,7 +1848,6 @@ from IPython.display import display
 from PIL import Image
 from sklearn.calibration import calibration_curve
 from sklearn.metrics import average_precision_score, brier_score_loss, roc_auc_score
-from sklearn.model_selection import GroupShuffleSplit
 from torch.utils.data import DataLoader, Dataset
 
 from prooftag_qr.validation import DEFAULT_SCENARIOS, QRValidator
@@ -1863,7 +1870,13 @@ LEARNING_RATE = 2e-4
 MIN_SOURCE_GROUPS = 12
 MIN_SAMPLES = 120
 MIN_CLASS_COUNT_PER_DECODER = 10
+MIN_GROUP_CLASS_COUNT_PER_DECODER = 3
 REQUIRE_PHYSICAL_FOR_PRODUCTION = True
+SHM_BYTES_PER_WORKER = 256 * 2**20
+SHM_FREE_BYTES = (
+    shutil.disk_usage('/dev/shm').free if Path('/dev/shm').exists() else 0
+)
+DATALOADER_WORKERS = min(2, SHM_FREE_BYTES // SHM_BYTES_PER_WORKER)
 
 RUN_DIR = Path('/data/notebook-runs') / (
     datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + EXPERIMENT_NAME
@@ -1889,6 +1902,10 @@ template = pd.DataFrame(columns=[
 template.to_csv(RUN_DIR / 'physical-captures-template.csv', index=False)
 print('Sources :', SOURCE_RUNS)
 print('Gabarit physique :', RUN_DIR / 'physical-captures-template.csv')
+print(
+    'DataLoader :', DATALOADER_WORKERS, 'worker(s),',
+    round(SHM_FREE_BYTES / 2**20), 'Mio /dev/shm libres',
+)
 """
     ),
     markdown("## 2. Construire le dataset avec les vrais décodeurs"),
@@ -1911,6 +1928,22 @@ def payload_for_run(run_dir):
     if manifest.exists():
         return json.loads(manifest.read_text(encoding='utf-8')).get('payload', DEFAULT_PAYLOAD)
     return DEFAULT_PAYLOAD
+
+
+def result_contracts_for(run_dir):
+    contracts = {}
+    results_path = run_dir / 'results.jsonl'
+    if not results_path.exists():
+        return contracts
+    for line in results_path.read_text(encoding='utf-8').splitlines():
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        prompt_id = str(row.get('prompt_id') or '')
+        variant = str(row.get('blueprint') or row.get('name') or '')
+        if prompt_id and variant:
+            contracts[(prompt_id, variant)] = row.get('payload_contract', 'exact')
+    return contracts
 
 
 def context_group_for(run_dir, source_path, manifest):
@@ -1937,7 +1970,36 @@ def context_group_for(run_dir, source_path, manifest):
     ).hexdigest()[:16]
 
 
+def source_metadata(run_dir, source_path, manifest, result_contracts):
+    relative_path = source_path.relative_to(run_dir).as_posix()
+    prompt_specs = manifest.get('prompts', [])
+    known_ids = {str(item.get('id')) for item in prompt_specs}
+    prompt_id = str(manifest.get('prompt_id') or '')
+    if not prompt_id:
+        prompt_id = next(
+            (part for part in source_path.relative_to(run_dir).parts if part in known_ids),
+            '',
+        )
+    variant = source_path.parent.name
+    contract = result_contracts.get((prompt_id, variant))
+    if contract is None:
+        contract = 'canonical_url' if variant == 'qart_fragment_l' else 'exact'
+    source_sha256 = hashlib.sha256(source_path.read_bytes()).hexdigest()
+    source_id = hashlib.sha256(
+        f'{run_dir.name}:{relative_path}:{source_sha256}'.encode('utf-8')
+    ).hexdigest()[:20]
+    return {
+        'source_id': source_id,
+        'source_relative_path': relative_path,
+        'source_variant': variant,
+        'source_prompt_id': prompt_id,
+        'payload_contract': contract,
+        'source_sha256': source_sha256,
+    }
+
+
 records = []
+excluded_sources = []
 for run_dir in SOURCE_RUNS:
     expected_payload = payload_for_run(run_dir)
     manifest_path = run_dir / 'manifest.json'
@@ -1945,15 +2007,30 @@ for run_dir in SOURCE_RUNS:
         json.loads(manifest_path.read_text(encoding='utf-8'))
         if manifest_path.exists() else {}
     )
+    result_contracts = result_contracts_for(run_dir)
     for source_path in source_pngs(run_dir):
+        source_meta = source_metadata(
+            run_dir, source_path, manifest, result_contracts
+        )
+        if source_meta['payload_contract'] != 'exact':
+            excluded_sources.append({
+                'source_path': str(source_path),
+                'reason': 'non_exact_payload_contract',
+                **source_meta,
+            })
+            continue
         source = Image.open(source_path).convert('RGB')
         source_group = context_group_for(run_dir, source_path, manifest)
         for scenario in DEFAULT_SCENARIOS:
             transformed = scenario.apply(source)
             key = hashlib.sha256(
-                f'{source_group}:{scenario.name}'.encode('utf-8')
+                f"{source_meta['source_id']}:{scenario.name}".encode('utf-8')
             ).hexdigest()[:20]
             saved_path = DATASET_IMAGE_DIR / f'{key}.jpg'
+            if saved_path.exists():
+                raise RuntimeError(
+                    f'Collision de dataset interdite pour {source_path} / {scenario.name}'
+                )
             transformed.save(saved_path, quality=95)
             row = {
                 'image_path': str(saved_path), 'source_path': str(source_path),
@@ -1961,6 +2038,7 @@ for run_dir in SOURCE_RUNS:
                 'scenario': scenario.name, 'physical': False,
                 'expected_payload': expected_payload,
                 'expected_payload_hash': hashlib.sha256(expected_payload.encode()).hexdigest(),
+                **source_meta,
             }
             for decoder in validator.decoders:
                 decoded = decoder.decode(transformed)
@@ -1995,10 +2073,14 @@ if PHYSICAL_CSV.exists():
         records.append(row)
         physical_count += 1
 
+(RUN_DIR / 'excluded-sources.json').write_text(
+    json.dumps(excluded_sources, indent=2), encoding='utf-8'
+)
 dataset_frame = pd.DataFrame(records)
 dataset_frame.to_csv(RUN_DIR / 'decoder-dataset.csv', index=False)
 print('Lignes :', len(dataset_frame), 'groupes :', dataset_frame.source_group.nunique())
 print('Captures physiques :', physical_count)
+print('Sources non exactes exclues :', len(excluded_sources))
 display(dataset_frame[[f'label_{name}' for name in decoder_names]].sum().to_frame('positifs'))
 """
     ),
@@ -2019,6 +2101,15 @@ for name in decoder_names:
             f'{name}: classe minoritaire {min(positives, negatives)} < '
             f'{MIN_CLASS_COUNT_PER_DECODER}'
         )
+    group_labels = dataset_frame.groupby('source_group')[f'label_{name}'].max()
+    positive_groups = int(group_labels.sum())
+    negative_groups = len(group_labels) - positive_groups
+    if min(positive_groups, negative_groups) < MIN_GROUP_CLASS_COUNT_PER_DECODER:
+        problems.append(
+            f'{name}: groupes de classe minoritaire '
+            f'{min(positive_groups, negative_groups)} < '
+            f'{MIN_GROUP_CLASS_COUNT_PER_DECODER}'
+        )
 if problems:
     (RUN_DIR / 'STOP-INSUFFICIENT-DATA.json').write_text(
         json.dumps({'problems': problems}, indent=2), encoding='utf-8'
@@ -2028,20 +2119,68 @@ if problems:
     ),
     markdown("## 4. Split par source, Dataset PyTorch et CNN multi-décodeur"),
     code(
-        """groups = dataset_frame.source_group.to_numpy()
-outer = GroupShuffleSplit(n_splits=1, test_size=0.20, random_state=20260723)
-train_val_index, test_index = next(outer.split(dataset_frame, groups=groups))
-train_val = dataset_frame.iloc[train_val_index].reset_index(drop=True)
-test_frame = dataset_frame.iloc[test_index].reset_index(drop=True)
-inner = GroupShuffleSplit(n_splits=1, test_size=0.20, random_state=20260724)
-train_index, val_index = next(
-    inner.split(train_val, groups=train_val.source_group.to_numpy())
-)
-train_frame = train_val.iloc[train_index].reset_index(drop=True)
-val_frame = train_val.iloc[val_index].reset_index(drop=True)
+        """label_columns = [f'label_{name}' for name in decoder_names]
+group_targets = dataset_frame.groupby('source_group')[label_columns].max().astype(int)
+
+
+def frame_has_both_classes(frame):
+    return all(
+        0 < int(frame[column].sum()) < len(frame)
+        for column in label_columns
+    )
+
+
+def select_group_partitions(group_targets, attempts=20000, seed=20260723):
+    names = group_targets.index.to_numpy()
+    number_of_groups = len(names)
+    number_test = max(2, round(number_of_groups * 0.20))
+    number_val = max(2, round(number_of_groups * 0.20))
+    if number_of_groups - number_test - number_val < 2:
+        raise RuntimeError('Pas assez de groupes pour trois partitions identifiables.')
+    full_prevalence = group_targets.mean().to_numpy()
+    rng = np.random.default_rng(seed)
+    best = None
+    for _ in range(attempts):
+        shuffled = rng.permutation(names)
+        test_groups = shuffled[:number_test]
+        val_groups = shuffled[number_test:number_test + number_val]
+        train_groups = shuffled[number_test + number_val:]
+        partitions = [train_groups, val_groups, test_groups]
+        if not all(
+            frame_has_both_classes(group_targets.loc[group_names])
+            for group_names in partitions
+        ):
+            continue
+        score = sum(
+            float(np.abs(
+                group_targets.loc[group_names].mean().to_numpy() - full_prevalence
+            ).mean())
+            for group_names in partitions
+        )
+        if best is None or score < best[0]:
+            best = (score, train_groups, val_groups, test_groups)
+    if best is None:
+        raise RuntimeError(
+            'Aucun split groupé train/val/test ne contient les deux classes '
+            'pour chaque décodeur. Ajouter des prompts/seeds positifs.'
+        )
+    return best[1], best[2], best[3]
+
+
+train_groups, val_groups, test_groups = select_group_partitions(group_targets)
+train_frame = dataset_frame[
+    dataset_frame.source_group.isin(train_groups)
+].reset_index(drop=True)
+val_frame = dataset_frame[
+    dataset_frame.source_group.isin(val_groups)
+].reset_index(drop=True)
+test_frame = dataset_frame[
+    dataset_frame.source_group.isin(test_groups)
+].reset_index(drop=True)
 assert set(train_frame.source_group).isdisjoint(val_frame.source_group)
 assert set(train_frame.source_group).isdisjoint(test_frame.source_group)
 assert set(val_frame.source_group).isdisjoint(test_frame.source_group)
+assert all(frame_has_both_classes(frame) for frame in [train_frame, val_frame, test_frame])
 print('train/val/test :', len(train_frame), len(val_frame), len(test_frame))
 
 
@@ -2087,10 +2226,22 @@ class ScanSurrogate(nn.Module):
         return self.head(self.features(image))
 
 
+def make_loader(frame, *, shuffle):
+    options = {
+        'batch_size': BATCH_SIZE,
+        'shuffle': shuffle,
+        'num_workers': DATALOADER_WORKERS,
+        'pin_memory': torch.cuda.is_available(),
+    }
+    if DATALOADER_WORKERS:
+        options.update({'prefetch_factor': 1, 'persistent_workers': True})
+    return DataLoader(DecoderDataset(frame), **options)
+
+
 loaders = {
-    'train': DataLoader(DecoderDataset(train_frame), batch_size=BATCH_SIZE, shuffle=True, num_workers=2),
-    'val': DataLoader(DecoderDataset(val_frame), batch_size=BATCH_SIZE, shuffle=False, num_workers=2),
-    'test': DataLoader(DecoderDataset(test_frame), batch_size=BATCH_SIZE, shuffle=False, num_workers=2),
+    'train': make_loader(train_frame, shuffle=True),
+    'val': make_loader(val_frame, shuffle=False),
+    'test': make_loader(test_frame, shuffle=False),
 }
 model = ScanSurrogate(len(decoder_names)).to(DEVICE)
 positives = torch.tensor(
@@ -2113,7 +2264,8 @@ for epoch in range(1, EPOCHS + 1):
         total_loss = 0.0
         total_items = 0
         for images, labels in loaders[phase]:
-            images, labels = images.to(DEVICE), labels.to(DEVICE)
+            images = images.to(DEVICE, non_blocking=True)
+            labels = labels.to(DEVICE, non_blocking=True)
             with torch.set_grad_enabled(phase == 'train'):
                 logits = model(images)
                 loss = criterion(logits, labels)
@@ -2142,7 +2294,9 @@ pd.DataFrame(history).to_csv(RUN_DIR / 'training-history.csv', index=False)
     truths, probabilities = [], []
     with torch.no_grad():
         for images, labels in loader:
-            probabilities.append(torch.sigmoid(model(images.to(DEVICE))).cpu().numpy())
+            probabilities.append(
+                torch.sigmoid(model(images.to(DEVICE, non_blocking=True))).cpu().numpy()
+            )
             truths.append(labels.numpy())
     return np.concatenate(truths), np.concatenate(probabilities)
 
@@ -2263,14 +2417,35 @@ promotion['research_usable'] = (
 )
 promotion['production_usable'] = promotion['research_usable'] and promotion['physical_gate']
 
-model = model.eval().cpu()
-scripted = torch.jit.trace(model, torch.zeros(1, 3, IMAGE_SIZE, IMAGE_SIZE))
-scripted.save(str(RUN_DIR / 'scan-surrogate.torchscript.pt'))
+exported_model = None
+if promotion['research_usable']:
+    model = model.eval().cpu()
+    scripted = torch.jit.trace(model, torch.zeros(1, 3, IMAGE_SIZE, IMAGE_SIZE))
+    exported_model = 'scan-surrogate.research-only.torchscript.pt'
+    scripted.save(str(RUN_DIR / exported_model))
+else:
+    (RUN_DIR / 'REJECTED-SURROGATE.json').write_text(
+        json.dumps({
+            'reason': 'promotion gates failed',
+            'promotion': promotion,
+            'model_exported': False,
+        }, indent=2),
+        encoding='utf-8',
+    )
 model_card = {
     'experiment': EXPERIMENT_NAME, 'decoder_outputs': decoder_names,
     'input': {'shape': [3, IMAGE_SIZE, IMAGE_SIZE], 'range': [0, 1]},
     'source_runs': [str(path) for path in SOURCE_RUNS],
-    'split': 'GroupShuffleSplit by source_group; train/val/test disjoint',
+    'split': (
+        'deterministic grouped multilabel search; train/val/test source_group '
+        'disjoint and both classes present for every decoder'
+    ),
+    'model_exported': exported_model,
+    'data_loader': {
+        'workers': DATALOADER_WORKERS,
+        'shared_memory_free_bytes': SHM_FREE_BYTES,
+        'prefetch_factor': 1 if DATALOADER_WORKERS else None,
+    },
     'metrics': metrics, 'promotion': promotion,
     'warning': 'Never replace external decoders or physical tests with this surrogate.',
 }

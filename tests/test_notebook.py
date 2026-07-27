@@ -352,6 +352,11 @@ def test_e014a_uses_real_qart_and_keeps_exact_payload_claims_separate():
     assert "adaptive_exact_payload_m" in source
     assert "all_mask_costs" in source
     assert "QART_REPEATS = 3" in source
+    assert "qart-screening.json" in source
+    assert "f'{step_index:03d}.jpg'" in source
+    assert "f'qart-raw-threshold-{threshold}-repeat-{repeat}.png'" in source
+    assert "f'{{step_index:03d}}.jpg'" not in source
+    assert "f'qart-raw-threshold-{{threshold}}-repeat-{{repeat}}.png'" not in source
     assert "load_saved_target" in source
     assert "stage1-control-preflight.json" in source
     assert "paired_stage2_latents" in source
@@ -417,10 +422,18 @@ def test_e016_labels_with_real_decoders_prevents_leakage_and_audits_gradients():
     source = Path("notebooks/14_e016_differentiable_scan_surrogate.ipynb").read_text(
         encoding="utf-8"
     )
+    deployment = Path("deploy/k8s/notebook.yaml").read_text(encoding="utf-8")
 
     assert "DEFAULT_SCENARIOS" in source
     assert "len(decoder_names) < 3" in source
-    assert "GroupShuffleSplit" in source
+    assert "source_id" in source
+    assert "source_relative_path" in source
+    assert "non_exact_payload_contract" in source
+    assert "excluded-sources.json" in source
+    assert "Collision de dataset interdite" in source
+    assert "MIN_GROUP_CLASS_COUNT_PER_DECODER = 3" in source
+    assert "select_group_partitions" in source
+    assert "GroupShuffleSplit" not in source
     assert "isdisjoint" in source
     assert "BCEWithLogitsLoss" in source
     assert "average_precision_score" in source
@@ -429,3 +442,13 @@ def test_e016_labels_with_real_decoders_prevents_leakage_and_audits_gradients():
     assert "real_decoder_improved" in source
     assert "physical-captures-template.csv" in source
     assert "production_usable" in source
+    assert "scan-surrogate.research-only.torchscript.pt" in source
+    assert "REJECTED-SURROGATE.json" in source
+    assert "scan-surrogate.torchscript.pt" not in source
+    assert "shutil.disk_usage('/dev/shm')" in source
+    assert "DATALOADER_WORKERS" in source
+    assert "'prefetch_factor': 1" in source
+    assert "'persistent_workers': True" in source
+    assert "num_workers=2" not in source
+    assert "mountPath: /dev/shm" in deployment
+    assert "sizeLimit: 2Gi" in deployment
