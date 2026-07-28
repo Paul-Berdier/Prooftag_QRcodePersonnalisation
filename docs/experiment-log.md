@@ -909,6 +909,50 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   pire scénario, CLIP-aesthetic, CLIPScore et préservation. Une recette fixe doit réussir dans les
   quatre contextes et ne pas faire régresser `p3`. L'oracle contextuel est uniquement
   diagnostique.
+- **Incident E014D-01 — schéma E014B v2 :** le premier chargement de `p3_detailed` échoue avant
+  toute diffusion avec `KeyError: original_all`. E014B v2 enregistrait seulement
+  `original_passed` et `original_total`, alors qu'E014B v3 ajoutait `original_all`. La sélection
+  des sources normalise désormais les deux schémas, exige un total original strictement positif
+  et utilise des accès tolérants pour les champs de classement. Aucun résultat E014D partiel
+  n'avait encore été produit.
+- **Incident E014D-02 — fenêtre DDIM non prise en charge :** la première réparation s'arrête
+  avant son premier pas, car `DDIMScheduler.set_timesteps` de Diffusers 0.32.2 n'accepte pas
+  l'argument `timesteps` utilisé par `retrieve_timesteps`. Un adaptateur DDIM local accepte
+  uniquement le suffixe exact du planning complet à quarante pas, conserve
+  `scheduler.num_inference_steps=40` pour que le calcul du pas précédent reste celui du planning
+  d'origine, puis expose les huit pas tardifs à la boucle DiffQRCoder. Il refuse toute autre liste
+  afin d'éviter de transformer silencieusement la dynamique DDIM. Aucun résultat E014D n'avait
+  encore été écrit.
+- **Résultat E014D :** archive
+  `20260728T080203Z-e014d-functional-late-rediffusion-v1.tar.gz`, SHA-256
+  `7CC59CD2D65373070BAC653863B00CA8FB4129D43548242885E2528CC6AD8332`. Les seize sorties,
+  seize latents, douze GIF, douze traces et 96 frames sont complets. Les entrées sont appariées
+  dans chaque contexte et les traces exécutent le suffixe DDIM `176,151,126,101,76,51,26,1`.
+- **Gain E014D :** les douze rediffusions passent l'original 3/3. La recette fixe 0,30 passe
+  151/156 validations, soit 96,79 %, contre 95/156 et 60,90 % pour le contrôle E014B. Elle atteint
+  39/39 sur `p1` et `p4`, 37/39 sur `p2` et 36/39 sur `p3`.
+- **Rejet E014D :** la porte fixe reste fausse. CLIP-aesthetic moyen baisse de 5,165 à 4,017,
+  la perte maximale atteint 1,339 pour une limite à 0,75 et la modification absolue atteint
+  0,250 pour une limite à 0,18. Visuellement, les sorties sont nettement plus QR et perdent leurs
+  cadres et transitions artistiques.
+- **Échecs E014D :** les seize échecs restants se concentrent sur `print_dot_loss` (6),
+  `downscale_75` (5), `print_dot_gain` (4) et `noise_gaussian` (1). ZXing-C++ réussit tous les
+  tests E014D ; ZBar échoue neuf fois et OpenCV sept fois.
+- **Décision E014D :** ne pas entraîner le sélecteur contextuel sur quatre prompts. E014E doit
+  d'abord séparer rediffusion, fusion globale, masque fonctionnel et longueur de fenêtre avec des
+  forces plus faibles. Le but est de conserver le 3/3 original en récupérant l'esthétique.
+- **Rapport E014D :**
+  [`docs/e014d-results-2026-07-28.md`](e014d-results-2026-07-28.md).
+- **Protocole E014E :** le notebook 19 sépare la rediffusion DiffQRCoder, la fusion globale et
+  le masque fonctionnel sur `p2`/`p3` avec quatre pas. La référence 0,15/0,15 est forcée dans la
+  phase B avec les deux meilleures recettes faibles, puis les fenêtres 2/4/6/8 sont comparées sur
+  les quatre contextes. `p1`/`p4` servent de holdout après le screening.
+- **Portes E014E :** priorité à l'original 3/3 et au SSR, mais une recette fixe doit aussi limiter
+  toute perte CLIP-aesthetic à 0,75 et toute modification absolue à 0,18. La campagne produit
+  74 lignes, conserve les entrées appariées, journalise les erreurs et interdit explicitement
+  l'entraînement d'un sélecteur sur quatre contextes.
+- **Protocole détaillé E014E :**
+  [`docs/e014e-protocol-2026-07-28.md`](e014e-protocol-2026-07-28.md).
 - **Observation QArt :** les trois répétitions d'un seuil produisent le même SHA-256 dans les
   quatre contextes. Le CLI se comporte donc de façon déterministe dans cette image Docker ; cinq
   seuils donnent cinq candidats uniques par prompt.

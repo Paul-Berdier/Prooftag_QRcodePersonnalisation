@@ -582,15 +582,53 @@ def test_e014d_uses_late_functional_rediffusion_without_pixel_compositing():
     assert "'structural_strength': 0.45" in source
     assert "functional_pattern_mask" in source
     assert "quiet zone plus finder/separator" in source
+    assert "class LateWindowDDIMScheduler(DDIMScheduler):" in source
+    assert "self.num_inference_steps != BASE_STEPS" in source
+    assert "LateWindowDDIMScheduler.from_config" in source
     assert "timesteps=[int(value)" in source
     assert "num_inference_steps=None" in source
     assert "original_probe" in source
     assert "fixed_recipe_gate" in source
     assert "fresh_pipeline_per_rescue_candidate" in source
+    assert "Nettoyage du candidat partiel sans image finale" in source
     assert "paired-input-audit.json" in source
     assert "rescue_noise_sha256" in source
+    assert "def source_original_all(row):" in source
+    assert "row.get('original_passed')" in source
+    assert "winner = max(candidates, key=source_row_rank)" in source
     assert "'post_diffusion_pixel_projection': False" in source
     assert "context-adaptive-oracle.csv" in source
     assert "fixed-recipe-aggregates.csv" in source
     assert "physical-validation-template.csv" in source
     assert "18_e014d_functional_late_rediffusion.ipynb" in launcher
+
+
+def test_e014e_separates_mechanisms_before_testing_late_windows():
+    source = Path(
+        "notebooks/19_e014e_mechanism_window_ablation.ipynb"
+    ).read_text(encoding="utf-8")
+    launcher = Path("scripts/notebook-remote.ps1").read_text(encoding="utf-8")
+
+    assert "e014e-mechanism-window-ablation-v1" in source
+    assert "SCREENING_CONTEXT_IDS = ['p2_medium', 'p3_detailed']" in source
+    assert "HOLDOUT_CONTEXT_IDS = ['p1_simple', 'p4_complex']" in source
+    assert "PHASE_A_STEPS = 4" in source
+    assert "PHASE_B_STEP_COUNTS = [2, 4, 6, 8]" in source
+    assert "'rediffusion_only'" in source
+    assert "'global_a03'" in source
+    assert "'mask_s05'" in source
+    assert "'combined_a03_s05'" in source
+    assert "REFERENCE_RECIPE_ID = 'combined_a15_s15'" in source
+    assert "reference_forced" in source
+    assert "LateWindowDDIMScheduler" in source
+    assert "late_schedule(pipeline, rescue_steps)" in source
+    assert "fresh_pipeline_per_candidate" in source
+    assert "paired-input-audit.json" in source
+    assert "Nettoyage du candidat non indexé" in source
+    assert "ERRORS_PATH" in source
+    assert "'post_diffusion_pixel_projection': False" in source
+    assert "'selector_training_allowed': False" in source
+    assert "phase-a-aggregates.csv" in source
+    assert "phase-b-fixed-aggregates.csv" in source
+    assert "physical-validation-template.csv" in source
+    assert "19_e014e_mechanism_window_ablation.ipynb" in launcher

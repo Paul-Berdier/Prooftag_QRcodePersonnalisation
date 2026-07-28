@@ -287,37 +287,47 @@ def structural_mask_image(aligned):
     return Image.fromarray(mask, mode='L')
 
 
+def source_original_all(row):
+    explicit = row.get('original_all')
+    if explicit is not None:
+        return bool(explicit)
+    passed = row.get('original_passed')
+    total = row.get('original_total')
+    if passed is None or total is None:
+        return False
+    return int(total) > 0 and int(passed) == int(total)
+
+
+def source_row_rank(row):
+    return (
+        source_original_all(row),
+        int(row.get('passed', 0) or 0),
+        float(row.get('clip_aesthetic') or -999),
+    )
+
+
 def selected_source_row(context_id):
     if context_id == 'p3_detailed':
         run_root = E014B_V2_RUN_DIR
         candidates = [
             row for row in jsonl_rows(run_root / 'results.jsonl')
-            if row['recipe'] == 'fusion_all'
+            if row.get('recipe') == 'fusion_all'
         ]
         if not candidates:
             raise RuntimeError('Aucune fusion_all dans E014B v2.')
-        winner = max(
-            candidates,
-            key=lambda row: (
-                row['original_all'], row['passed'],
-                row.get('clip_aesthetic') or -999,
-            ),
-        )
+        winner = max(candidates, key=source_row_rank)
         return winner, run_root / winner['run_name']
     run_root = E014B_V3_RUN_DIR
     candidates = [
         row for row in jsonl_rows(run_root / 'results.jsonl')
-        if row['context_id'] == context_id and row['recipe'] == 'fusion_all'
+        if (
+            row.get('context_id') == context_id
+            and row.get('recipe') == 'fusion_all'
+        )
     ]
     if not candidates:
         raise RuntimeError(f'Aucune fusion_all E014B v3 pour {context_id}.')
-    winner = max(
-        candidates,
-        key=lambda row: (
-            row['original_all'], row['passed'],
-            row.get('clip_aesthetic') or -999,
-        ),
-    )
+    winner = max(candidates, key=source_row_rank)
     return winner, run_root / context_id / winner['run_name']
 
 
@@ -411,6 +421,32 @@ def tensor_sha256(tensor):
     return hashlib.sha256(value.numpy().tobytes()).hexdigest()
 
 
+class LateWindowDDIMScheduler(DDIMScheduler):
+    def set_timesteps(
+        self, num_inference_steps=None, device=None, timesteps=None
+    ):
+        if timesteps is None:
+            return super().set_timesteps(
+                num_inference_steps=num_inference_steps, device=device
+            )
+        if self.num_inference_steps != BASE_STEPS:
+            raise RuntimeError(
+                'Le planning DDIM complet doit être initialisé avec '
+                f'BASE_STEPS={BASE_STEPS} avant de sélectionner sa fenêtre tardive.'
+            )
+        requested = torch.as_tensor(
+            timesteps, dtype=self.timesteps.dtype, device=self.timesteps.device
+        )
+        expected = self.timesteps[-len(requested):]
+        if not torch.equal(requested.to(expected.device), expected):
+            raise ValueError(
+                'La fenêtre personnalisée doit être exactement le suffixe du '
+                f'planning DDIM {BASE_STEPS} pas : demandé={requested.tolist()}, '
+                f'attendu={expected.tolist()}.'
+            )
+        self.timesteps = requested.to(device=device)
+
+
 def load_pipeline():
     controlnet = ControlNetModel.from_pretrained(
         CONTROLNET_MODEL, subfolder=CONTROLNET_SUBFOLDER,
@@ -422,7 +458,9 @@ def load_pipeline():
         cache_dir='/cache/huggingface', safety_checker=None, use_safetensors=True,
         config=BASE_CONFIG_PATH,
     )
-    pipeline.scheduler = DDIMScheduler.from_config(pipeline.scheduler.config)
+    pipeline.scheduler = LateWindowDDIMScheduler.from_config(
+        pipeline.scheduler.config
+    )
     pipeline = pipeline.to('cuda')
     for component in [
         pipeline.unet, pipeline.controlnet, pipeline.vae, pipeline.text_encoder
@@ -694,6 +732,9 @@ for context_id, context in contexts.items():
     code(
         """def run_rescue(context, recipe):
     output_dir = RUN_DIR / context['id'] / recipe['id']
+    if output_dir.exists() and not (output_dir / 'final.png').exists():
+        print('Nettoyage du candidat partiel sans image finale :', output_dir)
+        shutil.rmtree(output_dir)
     if output_dir.exists():
         raise RuntimeError(f'Candidat partiel : {output_dir}. Démarrer un nouveau run.')
     output_dir.mkdir(parents=True)

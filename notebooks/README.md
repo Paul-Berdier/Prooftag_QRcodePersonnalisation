@@ -316,6 +316,27 @@ scénario, à CLIP-aesthetic et à CLIPScore. Une force fixe doit réussir dans 
 le meilleur réglage différent pour chaque prompt est exporté comme oracle diagnostique, jamais
 comme recette générale.
 
+## Ablation mécanistique et temporelle E014E
+
+E014D a confirmé le gain fonctionnel mais a trop dégradé l'image. Le notebook 19 cherche la
+contrainte minimale utile. Sa phase A compare, sur `p2_medium` et `p3_detailed`, la rediffusion
+DiffQRCoder seule, la fusion globale seule, le masque fonctionnel seul et trois combinaisons
+faibles. La combinaison E014D 0,15/0,15 est conservée comme référence forcée.
+
+La phase B promeut la référence et les deux meilleures recettes faibles, puis compare des fenêtres
+de 2, 4, 6 et 8 pas sur les quatre contextes. `p1_simple` et `p4_complex` n'interviennent pas dans
+la sélection initiale et servent de holdout. Le notebook génère 74 lignes complètes, les GIF et
+frames de chaque rediffusion, les audits d'appariement, les erreurs, les métriques par décodeur et
+un rapport automatique.
+
+```powershell
+.\scripts\notebook-remote.ps1 -Reset -Notebook 19_e014e_mechanism_window_ablation.ipynb
+```
+
+Lancer ensuite **Run > Run All Cells**. Une reprise après interruption doit renseigner
+`RESUME_RUN_NAME` avec le nom du dossier E014E existant avant de relancer les cellules. E014E
+n'entraîne aucun sélecteur : quatre contextes restent insuffisants pour cela.
+
 ## Première installation ou mise à jour sur le serveur
 
 ```bash
@@ -332,6 +353,15 @@ kubectl get deployment/prooftag-qr-notebook -n qr-core
 Le Deployment notebook reste à zéro réplique tant que la commande PowerShell ne le démarre pas.
 Les modèles réutilisent le PVC `prooftag-qr-model-cache` et les résultats persistent dans le PVC
 `prooftag-qr-data`, sous `/data/notebook-runs` et `/data/parameter-search`.
+
+Pour éviter qu'un pod réutilise un ancien tag `dev`, préférer le déploiement immuable suivant après
+chaque `git pull`. Le script construit une image portant les douze premiers caractères du commit,
+vérifie le notebook dans l'image, l'importe dans k3s et met explicitement à jour le Deployment :
+
+```bash
+bash scripts/deploy-notebook-image.sh \
+  notebooks/19_e014e_mechanism_window_ablation.ipynb
+```
 
 ## Analyse d'une ancienne archive sur Windows
 
