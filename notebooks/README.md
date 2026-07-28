@@ -296,6 +296,26 @@ Seul le statut `production_candidate` signifie que les douze sorties fusionnées
 39/39 ; `generalized_not_strict` signifie seulement que le gain se généralise. Les identifiants,
 révisions des modèles et le hash du pipeline DiffQRCoder sont conservés dans le manifeste.
 
+## Réparation fonctionnelle tardive E014D
+
+Le notebook 18 repart des meilleurs latents `fusion_all` d'E014B v2/v3. Il ne régénère pas les
+quarante pas déjà calculés. Pour `p1`, `p2`, `p3` et `p4`, il compare le contrôle fusionné à trois
+forces structurelles prédéfinies : 0,15, 0,30 et 0,45.
+
+Chaque candidat utilise une pipeline fraîche, le même bruit par contexte et les huit derniers
+timesteps du planning DDIM à quarante pas. À chaque pas, le canal latent 1 conserve la fusion
+alpha 0,15, tandis qu'un masque protège seulement la quiet zone et les motifs fonctionnels. Les
+modules de données restent libres et aucune projection de pixels n'est appliquée à la fin.
+
+```powershell
+.\scripts\notebook-remote.ps1 -Reset -Notebook 18_e014d_functional_late_rediffusion.ipynb
+```
+
+Le classement donne la priorité à l'original 3/3, puis au SSR 39 tests, au pire décodeur, au pire
+scénario, à CLIP-aesthetic et à CLIPScore. Une force fixe doit réussir dans les quatre contextes ;
+le meilleur réglage différent pour chaque prompt est exporté comme oracle diagnostique, jamais
+comme recette générale.
+
 ## Première installation ou mise à jour sur le serveur
 
 ```bash

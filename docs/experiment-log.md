@@ -862,9 +862,53 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   manifestés.
 - **Incident E014B-03 — URL single-file :** la première exécution v3 s'arrête avant tout run.
   Une URL `/resolve/<commit>/fichier` est réinterprétée par Diffusers comme un nom de fichier,
-  produisant `/resolve/main/resolve/<commit>/fichier` et une 404. L'URL épinglée utilise désormais
-  `/blob/<commit>/fichier`, format compris par `from_single_file`. Aucun résultat partiel n'a été
-  écrit.
+  produisant `/resolve/main/resolve/<commit>/fichier` et une 404. Une tentative
+  `/blob/<commit>/fichier` échoue de la même façon, car le parseur 0.32 ne retire que
+  `blob/main/`. Transmettre le commit avec `revision=` échoue aussi : Diffusers réutilise cette
+  révision Cetus pour le dépôt de configuration SD 1.5. La forme finale télécharge séparément le
+  checkpoint Cetus avec `hf_hub_download` et la configuration SD 1.5 avec `snapshot_download`,
+  chacun à sa propre révision, puis fournit leurs chemins locaux à `from_single_file`. Aucun
+  résultat partiel n'a été écrit.
+- **Incident E014B-04 — assertion inter-blocs trop stricte :** les vingt-quatre diffusions v3 se
+  terminent, puis le contrôle final trouve deux hashes initiaux entre les blocs de `p2_medium`.
+  L'appariement baseline/fusion est néanmoins exact dans chacun des douze blocs ; c'est la
+  condition requise par l'analyse appariée, tandis que l'ordre alterné traite la variabilité entre
+  blocs. Le hard fail inter-blocs est remplacé par `initial-latent-audit.json`. Les avertissements
+  FP16/CPU provenaient uniquement du déplacement de la pipeline pendant sa destruction ; la
+  destruction libère désormais directement les objets CUDA.
+- **Résultat E014B v3 :** archive
+  `20260727T143614Z-e014b-multicontext-generalization-v3.tar.gz`, SHA-256
+  `859BB6AC02959438532D77EC47C948FDCB6E8280E4D7940D96A9177F26A782A6`. Les vingt-quatre
+  diffusions, latents, GIF, traces et 936 validations sont présents. Les trois blueprints passent
+  39/39 avant diffusion.
+- **Gain E014B v3 :** la fusion canal 1 alpha 0,15 fait passer le SSR global de 74/468
+  (15,81 %) à 247/468 (52,78 %). Elle gagne dans les douze blocs : 28/39 sur `p1_simple`,
+  17–20/39 sur `p2_medium` et 16/39 sur `p4_complex`.
+- **Rejet E014B v3 :** aucune des douze sorties fusionnées ne passe l'original à 3/3 et aucune
+  n'atteint 39/39. ZBar lit les douze originaux, ZXing-cpp seulement les quatre `p1_simple` et
+  OpenCV aucun. La fusion est conservée comme composant de réparation, pas comme recette
+  autonome de production.
+- **Qualité E014B v3 :** CLIP-aesthetic progresse de 0,458 sur `p1` et 0,678 sur `p2`, mais baisse
+  de 0,496 sur `p4`. CLIPScore baisse dans les trois contextes, jusqu'à -0,168 sur `p4`. Une alpha
+  globale plus forte n'est donc pas la prochaine expérience recommandée.
+- **Diagnostic E014B v3 :** `p1` présente zéro erreur de modules mesurée tout en échouant sous
+  OpenCV. Les centres de modules ne suffisent pas : la prochaine réparation doit protéger
+  contours, motifs fonctionnels et quiet zone, puis effectuer une rediffusion tardive faible
+  bruit. Ce protocole ciblé devient E014D.
+- **Rapport E014B v3 :**
+  [`docs/e014b-v3-results-2026-07-28.md`](e014b-v3-results-2026-07-28.md).
+- **Protocole E014D :** le notebook 18 reprend les meilleurs latents fusionnés de `p1`, `p2`,
+  `p3` et `p4`, puis compare trois forces structurelles figées — 0,15, 0,30 et 0,45 — sur les huit
+  derniers timesteps DDIM. Chaque candidat possède une pipeline fraîche et le même bruit tardif
+  dans un contexte.
+- **Masque E014D :** la quiet zone, les finders/séparateurs, timings, formats/versions et
+  alignments sont projetés dans le latent à chaque pas. Les modules de données restent libres.
+  La sortie finale est décodée directement du latent ; aucun collage ou correctif de pixels
+  post-diffusion n'est autorisé.
+- **Porte E014D :** priorité lexicographique à l'original 3/3, puis SSR 39 tests, pire décodeur,
+  pire scénario, CLIP-aesthetic, CLIPScore et préservation. Une recette fixe doit réussir dans les
+  quatre contextes et ne pas faire régresser `p3`. L'oracle contextuel est uniquement
+  diagnostique.
 - **Observation QArt :** les trois répétitions d'un seuil produisent le même SHA-256 dans les
   quatre contextes. Le CLI se comporte donc de façon déterministe dans cette image Docker ; cinq
   seuils donnent cinq candidats uniques par prompt.

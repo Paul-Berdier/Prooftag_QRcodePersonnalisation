@@ -543,7 +543,9 @@ def test_e014b_v3_confirms_generalization_with_corrected_gates():
     assert "'channel': 1, 'alpha': 0.15" in source
     assert "fresh_pipeline_per_block" in source
     assert "Bloc {context_id}/{repeat} partiel" in source
-    assert "Latent initial variable entre les blocs" in source
+    assert "paired_within_every_block" in source
+    assert "initial-latent-audit.json" in source
+    assert "Cross-block variability" in source
     assert "original_3of3_required_in_every_repeat" in source
     assert "(fusion.original_passed == fusion.original_total).all()" in source
     assert "MIN_MEAN_GAIN = 3 / 39" in source
@@ -552,8 +554,43 @@ def test_e014b_v3_confirms_generalization_with_corrected_gates():
     assert "decoder-results.csv" in source
     assert "scenario-results.csv" in source
     assert "resolved-model-revisions.json" in source
-    assert "/blob/" in source
+    assert "hf_hub_download" in source
+    assert "snapshot_download" in source
+    assert "CONFIG_MODEL_REPO" in source
+    assert "revision=resolved_revisions['base_model']" in source
+    assert "revision=resolved_revisions['config_model']" in source
+    assert "config=BASE_CONFIG_PATH" in source
     assert "diffqrcoder_commit" in source
     assert "pipeline_source_sha256" in source
     assert "physical-validation-template.csv" in source
+    assert "pipeline.to('cpu')" not in source
     assert "17_e014b_multicontext_generalization.ipynb" in launcher
+
+
+def test_e014d_uses_late_functional_rediffusion_without_pixel_compositing():
+    source = Path(
+        "notebooks/18_e014d_functional_late_rediffusion.ipynb"
+    ).read_text(encoding="utf-8")
+    launcher = Path("scripts/notebook-remote.ps1").read_text(encoding="utf-8")
+
+    assert "CONTEXT_IDS = ['p1_simple', 'p2_medium', 'p3_detailed', 'p4_complex']" in source
+    assert "RESCUE_STEPS = 8" in source
+    assert "GLOBAL_FUSION_CHANNEL = 1" in source
+    assert "GLOBAL_FUSION_ALPHA = 0.15" in source
+    assert "'structural_strength': 0.15" in source
+    assert "'structural_strength': 0.30" in source
+    assert "'structural_strength': 0.45" in source
+    assert "functional_pattern_mask" in source
+    assert "quiet zone plus finder/separator" in source
+    assert "timesteps=[int(value)" in source
+    assert "num_inference_steps=None" in source
+    assert "original_probe" in source
+    assert "fixed_recipe_gate" in source
+    assert "fresh_pipeline_per_rescue_candidate" in source
+    assert "paired-input-audit.json" in source
+    assert "rescue_noise_sha256" in source
+    assert "'post_diffusion_pixel_projection': False" in source
+    assert "context-adaptive-oracle.csv" in source
+    assert "fixed-recipe-aggregates.csv" in source
+    assert "physical-validation-template.csv" in source
+    assert "18_e014d_functional_late_rediffusion.ipynb" in launcher

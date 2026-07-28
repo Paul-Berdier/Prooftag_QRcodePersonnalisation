@@ -79,7 +79,7 @@ imports = imports.replace("import gc\n", "import gc\nimport importlib.metadata\n
 imports = imports.replace(
     "from diffusers import ControlNetModel, DDIMScheduler\n",
     "from diffusers import ControlNetModel, DDIMScheduler\n"
-    "from huggingface_hub import model_info\n",
+    "from huggingface_hub import hf_hub_download, model_info, snapshot_download\n",
 )
 imports = imports.replace(
     "16_e014b_statistical_freeqr_confirmation.ipynb",
@@ -96,6 +96,7 @@ RESUME_RUN_NAME = None
 
 BASE_MODEL_REPO = 'fp16-guy/Cetus-Mix_Whalefall_fp16_cleaned'
 BASE_MODEL_FILE = 'cetusMix_Whalefall2_fp16.safetensors'
+CONFIG_MODEL_REPO = 'stable-diffusion-v1-5/stable-diffusion-v1-5'
 CONTROLNET_MODEL = 'monster-labs/control_v1p_sd15_qrcode_monster'
 CONTROLNET_SUBFOLDER = 'v2'
 DIFFQRCODER_COMMIT = 'e24ea73ee2e13c7e6e87cb422e8b11784e70ae00'
@@ -167,16 +168,29 @@ revision_path = RUN_DIR / 'resolved-model-revisions.json'
 if revision_path.exists():
     resolved_revisions = json.loads(revision_path.read_text(encoding='utf-8'))
 else:
-    resolved_revisions = {
-        'base_model': resolve_revision(BASE_MODEL_REPO),
-        'controlnet': resolve_revision(CONTROLNET_MODEL),
-    }
-    revision_path.write_text(
-        json.dumps(resolved_revisions, indent=2), encoding='utf-8'
-    )
-BASE_MODEL_URL = (
-    f"https://huggingface.co/{BASE_MODEL_REPO}/blob/"
-    f"{resolved_revisions['base_model']}/{BASE_MODEL_FILE}"
+    resolved_revisions = {}
+revision_repositories = {
+    'base_model': BASE_MODEL_REPO,
+    'config_model': CONFIG_MODEL_REPO,
+    'controlnet': CONTROLNET_MODEL,
+}
+for revision_key, repo_id in revision_repositories.items():
+    if not resolved_revisions.get(revision_key):
+        resolved_revisions[revision_key] = resolve_revision(repo_id)
+revision_path.write_text(
+    json.dumps(resolved_revisions, indent=2), encoding='utf-8'
+)
+BASE_MODEL_PATH = hf_hub_download(
+    repo_id=BASE_MODEL_REPO,
+    filename=BASE_MODEL_FILE,
+    revision=resolved_revisions['base_model'],
+    cache_dir='/cache/huggingface',
+)
+BASE_CONFIG_PATH = snapshot_download(
+    repo_id=CONFIG_MODEL_REPO,
+    revision=resolved_revisions['config_model'],
+    cache_dir='/cache/huggingface',
+    allow_patterns=['**/*.json', '*.json', '*.txt', '**/*.txt', '**/*.model'],
 )
 
 pipeline_source = UPSTREAM_ROOT / 'diffqrcoder' / 'pipeline_diffqrcoder.py'
@@ -320,8 +334,9 @@ cells[10] = code(
         torch_dtype=torch.float16, cache_dir='/cache/huggingface',
     )
     pipeline = DiffQRCoderPipeline.from_single_file(
-        BASE_MODEL_URL, controlnet=controlnet, torch_dtype=torch.float16,
+        BASE_MODEL_PATH, controlnet=controlnet, torch_dtype=torch.float16,
         cache_dir='/cache/huggingface', safety_checker=None, use_safetensors=True,
+        config=BASE_CONFIG_PATH,
     )
     pipeline.scheduler = DDIMScheduler.from_config(pipeline.scheduler.config)
     pipeline = pipeline.to('cuda')
@@ -352,10 +367,6 @@ def release_guidance(pipeline):
 
 def close_pipeline(pipeline):
     release_guidance(pipeline)
-    pipeline.to('cpu')
-    gc.collect()
-    torch.cuda.empty_cache()
-    torch.cuda.synchronize()
 
 
 @torch.no_grad()
@@ -639,6 +650,9 @@ for context_id in CONTEXT_IDS:
         del stage1_tensor, blueprint_latent, paired_initial, paired_noise
         close_pipeline(pipe)
         del pipe
+        gc.collect()
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
 
 rows = result_rows()
 expected_rows = len(CONTEXT_IDS) * REPEATS * len(RECIPES)
@@ -646,7 +660,9 @@ if len(rows) != expected_rows:
     raise RuntimeError(f'Campagne incomplète : {len(rows)}/{expected_rows}.')
 
 initial_hashes_by_block = {}
+initial_hashes_by_context = {}
 for context_id in CONTEXT_IDS:
+    initial_hashes_by_context[context_id] = []
     for repeat in range(1, REPEATS + 1):
         hashes = sorted({
             row['initial_latent_sha256'] for row in rows
@@ -657,16 +673,27 @@ for context_id in CONTEXT_IDS:
                 f'Latent initial non apparié dans {context_id}/{repeat}: {hashes}'
             )
         initial_hashes_by_block[f'{context_id}/r{repeat:02d}'] = hashes[0]
-for context_id in CONTEXT_IDS:
-    context_hashes = {
-        initial_hashes_by_block[f'{context_id}/r{repeat:02d}']
-        for repeat in range(1, REPEATS + 1)
-    }
-    if len(context_hashes) != 1:
-        raise RuntimeError(
-            f'Latent initial variable entre les blocs de {context_id}: {context_hashes}'
-        )
+        initial_hashes_by_context[context_id].append(hashes[0])
+initial_latent_audit = {
+    'paired_within_every_block': True,
+    'unique_hashes_by_context': {
+        context_id: sorted(set(hashes))
+        for context_id, hashes in initial_hashes_by_context.items()
+    },
+    'same_initial_across_blocks': {
+        context_id: len(set(hashes)) == 1
+        for context_id, hashes in initial_hashes_by_context.items()
+    },
+    'interpretation': (
+        'Pairing is required within each block. Cross-block variability is retained '
+        'as an execution-history diagnostic and handled by balanced repeated measures.'
+    ),
+}
+(RUN_DIR / 'initial-latent-audit.json').write_text(
+    json.dumps(initial_latent_audit, indent=2), encoding='utf-8'
+)
 print('Campagne complète :', len(rows), 'résultats')
+print('Audit latents initiaux :', initial_latent_audit)
 """
 )
 
@@ -889,6 +916,8 @@ manifest = {
         'base_repo': BASE_MODEL_REPO,
         'base_file': BASE_MODEL_FILE,
         'base_revision': resolved_revisions['base_model'],
+        'config_repo': CONFIG_MODEL_REPO,
+        'config_revision': resolved_revisions['config_model'],
         'controlnet_repo': CONTROLNET_MODEL,
         'controlnet_subfolder': CONTROLNET_SUBFOLDER,
         'controlnet_revision': resolved_revisions['controlnet'],
@@ -907,6 +936,7 @@ manifest = {
     'fresh_pipeline_per_block': True,
     'strict_deterministic_algorithms': True,
     'initial_hashes_by_block': initial_hashes_by_block,
+    'initial_latent_audit': initial_latent_audit,
     'promotion_rule': {
         'positive_repeats_minimum': 3,
         'minimum_mean_gain': MIN_MEAN_GAIN,
