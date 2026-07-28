@@ -645,6 +645,8 @@ def test_e014f_uses_unseen_contexts_and_a_strict_delivery_cascade():
 
     assert "e014f-unseen-generalization-cascade-v1" in source
     assert "RESCUE_STEP_COUNTS = [2, 3, 4]" in source
+    assert "CANVAS_SIZE = 768" in source
+    assert "CANVAS_SIZE - (29 * QR_MODULE_SIZE) >= 8 * QR_MODULE_SIZE" in source
     assert "'combined_a06_s10'" in source
     assert "'combined_a10_s15'" in source
     assert "'combined_a15_s15'" in source

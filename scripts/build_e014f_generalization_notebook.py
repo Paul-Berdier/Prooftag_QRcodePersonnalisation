@@ -120,7 +120,7 @@ NEGATIVE_PROMPT = 'easynegative, unreadable text, letters, watermark'
 QR_VERSION = 3
 QR_ECC = 'M'
 QR_MODULE_SIZE = 20
-CANVAS_SIZE = 736
+CANVAS_SIZE = 768
 ADAPTIVE_FRACTIONS = [0.22, 0.30, 0.38, 0.46, 0.55, 0.70, 0.85]
 SAVE_SOURCE_PREVIEW_EVERY = 10
 MAX_AESTHETIC_DROP = 0.75
@@ -196,6 +196,7 @@ if CONTEXT_LIMIT is None:
     assert len(contexts_spec) == 24
     assert sum(item['split'] == 'calibration' for item in contexts_spec) == 16
     assert sum(item['split'] == 'holdout' for item in contexts_spec) == 8
+assert CANVAS_SIZE - (29 * QR_MODULE_SIZE) >= 8 * QR_MODULE_SIZE
 
 if RESUME_RUN_NAME:
     RUN_DIR = Path('/data/notebook-runs') / RESUME_RUN_NAME
