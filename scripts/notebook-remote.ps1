@@ -20,7 +20,8 @@ param(
         "16_e014b_statistical_freeqr_confirmation.ipynb",
         "17_e014b_multicontext_generalization.ipynb",
         "18_e014d_functional_late_rediffusion.ipynb",
-        "19_e014e_mechanism_window_ablation.ipynb"
+        "19_e014e_mechanism_window_ablation.ipynb",
+        "20_e014f_unseen_generalization_cascade.ipynb"
     )]
     [string]$Notebook = "02_generate_live_on_gpu.ipynb",
     [switch]$Reset,

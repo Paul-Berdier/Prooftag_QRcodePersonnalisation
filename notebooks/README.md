@@ -337,6 +337,27 @@ Lancer ensuite **Run > Run All Cells**. Une reprise après interruption doit ren
 `RESUME_RUN_NAME` avec le nom du dossier E014E existant avant de relancer les cellules. E014E
 n'entraîne aucun sélecteur : quatre contextes restent insuffisants pour cela.
 
+## Généralisation inconnue et cascade E014F
+
+E014F ne réutilise pas les quatre images d'E014E. Il régénère vingt-quatre sources à partir de
+douze nouveaux prompts, deux graines et six payloads. Chaque source utilise une Stage 1, un
+blueprint adaptatif exact sélectionné avant la Stage 2, puis une Stage 2 FreeQR complète.
+
+Les quatre recettes préenregistrées sont comparées à 2, 3 et 4 pas, soit 288 réparations. Le
+notebook sépare seize contextes de calibration et huit contextes holdout, classe une recette fixe,
+mesure l'oracle exhaustif et simule une cascade qui ne livre que les sorties à 39/39.
+
+```powershell
+.\scripts\notebook-remote.ps1 -Reset -Notebook 20_e014f_unseen_generalization_cascade.ipynb
+```
+
+Lancer **Run > Run All Cells** une seule fois. La campagne peut durer plusieurs heures. Après une
+interruption, renseigner `RESUME_RUN_NAME` avec le dossier E014F existant. `CONTEXT_LIMIT` sert
+uniquement à vérifier l'installation dans un run distinct, jamais à produire un résultat
+revendiqué.
+
+Protocole : [`../docs/e014f-protocol-2026-07-28.md`](../docs/e014f-protocol-2026-07-28.md).
+
 ## Première installation ou mise à jour sur le serveur
 
 ```bash
@@ -360,7 +381,7 @@ vérifie le notebook dans l'image, l'importe dans k3s et met explicitement à jo
 
 ```bash
 bash scripts/deploy-notebook-image.sh \
-  notebooks/19_e014e_mechanism_window_ablation.ipynb
+  notebooks/20_e014f_unseen_generalization_cascade.ipynb
 ```
 
 ## Analyse d'une ancienne archive sur Windows

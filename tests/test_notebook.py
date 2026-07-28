@@ -632,3 +632,33 @@ def test_e014e_separates_mechanisms_before_testing_late_windows():
     assert "phase-b-fixed-aggregates.csv" in source
     assert "physical-validation-template.csv" in source
     assert "19_e014e_mechanism_window_ablation.ipynb" in launcher
+
+
+def test_e014f_uses_unseen_contexts_and_a_strict_delivery_cascade():
+    source = Path(
+        "notebooks/20_e014f_unseen_generalization_cascade.ipynb"
+    ).read_text(encoding="utf-8")
+    launcher = Path("scripts/notebook-remote.ps1").read_text(encoding="utf-8")
+    deployer = Path("scripts/deploy-notebook-image.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "e014f-unseen-generalization-cascade-v1" in source
+    assert "RESCUE_STEP_COUNTS = [2, 3, 4]" in source
+    assert "'combined_a06_s10'" in source
+    assert "'combined_a10_s15'" in source
+    assert "'combined_a15_s15'" in source
+    assert "len(contexts_spec) == 24" in source
+    assert "== 16" in source
+    assert "== 8" in source
+    assert "adaptive_exact_payload" in source
+    assert "SOURCE_FUSION_ALPHA = 0.15" in source
+    assert "fresh_pipeline_per_candidate" in source
+    assert "paired-input-audit.json" in source
+    assert "CASCADE_ORDER" in source
+    assert "exact payload, 39/39 software validations" in source
+    assert "'selector_training_allowed': False" in source
+    assert "'post_diffusion_pixel_projection': False" in source
+    assert "physical-validation-template.csv" in source
+    assert "20_e014f_unseen_generalization_cascade.ipynb" in launcher
+    assert "20_e014f_unseen_generalization_cascade.ipynb" in deployer

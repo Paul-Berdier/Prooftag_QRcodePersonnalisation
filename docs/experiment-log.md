@@ -953,6 +953,40 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   l'entraînement d'un sélecteur sur quatre contextes.
 - **Protocole détaillé E014E :**
   [`docs/e014e-protocol-2026-07-28.md`](e014e-protocol-2026-07-28.md).
+- **Résultat E014E :** archive
+  `20260728T085500Z-e014e-mechanism-window-ablation-v1.tar.gz`, SHA-256
+  `34FBB51CEFB1EA58030BA01980590F12909E3DBE7A4E0E74CC0B86B4EE6B8944`. La campagne
+  contient 74 candidats complets et aucun événement dans `errors.jsonl`.
+- **Mécanisme E014E :** la fusion sous le masque des motifs fonctionnels produit l'essentiel du
+  gain. La fusion globale seule apporte peu et peut dégrader la lecture originale. La recette
+  douce `combined_a06_s10`, écartée de la phase B par le classement, reste une candidate de
+  frontière et doit revenir dans E014F.
+- **Fenêtre E014E :** quatre pas maximisent le SSR ; six et huit pas sont dominés et détruisent
+  davantage l'image. Deux pas maximisent la préservation. Trois pas, non testés, deviennent le
+  point prioritaire d'E014F.
+- **Candidat équilibré E014E :** `combined_a10_s15` à deux pas passe 148/156 validations
+  (94,87 %), l'original 3/3 dans les quatre contextes, avec CLIP-aesthetic moyen 4,915 et une
+  modification maximale de 0,083. Il franchit la porte logicielle de faible dommage.
+- **Candidat robuste E014E :** `combined_a15_s15` à quatre pas passe 153/156 validations
+  (98,08 %) et l'original 3/3 partout, mais sa perte esthétique maximale de 0,938 dépasse la
+  limite 0,75. Il reste expérimental.
+- **Décision E014E :** ne pas entraîner de sélecteur. E014F comparera les fenêtres 2/3/4 et
+  réintroduira `combined_a06_s10` sur des prompts, graines et payloads inconnus. Une cascade
+  générer-valider-escalader est préférable au mini-modèle tant que le jeu de données n'existe pas.
+- **Rapport E014E :**
+  [`docs/e014e-results-2026-07-28.md`](e014e-results-2026-07-28.md).
+- **Protocole E014F :** vingt-quatre contextes inconnus sont formés par douze nouveaux prompts,
+  deux graines et six payloads. Chaque source régénère Stage 1, blueprint adaptatif exact et
+  Stage 2 FreeQR avant toute réparation.
+- **Comparaison E014F :** `mask_s15`, `combined_a06_s10`, `combined_a10_s15` et
+  `combined_a15_s15` sont comparées avec deux, trois et quatre pas. Les entrées sont appariées et
+  chaque candidat possède une pipeline fraîche.
+- **Validation E014F :** seize contextes servent à classer une recette fixe et huit contextes,
+  issus de quatre prompts entiers, restent holdout. Une cascade préenregistrée ne livre que le
+  premier candidat passant 39/39. Aucun sélecteur appris ni aucune projection de pixels ne sont
+  autorisés.
+- **Protocole détaillé E014F :**
+  [`docs/e014f-protocol-2026-07-28.md`](e014f-protocol-2026-07-28.md).
 - **Observation QArt :** les trois répétitions d'un seuil produisent le même SHA-256 dans les
   quatre contextes. Le CLI se comporte donc de façon déterministe dans cette image Docker ; cinq
   seuils donnent cinq candidats uniques par prompt.

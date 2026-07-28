@@ -5,7 +5,7 @@ namespace="${PROOFTAG_NOTEBOOK_NAMESPACE:-qr-core}"
 deployment="${PROOFTAG_NOTEBOOK_DEPLOYMENT:-prooftag-qr-notebook}"
 container="${PROOFTAG_NOTEBOOK_CONTAINER:-notebook}"
 image_repository="${PROOFTAG_NOTEBOOK_IMAGE:-prooftag-qr-notebook}"
-expected_notebook="${1:-notebooks/19_e014e_mechanism_window_ablation.ipynb}"
+expected_notebook="${1:-notebooks/20_e014f_unseen_generalization_cascade.ipynb}"
 
 if [[ ! -f Dockerfile.notebook || ! -d notebooks ]]; then
   echo "Lancer ce script depuis la racine du dépôt." >&2
