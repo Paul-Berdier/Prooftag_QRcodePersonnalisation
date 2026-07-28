@@ -74,6 +74,13 @@ dimensions, iPhone, Pixel et lecteurs industriels.
 | `prooftag_qr_latent_refinement_iterations` | histogramme | nombre d'itérations réellement exécutées |
 | `prooftag_qr_latent_refinement_module_error_rate` | jauge | erreur des sous-modules centraux avant/après et meilleur résultat observé |
 | `prooftag_qr_latent_refinement_loss` | jauge | composantes SRL, préservation et changement absolu moyen, retenues et observées |
+| `prooftag_qr_lab_campaigns_total` | compteur | campagnes Web par état terminal |
+| `prooftag_qr_lab_campaigns_active` | jauge | campagne Web actuellement exécutée |
+| `prooftag_qr_lab_trials_total` | compteur | essais Web par méthode et résultat |
+| `prooftag_qr_lab_trial_duration_seconds` | histogramme | durée de bout en bout par méthode |
+| `prooftag_qr_lab_ratings_total` | compteur | évaluations humaines enregistrées |
+| `prooftag_qr_lab_quality_scores_total` | compteur | calculs CLIP/esthétique réussis ou en erreur |
+| `prooftag_qr_lab_quality_score_duration_seconds` | histogramme | durée CPU de CLIPScore et CLIP-aesthetic |
 
 Les journaux `repair_variant_validated` contiennent aussi la tentative, la seed, toutes les
 métriques visuelles et la liste exacte des scénarios en échec. Le benchmark les exporte dans
@@ -96,7 +103,8 @@ La porte décide seulement si les réparations `srpg_*` peuvent repartir de cett
 benchmark les normalise dans `srpg-steps.csv`.
 
 Les métriques DCGM existantes complètent le dashboard avec VRAM, utilisation GPU,
-température et puissance.
+température et puissance. Le laboratoire expose en plus les agrégats de campagne dans son
+interface et un export CSV persistant ; Prometheus reste destiné à la supervision temporelle.
 
 ## Indicateurs ajoutés par la campagne E007
 

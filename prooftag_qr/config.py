@@ -13,6 +13,7 @@ class Settings(BaseSettings):
 
     environment: str = "development"
     log_level: str = "INFO"
+    lab_clip_scoring_enabled: bool = False
     data_dir: Path = Path("data")
     model_cache_dir: Path = Path("models")
     default_backend: Literal["qr", "controlnet"] = "qr"
@@ -65,6 +66,11 @@ class Settings(BaseSettings):
     srpg_seed_offset: int = Field(default=2_000_003, ge=0, le=2**32 - 1)
     srpg_save_step_previews: bool = False
     srpg_preview_interval: int = Field(default=5, ge=1, le=100)
+    srpg_latent_fusion_enabled: bool = False
+    srpg_latent_fusion_channel: int = Field(default=1, ge=0, le=3)
+    srpg_latent_fusion_alpha: float = Field(default=0.15, ge=0.0, le=1.0)
+    srpg_latent_fusion_start: float = Field(default=0.0, ge=0.0, le=1.0)
+    srpg_latent_fusion_end: float = Field(default=1.0, ge=0.0, le=1.0)
     latent_refinement_enabled: bool = False
     latent_refinement_iterations: int = Field(default=8, ge=1, le=100)
     latent_refinement_learning_rate: float = Field(default=0.02, gt=0.0, le=10.0)
@@ -104,6 +110,8 @@ class Settings(BaseSettings):
             raise ValueError("SRPG dark threshold cannot exceed light threshold")
         if self.srpg_robust_blur_kernel % 2 == 0:
             raise ValueError("SRPG robust blur kernel must be odd")
+        if self.srpg_latent_fusion_start > self.srpg_latent_fusion_end:
+            raise ValueError("SRPG latent fusion start cannot exceed end")
         return self
 
     @property

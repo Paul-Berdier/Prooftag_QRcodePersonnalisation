@@ -8,6 +8,7 @@ mesurer leur qualité et ne publier que les résultats validés.
 La version `0.1.0` fournit :
 
 - une API FastAPI ;
+- un laboratoire Web persistant pour composer, lancer, comparer et noter des campagnes ;
 - un générateur QR de référence (`backend=qr`) ;
 - une baseline artistique Stable Diffusion 1.5 + ControlNet (`backend=controlnet`) ;
 - une seconde diffusion img2img guidée par les modules QR incorrects, expérimentale et
@@ -44,6 +45,29 @@ recherche sont désactivés par défaut. Voir [`docs/e005-srpg.md`](docs/e005-sr
 [`docs/research-roadmap.md`](docs/research-roadmap.md) pour le programme complet et
 [`docs/experiment-log.md`](docs/experiment-log.md) pour les résultats, erreurs et décisions.
 
+## Laboratoire Web
+
+Le laboratoire est servi par la même API à l'adresse `/lab`. Il exécute séquentiellement chaque
+combinaison méthode × prompt × seed, conserve les configurations et mesures dans PostgreSQL,
+affiche les images, tableaux et graphiques, et permet d'enregistrer les notes humaines et scans
+physiques. CLIPScore et CLIP-aesthetic sont calculés sur CPU dans le déploiement K3s afin de
+réserver la VRAM à la diffusion.
+
+Depuis le PC Windows, lorsque le Deployment est prêt sur le serveur :
+
+```powershell
+.\scripts\lab-remote.ps1
+```
+
+Pour fermer le tunnel :
+
+```powershell
+.\scripts\lab-remote.ps1 -Stop
+```
+
+Le fonctionnement, les profils disponibles et les limites d'interprétation sont détaillés dans
+[`docs/web-lab.md`](docs/web-lab.md).
+
 ## API
 
 Lancer localement :
@@ -75,8 +99,14 @@ Endpoints principaux :
 | `GET /v1/generations` | Tableau des exécutions récentes |
 | `GET /v1/generations/{id}` | Détails, tentatives et validations |
 | `GET /v1/generations/{id}/image` | Image acceptée ou meilleur candidat |
+| `GET /v1/generations/{id}/artifacts` | Liste des variantes et diagnostics sauvegardés |
 | `POST /v1/generations/{id}/physical-validations` | Enregistrer un scan terrain |
 | `GET /v1/generations/{id}/physical-validations` | Tableau des essais physiques |
+| `GET /lab` | Interface du laboratoire comparatif |
+| `GET /v1/lab/schema` | Profils et paramètres proposés |
+| `POST /v1/lab/campaigns` | Créer et mettre en file une campagne |
+| `GET /v1/lab/campaigns/{id}` | Progression, essais, images et notes |
+| `GET /v1/lab/campaigns/{id}/results.csv` | Export complet de la campagne |
 | `GET /v1/reports/summary` | Agrégats persistants |
 | `GET /v1/reports/runs.csv` | Export pour analyse externe |
 | `GET /metrics` | Métriques Prometheus |
@@ -99,7 +129,8 @@ l'analyse du modèle, mais ne doit pas être publiée par l'application appelant
 
 Le projet ne déploie pas de second Prometheus, Grafana, Loki ou MinIO. Voir
 [`docs/deployment.md`](docs/deployment.md) pour le déploiement K3s et la permutation avec
-vLLM, [`docs/metrics.md`](docs/metrics.md) pour le catalogue de mesures et
+vLLM, [`docs/web-lab.md`](docs/web-lab.md) pour le laboratoire,
+[`docs/metrics.md`](docs/metrics.md) pour le catalogue de mesures et
 [`docs/benchmark.md`](docs/benchmark.md) pour générer et rapatrier un rapport comparatif en
 une commande.
 

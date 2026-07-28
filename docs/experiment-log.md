@@ -1003,3 +1003,23 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   négatifs par moteur avant tout fine-tuning.
 - **Rapport :**
   [`docs/e014-e016-results-audit-2026-07-27.md`](e014-e016-results-audit-2026-07-27.md).
+- **Diagnostic visuel E014F :** sur 24 paires Stage 1/Stage 2, la netteté moyenne passe de
+  942,10 à 535,33, la saturation moyenne de 0,3616 à 0,5219, les pixels fortement saturés de
+  0,0061 à 0,2121 et les pixels écrêtés de 0,0016 à 0,1088. Le défaut visible n'est donc pas
+  seulement une impression subjective.
+- **Attribution E014F :** la fusion FreeQR ajoutée à `alpha=0,15`, canal 1, pendant les 40 pas
+  n'appartient pas au Stage 2 publié par DiffQRCoder. Les résultats appariés E014B montrent
+  toutefois qu'elle ne suffit pas à expliquer la saturation globale ; le redémarrage bruité et la
+  reconstruction Stage 2 constituent le mécanisme principal, avec une interaction par prompt.
+- **Décision d'outillage :** les nouvelles ablations courantes passent dans le laboratoire Web
+  `/lab`. Chaque méthode, prompt et seed devient un essai persistant ; l'exécution GPU est
+  séquentielle et les notes humaines et scans physiques rejoignent les métriques automatiques.
+- **Incident Web Lab 01 — cache d'assets :** le navigateur conservait l'ancienne feuille de style
+  et masquait mal le bouton d'arrêt d'une campagne terminée. Les assets possèdent désormais une
+  version de cache, la règle HTML `[hidden]` est forcée, et les cartes d'essai sont activables au
+  clavier.
+- **Validation Web Lab :** smoke test complet avec le backend QR : création, progression,
+  résultat 1/1 strict, affichage de l'artefact, export CSV et notation humaine. Les tests API,
+  schéma laboratoire, repository et SRPG ciblés passent ; les deux tests GPU indisponibles
+  localement restent explicitement ignorés.
+- **Documentation Web Lab :** [`docs/web-lab.md`](web-lab.md).

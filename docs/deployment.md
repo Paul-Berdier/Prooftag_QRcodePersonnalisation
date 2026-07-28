@@ -114,6 +114,25 @@ curl http://127.0.0.1:8080/healthz
 curl http://127.0.0.1:8080/metrics
 ```
 
+## Ouvrir le laboratoire depuis Windows
+
+Après le déploiement, une seule commande PowerShell crée le `port-forward` sur le serveur,
+le tunnel SSH vers le PC et ouvre le navigateur :
+
+```powershell
+cd "C:\Users\p.berdier\Documents\Paul Berdier\codage\Prooftag_QRcodePersonnalisation"
+.\scripts\lab-remote.ps1
+```
+
+Pour fermer proprement le tunnel :
+
+```powershell
+.\scripts\lab-remote.ps1 -Stop
+```
+
+Le laboratoire est alors disponible sur `http://127.0.0.1:18080/lab`. Le protocole complet est
+documenté dans [`web-lab.md`](web-lab.md).
+
 ## Restituer le GPU à vLLM
 
 Le pod QR doit d'abord être ramené à zéro, sinon Kubernetes conservera le GPU :
@@ -164,7 +183,7 @@ les variables suivantes au Deployment :
 ## Point de vigilance Prometheus
 
 Le Prometheus existant n'a pas de stockage persistant et sa rétention est de dix jours. Les
-mesures détaillées restent donc dans SQLite même après disparition des séries temporelles.
+mesures détaillées restent donc dans PostgreSQL même après disparition des séries temporelles.
 La persistance de Prometheus pourra être ajoutée ultérieurement au chart
 `kube-prometheus-stack`, mais ce changement concerne toute la plateforme et n'est pas requis
 pour le premier prototype.

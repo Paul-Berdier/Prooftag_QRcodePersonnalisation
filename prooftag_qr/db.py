@@ -102,3 +102,73 @@ physical_validations = Table(
     Index("idx_physical_run", "run_id"),
     Index("idx_physical_dimensions", "device", "print_profile", "material", "outcome"),
 )
+
+lab_campaigns = Table(
+    "lab_campaigns",
+    metadata,
+    Column("id", String(36), primary_key=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    Column("name", String(200), nullable=False),
+    Column("status", String(30), nullable=False),
+    Column("payload_hash", String(64), nullable=False),
+    Column("specification", JSON, nullable=False),
+    Column("total_trials", Integer, nullable=False, default=0),
+    Column("completed_trials", Integer, nullable=False, default=0),
+    Column("accepted_trials", Integer, nullable=False, default=0),
+    Column("error", Text),
+    Index("idx_lab_campaigns_created_at", "created_at"),
+    Index("idx_lab_campaigns_status", "status"),
+)
+
+lab_trials = Table(
+    "lab_trials",
+    metadata,
+    Column("id", String(36), primary_key=True),
+    Column(
+        "campaign_id",
+        String(36),
+        ForeignKey("lab_campaigns.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("completed_at", DateTime(timezone=True)),
+    Column("prompt_id", String(100), nullable=False),
+    Column("method_id", String(100), nullable=False),
+    Column("seed", Integer, nullable=False),
+    Column("status", String(30), nullable=False),
+    Column("generation_run_id", String(36), ForeignKey("runs.id", ondelete="SET NULL")),
+    Column("configuration", JSON, nullable=False),
+    Column("error", Text),
+    UniqueConstraint(
+        "campaign_id",
+        "prompt_id",
+        "method_id",
+        "seed",
+        name="uq_lab_trial_dimensions",
+    ),
+    Index("idx_lab_trials_campaign", "campaign_id"),
+    Index("idx_lab_trials_status", "status"),
+)
+
+lab_ratings = Table(
+    "lab_ratings",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column(
+        "trial_id",
+        String(36),
+        ForeignKey("lab_trials.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    ),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    Column("aesthetic_score", Integer),
+    Column("prompt_fidelity_score", Integer),
+    Column("qr_discretion_score", Integer),
+    Column("overall_score", Integer),
+    Column("favorite", Boolean, nullable=False, default=False),
+    Column("notes", Text, nullable=False, default=""),
+    Index("idx_lab_ratings_trial", "trial_id"),
+)

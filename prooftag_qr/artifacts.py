@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 from pathlib import Path
 
 from PIL import Image
@@ -12,6 +13,9 @@ class ArtifactStore:
         raise NotImplementedError
 
     def save_variant(self, run_id: str, variant: str, image: Image.Image) -> str:
+        raise NotImplementedError
+
+    def load_image(self, location: str) -> Image.Image:
         raise NotImplementedError
 
 
@@ -34,6 +38,10 @@ class LocalArtifactStore(ArtifactStore):
         image.save(path, format="PNG", optimize=True)
         return str(path)
 
+    def load_image(self, location: str) -> Image.Image:
+        with Image.open(location) as image:
+            return image.convert("RGB").copy()
+
 
 class S3ArtifactStore(ArtifactStore):
     def __init__(self, settings: Settings):
@@ -54,8 +62,6 @@ class S3ArtifactStore(ArtifactStore):
             self.client.create_bucket(Bucket=self.bucket)
 
     def save_image(self, run_id: str, image: Image.Image) -> str:
-        import io
-
         stream = io.BytesIO()
         image.save(stream, format="PNG", optimize=True)
         stream.seek(0)
@@ -64,14 +70,21 @@ class S3ArtifactStore(ArtifactStore):
         return f"s3://{self.bucket}/{key}"
 
     def save_variant(self, run_id: str, variant: str, image: Image.Image) -> str:
-        import io
-
         stream = io.BytesIO()
         image.save(stream, format="PNG", optimize=True)
         stream.seek(0)
         key = f"runs/{run_id}/variants/{variant}.png"
         self.client.upload_fileobj(stream, self.bucket, key, ExtraArgs={"ContentType": "image/png"})
         return f"s3://{self.bucket}/{key}"
+
+    def load_image(self, location: str) -> Image.Image:
+        prefix = f"s3://{self.bucket}/"
+        if not location.startswith(prefix):
+            raise ValueError(f"Artifact does not belong to bucket {self.bucket}")
+        key = location[len(prefix) :]
+        response = self.client.get_object(Bucket=self.bucket, Key=key)
+        with Image.open(io.BytesIO(response["Body"].read())) as image:
+            return image.convert("RGB").copy()
 
 
 def build_artifact_store(settings: Settings) -> ArtifactStore:

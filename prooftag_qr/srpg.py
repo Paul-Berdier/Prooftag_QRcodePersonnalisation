@@ -38,6 +38,11 @@ class SRPGConfig:
     min_relative_module_improvement: float = 0.10
     save_step_previews: bool = False
     preview_interval: int = 5
+    latent_fusion_enabled: bool = False
+    latent_fusion_channel: int = 1
+    latent_fusion_alpha: float = 0.15
+    latent_fusion_start: float = 0.0
+    latent_fusion_end: float = 1.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +56,8 @@ class SRPGStep:
     noise_delta_rms: float
     gradient_clipped: bool
     guidance_applied: bool
+    latent_fusion_applied: bool = False
+    latent_fusion_delta_rms: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,6 +174,12 @@ def _validate_config(config: SRPGConfig) -> None:
         raise ValueError("min_relative_module_improvement must be between 0 and 1")
     if config.preview_interval < 1:
         raise ValueError("preview_interval must be at least 1")
+    if config.latent_fusion_channel not in range(4):
+        raise ValueError("latent_fusion_channel must be between 0 and 3")
+    if not 0 <= config.latent_fusion_alpha <= 1:
+        raise ValueError("latent_fusion_alpha must be between 0 and 1")
+    if not 0 <= config.latent_fusion_start <= config.latent_fusion_end <= 1:
+        raise ValueError("invalid latent fusion window")
 
 
 def run_srpg_controlnet_img2img(
@@ -237,6 +250,7 @@ def run_srpg_controlnet_img2img(
     pipeline.scheduler.set_timesteps(config.steps, device=device)
     timesteps, _ = pipeline.get_timesteps(config.steps, config.strength, device)
     latent_timestep = timesteps[:1]
+    scaling_factor = pipeline.vae.config.scaling_factor
     latents = pipeline.prepare_latents(
         source_image,
         latent_timestep,
@@ -246,6 +260,26 @@ def run_srpg_controlnet_img2img(
         device,
         generator,
     )
+    fusion_latent = None
+    fusion_noise = None
+    if config.latent_fusion_enabled and config.latent_fusion_alpha > 0:
+        with torch.no_grad():
+            fusion_source = pipeline.image_processor.preprocess(
+                blueprint.image.convert("RGB"),
+                height=blueprint.image.height,
+                width=blueprint.image.width,
+            ).to(device=device, dtype=torch.float32)
+            fusion_latent = (
+                pipeline.vae.encode(fusion_source).latent_dist.mode() * scaling_factor
+            ).to(dtype=dtype)
+            fusion_generator = torch.Generator(device=device)
+            fusion_generator.set_state(generator.get_state())
+            fusion_noise = torch.randn(
+                fusion_latent.shape,
+                generator=fusion_generator,
+                device=device,
+                dtype=dtype,
+            )
     extra_step_kwargs = pipeline.prepare_extra_step_kwargs(generator, config.eta)
     layout = prepare_torch_layout(
         blueprint,
@@ -256,7 +290,6 @@ def run_srpg_controlnet_img2img(
         center_fraction=config.center_fraction,
     )
     perceptual_model = _load_lpips(pipeline, device)
-    scaling_factor = pipeline.vae.config.scaling_factor
     traces: list[SRPGStep] = []
     previews: list[SRPGPreview] = []
     preview_indices = (
@@ -450,6 +483,51 @@ def run_srpg_controlnet_img2img(
                 noise_delta_rms = float(noise_delta_rms_tensor.item())
                 guided_noise_prediction = noise_prediction + noise_delta.to(noise_prediction.dtype)
 
+            next_latents = pipeline.scheduler.step(
+                guided_noise_prediction.detach(),
+                timestep,
+                latents.detach(),
+                **extra_step_kwargs,
+                return_dict=False,
+            )[0]
+            fusion_applied = False
+            fusion_delta_rms = 0.0
+            fraction = index / max(1, len(timesteps) - 1)
+            if (
+                fusion_latent is not None
+                and fusion_noise is not None
+                and config.latent_fusion_start <= fraction <= config.latent_fusion_end
+            ):
+                next_timestep = (
+                    timesteps[index + 1]
+                    if index + 1 < len(timesteps)
+                    else torch.tensor(0, device=device, dtype=timesteps.dtype)
+                )
+                with torch.no_grad():
+                    noised_blueprint = pipeline.scheduler.add_noise(
+                        fusion_latent,
+                        fusion_noise,
+                        next_timestep.reshape(1),
+                    )
+                    channel = config.latent_fusion_channel
+                    before = next_latents[:, channel : channel + 1].clone()
+                    next_latents[:, channel : channel + 1] = (
+                        (1 - config.latent_fusion_alpha) * before
+                        + config.latent_fusion_alpha
+                        * noised_blueprint[:, channel : channel + 1]
+                    )
+                    fusion_delta_rms = float(
+                        (
+                            next_latents[:, channel : channel + 1] - before
+                        )
+                        .float()
+                        .square()
+                        .mean()
+                        .sqrt()
+                        .item()
+                    )
+                    fusion_applied = True
+
             step = SRPGStep(
                 index=index,
                 timestep=int(timestep.item()),
@@ -460,17 +538,13 @@ def run_srpg_controlnet_img2img(
                 noise_delta_rms=noise_delta_rms,
                 gradient_clipped=gradient_clipped,
                 guidance_applied=guidance_applied,
+                latent_fusion_applied=fusion_applied,
+                latent_fusion_delta_rms=fusion_delta_rms,
             )
             traces.append(step)
             if preview is not None and preview_callback is not None:
                 preview_callback(preview, step)
-            latents = pipeline.scheduler.step(
-                guided_noise_prediction.detach(),
-                timestep,
-                latents.detach(),
-                **extra_step_kwargs,
-                return_dict=False,
-            )[0]
+            latents = next_latents
 
     with torch.no_grad():
         decoded_final = pipeline.vae.decode(latents / scaling_factor, return_dict=False)[0]

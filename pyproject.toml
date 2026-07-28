@@ -62,6 +62,9 @@ optimizer = [
 [tool.setuptools.packages.find]
 include = ["prooftag_qr*"]
 
+[tool.setuptools.package-data]
+prooftag_qr = ["lab_static/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q --disable-warnings"

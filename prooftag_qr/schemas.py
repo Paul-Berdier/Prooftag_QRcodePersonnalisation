@@ -1,7 +1,7 @@
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class GenerationRequest(BaseModel):
@@ -101,3 +101,108 @@ class PhysicalValidationResponse(BaseModel):
     scan_latency_ms: float | None
     outcome: Literal["exact", "wrong_payload", "not_detected"]
     notes: str
+
+
+class LabPrompt(BaseModel):
+    id: str = Field(pattern=r"^[a-zA-Z0-9_-]+$", min_length=1, max_length=100)
+    text: str = Field(min_length=1, max_length=2000)
+    negative_prompt: str = Field(default="", max_length=2000)
+
+
+class LabToolConfig(BaseModel):
+    srpg_enabled: bool = False
+    guided_rediffusion_enabled: bool = False
+    latent_refinement_enabled: bool = False
+    settings: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_exclusive_stage2(self) -> "LabToolConfig":
+        if self.srpg_enabled and self.guided_rediffusion_enabled:
+            raise ValueError("SRPG and guided rediffusion cannot be enabled together")
+        return self
+
+
+class LabMethod(BaseModel):
+    id: str = Field(pattern=r"^[a-zA-Z0-9_-]+$", min_length=1, max_length=100)
+    name: str = Field(min_length=1, max_length=200)
+    backend: Literal["qr", "controlnet"] = "controlnet"
+    enabled: bool = True
+    generation: dict[str, Any] = Field(default_factory=dict)
+    model: dict[str, Any] = Field(default_factory=dict)
+    tools: LabToolConfig = Field(default_factory=LabToolConfig)
+
+
+class LabCampaignCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    payload: str = Field(min_length=1, max_length=2048)
+    error_correction: Literal["M", "Q", "H"] = "M"
+    prompts: list[LabPrompt] = Field(min_length=1, max_length=50)
+    seeds: list[int] = Field(min_length=1, max_length=20)
+    methods: list[LabMethod] = Field(min_length=1, max_length=20)
+    max_attempts: int = Field(default=1, ge=1, le=20)
+
+    @model_validator(mode="after")
+    def validate_campaign(self) -> "LabCampaignCreate":
+        if len({item.id for item in self.prompts}) != len(self.prompts):
+            raise ValueError("prompt ids must be unique")
+        active = [item for item in self.methods if item.enabled]
+        if not active:
+            raise ValueError("at least one method must be enabled")
+        if len({item.id for item in active}) != len(active):
+            raise ValueError("enabled method ids must be unique")
+        if len(set(self.seeds)) != len(self.seeds):
+            raise ValueError("seeds must be unique")
+        if any(seed < 0 or seed > 2**32 - 1 for seed in self.seeds):
+            raise ValueError("seeds must be between 0 and 2^32 - 1")
+        if len(self.prompts) * len(self.seeds) * len(active) > 500:
+            raise ValueError("a campaign is limited to 500 trials")
+        return self
+
+
+class LabRatingRequest(BaseModel):
+    aesthetic_score: int | None = Field(default=None, ge=1, le=10)
+    prompt_fidelity_score: int | None = Field(default=None, ge=1, le=10)
+    qr_discretion_score: int | None = Field(default=None, ge=1, le=10)
+    overall_score: int | None = Field(default=None, ge=1, le=10)
+    favorite: bool = False
+    notes: str = Field(default="", max_length=4000)
+
+
+class LabRatingResponse(LabRatingRequest):
+    id: int
+    trial_id: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class LabTrialResponse(BaseModel):
+    id: str
+    campaign_id: str
+    created_at: datetime
+    completed_at: datetime | None
+    prompt_id: str
+    method_id: str
+    seed: int
+    status: Literal["queued", "running", "accepted", "rejected", "error", "cancelled"]
+    generation_run_id: str | None
+    configuration: dict[str, Any]
+    error: str | None
+    generation: GenerationResponse | None = None
+    rating: LabRatingResponse | None = None
+
+
+class LabCampaignResponse(BaseModel):
+    id: str
+    created_at: datetime
+    updated_at: datetime
+    name: str
+    status: Literal[
+        "queued", "running", "completed", "completed_with_errors", "cancelled", "interrupted"
+    ]
+    payload_hash: str
+    specification: dict[str, Any]
+    total_trials: int
+    completed_trials: int
+    accepted_trials: int
+    error: str | None
+    trials: list[LabTrialResponse] = Field(default_factory=list)

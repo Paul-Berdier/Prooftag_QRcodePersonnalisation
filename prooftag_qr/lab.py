@@ -1,0 +1,532 @@
+from __future__ import annotations
+
+import gc
+import hashlib
+import logging
+import threading
+import time
+import uuid
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import asdict
+from datetime import UTC, datetime
+from typing import Any
+
+from . import metrics
+from .artifacts import ArtifactStore
+from .backends import build_backends
+from .config import Settings
+from .domain import RunRecord
+from .lab_repository import LabRepository
+from .quality_scoring import CLIPQualityScorer
+from .repository import RunRepository
+from .schemas import GenerationRequest, LabCampaignCreate, LabMethod
+from .service import GenerationService
+from .validation import QRValidator
+
+logger = logging.getLogger(__name__)
+
+GENERATION_KEYS = {
+    "steps",
+    "guidance_scale",
+    "controlnet_scale",
+    "strength",
+}
+MODEL_SETTING_KEYS = {
+    "base_model_id",
+    "controlnet_model_id",
+    "controlnet_model_subfolder",
+    "controlnet_conditioning_profile",
+    "controlnet_pipeline_mode",
+}
+TOOL_SETTING_KEYS = {
+    "srpg_steps",
+    "srpg_strength",
+    "srpg_controlnet_scale",
+    "srpg_qr_weight",
+    "srpg_perceptual_weight",
+    "srpg_functional_weight",
+    "srpg_center_fraction",
+    "srpg_dark_threshold",
+    "srpg_light_threshold",
+    "srpg_robust_blur_weight",
+    "srpg_robust_blur_kernel",
+    "srpg_robust_downscale_weight",
+    "srpg_robust_downscale_factor",
+    "srpg_robust_brightness_weight",
+    "srpg_robust_brightness_low",
+    "srpg_robust_brightness_high",
+    "srpg_robust_contrast_weight",
+    "srpg_robust_contrast_factor",
+    "srpg_target_module_error_rate",
+    "srpg_max_noise_delta_rms",
+    "srpg_eta",
+    "srpg_max_mean_absolute_change",
+    "srpg_min_relative_module_improvement",
+    "srpg_save_step_previews",
+    "srpg_preview_interval",
+    "srpg_seed_offset",
+    "srpg_latent_fusion_enabled",
+    "srpg_latent_fusion_channel",
+    "srpg_latent_fusion_alpha",
+    "srpg_latent_fusion_start",
+    "srpg_latent_fusion_end",
+    "guided_rediffusion_steps",
+    "guided_rediffusion_strength",
+    "guided_rediffusion_controlnet_scale",
+    "guided_rediffusion_guide_center_scale",
+    "guided_rediffusion_guide_confidence_margin",
+    "guided_rediffusion_mask_dilation_px",
+    "guided_rediffusion_mask_feather_px",
+    "guided_rediffusion_max_mean_absolute_change",
+    "guided_rediffusion_min_relative_module_improvement",
+    "guided_rediffusion_seed_offset",
+    "latent_refinement_iterations",
+    "latent_refinement_learning_rate",
+    "latent_refinement_qr_weight",
+    "latent_refinement_preservation_weight",
+    "latent_refinement_functional_weight",
+    "latent_refinement_target_module_error_rate",
+    "latent_refinement_max_latent_delta",
+    "latent_refinement_max_mean_absolute_change",
+    "latent_refinement_min_relative_module_improvement",
+}
+
+
+def laboratory_profiles() -> list[dict[str, Any]]:
+    """Editable starting points; none of them is presented as a production guarantee."""
+
+    return [
+        {
+            "id": "qr_reference",
+            "name": "QR témoin",
+            "backend": "qr",
+            "enabled": True,
+            "generation": {"steps": 1, "guidance_scale": 0, "controlnet_scale": 0, "strength": 1},
+            "model": {},
+            "tools": {"settings": {}},
+            "description": "Contrôle binaire sans diffusion.",
+        },
+        {
+            "id": "controlnet_raw",
+            "name": "ControlNet brut",
+            "backend": "controlnet",
+            "enabled": True,
+            "generation": {
+                "steps": 40,
+                "guidance_scale": 7.5,
+                "controlnet_scale": 1.35,
+                "strength": 1.0,
+            },
+            "model": {},
+            "tools": {"settings": {}},
+            "description": "Première diffusion sans Stage 2.",
+        },
+        {
+            "id": "srpg_paper",
+            "name": "SRPG Prooftag — poids papier",
+            "backend": "controlnet",
+            "enabled": True,
+            "generation": {
+                "steps": 40,
+                "guidance_scale": 7.5,
+                "controlnet_scale": 1.35,
+                "strength": 1.0,
+            },
+            "model": {"controlnet_pipeline_mode": "img2img"},
+            "tools": {
+                "srpg_enabled": True,
+                "settings": {
+                    "srpg_steps": 40,
+                    "srpg_strength": 1.0,
+                    "srpg_controlnet_scale": 1.35,
+                    "srpg_qr_weight": 500.0,
+                    "srpg_perceptual_weight": 3.0,
+                    "srpg_functional_weight": 1.0,
+                    "srpg_dark_threshold": 0.45,
+                    "srpg_light_threshold": 0.65,
+                    "srpg_max_mean_absolute_change": 0.40,
+                    "srpg_min_relative_module_improvement": 0.0,
+                    "srpg_save_step_previews": True,
+                    "srpg_preview_interval": 5,
+                },
+            },
+            "description": "Boucle Prooftag avec SRL + LPIPS du papier, sans fusion FreeQR.",
+        },
+        {
+            "id": "srpg_freeqr",
+            "name": "SRPG + fusion latente",
+            "backend": "controlnet",
+            "enabled": False,
+            "generation": {
+                "steps": 40,
+                "guidance_scale": 7.5,
+                "controlnet_scale": 1.35,
+                "strength": 1.0,
+            },
+            "model": {"controlnet_pipeline_mode": "img2img"},
+            "tools": {
+                "srpg_enabled": True,
+                "settings": {
+                    "srpg_steps": 40,
+                    "srpg_strength": 1.0,
+                    "srpg_controlnet_scale": 1.35,
+                    "srpg_qr_weight": 500.0,
+                    "srpg_perceptual_weight": 3.0,
+                    "srpg_functional_weight": 1.0,
+                    "srpg_dark_threshold": 0.45,
+                    "srpg_light_threshold": 0.65,
+                    "srpg_latent_fusion_enabled": True,
+                    "srpg_latent_fusion_channel": 1,
+                    "srpg_latent_fusion_alpha": 0.15,
+                    "srpg_latent_fusion_start": 0.0,
+                    "srpg_latent_fusion_end": 1.0,
+                    "srpg_max_mean_absolute_change": 0.40,
+                    "srpg_min_relative_module_improvement": 0.0,
+                    "srpg_save_step_previews": True,
+                    "srpg_preview_interval": 5,
+                },
+            },
+            "description": "Ablation FreeQR inspirée d’E014B, désactivée par défaut.",
+        },
+        {
+            "id": "srpg_preservation",
+            "name": "SRPG — préservation",
+            "backend": "controlnet",
+            "enabled": False,
+            "generation": {
+                "steps": 40,
+                "guidance_scale": 7.5,
+                "controlnet_scale": 1.35,
+                "strength": 1.0,
+            },
+            "model": {"controlnet_pipeline_mode": "img2img"},
+            "tools": {
+                "srpg_enabled": True,
+                "settings": {
+                    "srpg_steps": 24,
+                    "srpg_strength": 0.60,
+                    "srpg_controlnet_scale": 1.20,
+                    "srpg_qr_weight": 400.0,
+                    "srpg_perceptual_weight": 6.0,
+                    "srpg_functional_weight": 2.0,
+                    "srpg_max_mean_absolute_change": 0.18,
+                    "srpg_min_relative_module_improvement": 0.0,
+                    "srpg_save_step_previews": True,
+                    "srpg_preview_interval": 4,
+                },
+            },
+            "description": "Hypothèse anti-flou à bruit réduit, à comparer au profil papier.",
+        },
+    ]
+
+
+class LabService:
+    def __init__(
+        self,
+        *,
+        base_settings: Settings,
+        run_repository: RunRepository,
+        lab_repository: LabRepository,
+        artifact_store: ArtifactStore,
+        validator: QRValidator,
+    ):
+        self.base_settings = base_settings
+        self.run_repository = run_repository
+        self.lab_repository = lab_repository
+        self.artifact_store = artifact_store
+        self.validator = validator
+        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="qr-lab")
+        self._cancelled: set[str] = set()
+        self._lock = threading.RLock()
+        self._quality_scorer: CLIPQualityScorer | None = None
+
+    def start(self) -> None:
+        self.lab_repository.mark_running_interrupted()
+
+    def shutdown(self) -> None:
+        self._executor.shutdown(wait=False, cancel_futures=True)
+
+    def create_campaign(self, request: LabCampaignCreate) -> dict:
+        active_methods = [method for method in request.methods if method.enabled]
+        for method in active_methods:
+            self._settings_for_method(method)
+        campaign_id = str(uuid.uuid4())
+        now = datetime.now(UTC)
+        specification = request.model_dump(exclude={"payload"})
+        total = len(request.prompts) * len(request.seeds) * len(active_methods)
+        campaign = self.lab_repository.create_campaign(
+            {
+                "id": campaign_id,
+                "created_at": now,
+                "updated_at": now,
+                "name": request.name,
+                "status": "queued",
+                "payload_hash": hashlib.sha256(request.payload.encode()).hexdigest(),
+                "specification": specification,
+                "total_trials": total,
+                "completed_trials": 0,
+                "accepted_trials": 0,
+                "error": None,
+            }
+        )
+        trial_plan = []
+        for method in active_methods:
+            for prompt in request.prompts:
+                for seed in request.seeds:
+                    trial_id = str(uuid.uuid4())
+                    configuration = {
+                        "prompt": prompt.model_dump(),
+                        "method": method.model_dump(),
+                        "error_correction": request.error_correction,
+                        "max_attempts": request.max_attempts,
+                    }
+                    self.lab_repository.create_trial(
+                        {
+                            "id": trial_id,
+                            "campaign_id": campaign_id,
+                            "created_at": now,
+                            "completed_at": None,
+                            "prompt_id": prompt.id,
+                            "method_id": method.id,
+                            "seed": seed,
+                            "status": "queued",
+                            "generation_run_id": None,
+                            "configuration": configuration,
+                            "error": None,
+                        }
+                    )
+                    trial_plan.append((trial_id, prompt, seed, method))
+        self._executor.submit(self._run_campaign, campaign_id, request, trial_plan)
+        return campaign
+
+    def cancel(self, campaign_id: str) -> dict:
+        campaign = self.lab_repository.get_campaign(campaign_id)
+        if campaign is None:
+            raise KeyError(campaign_id)
+        with self._lock:
+            self._cancelled.add(campaign_id)
+        if campaign["status"] == "queued":
+            return self.lab_repository.update_campaign(campaign_id, status="cancelled")
+        return campaign
+
+    def _is_cancelled(self, campaign_id: str) -> bool:
+        with self._lock:
+            return campaign_id in self._cancelled
+
+    def _run_campaign(
+        self,
+        campaign_id: str,
+        request: LabCampaignCreate,
+        trial_plan: list[tuple],
+    ) -> None:
+        metrics.LAB_ACTIVE_CAMPAIGNS.inc()
+        self.lab_repository.update_campaign(campaign_id, status="running")
+        completed = 0
+        accepted = 0
+        errors = 0
+        current_method_id = None
+        generation_service = None
+        try:
+            for trial_id, prompt, seed, method in trial_plan:
+                if self._is_cancelled(campaign_id):
+                    self.lab_repository.update_trial(
+                        trial_id,
+                        status="cancelled",
+                        completed_at=datetime.now(UTC),
+                    )
+                    continue
+                if method.id != current_method_id:
+                    self._release_generation_service(generation_service)
+                    generation_service = self._generation_service(method)
+                    current_method_id = method.id
+                self.lab_repository.update_trial(trial_id, status="running")
+                started = time.perf_counter()
+                try:
+                    generation_request = self._generation_request(
+                        request,
+                        method,
+                        prompt.text,
+                        prompt.negative_prompt,
+                        seed,
+                    )
+                    run = generation_service.generate(generation_request)
+                    self._score_quality(run, prompt.text)
+                    status = (
+                        run.status
+                        if run.status in {"accepted", "rejected", "error"}
+                        else "error"
+                    )
+                    self.lab_repository.update_trial(
+                        trial_id,
+                        status=status,
+                        generation_run_id=run.id,
+                        completed_at=datetime.now(UTC),
+                        error=run.error,
+                    )
+                    accepted += int(status == "accepted")
+                    errors += int(status == "error")
+                    metrics.LAB_TRIALS.labels(method.id, status).inc()
+                except Exception as exc:
+                    errors += 1
+                    self.lab_repository.update_trial(
+                        trial_id,
+                        status="error",
+                        completed_at=datetime.now(UTC),
+                        error=f"{type(exc).__name__}: {exc}",
+                    )
+                    metrics.LAB_TRIALS.labels(method.id, "error").inc()
+                    logger.exception(
+                        "lab_trial_failed",
+                        extra={"campaign_id": campaign_id, "trial_id": trial_id},
+                    )
+                finally:
+                    completed += 1
+                    metrics.LAB_TRIAL_DURATION.labels(method.id).observe(
+                        time.perf_counter() - started
+                    )
+                    self.lab_repository.update_campaign(
+                        campaign_id,
+                        completed_trials=completed,
+                        accepted_trials=accepted,
+                    )
+            cancelled = self._is_cancelled(campaign_id)
+            status = (
+                "cancelled"
+                if cancelled
+                else ("completed_with_errors" if errors else "completed")
+            )
+            self.lab_repository.update_campaign(campaign_id, status=status)
+            metrics.LAB_CAMPAIGNS.labels(status).inc()
+        except Exception as exc:
+            self.lab_repository.update_campaign(
+                campaign_id,
+                status="completed_with_errors",
+                error=f"{type(exc).__name__}: {exc}",
+            )
+            metrics.LAB_CAMPAIGNS.labels("completed_with_errors").inc()
+            logger.exception("lab_campaign_failed", extra={"campaign_id": campaign_id})
+        finally:
+            self._release_generation_service(generation_service)
+            metrics.LAB_ACTIVE_CAMPAIGNS.dec()
+            with self._lock:
+                self._cancelled.discard(campaign_id)
+
+    def _score_quality(self, run: RunRecord, prompt: str) -> None:
+        if not self.base_settings.lab_clip_scoring_enabled or not run.image_path:
+            return
+        started = time.perf_counter()
+        try:
+            if self._quality_scorer is None:
+                self._quality_scorer = CLIPQualityScorer(
+                    self.base_settings.model_cache_dir,
+                    device="cpu",
+                )
+            image = self.artifact_store.load_image(run.image_path)
+            run.quality_metrics.update(asdict(self._quality_scorer.score(image, prompt)))
+            self.run_repository.save(run)
+            metrics.LAB_QUALITY_SCORES.labels("success").inc()
+        except Exception:
+            metrics.LAB_QUALITY_SCORES.labels("error").inc()
+            logger.exception("lab_quality_scoring_failed", extra={"run_id": run.id})
+        finally:
+            metrics.LAB_QUALITY_SCORE_DURATION.observe(time.perf_counter() - started)
+
+    def _generation_service(self, method: LabMethod) -> GenerationService:
+        method_settings = self._settings_for_method(method)
+        return GenerationService(
+            settings=method_settings,
+            repository=self.run_repository,
+            artifact_store=self.artifact_store,
+            backends=build_backends(method_settings),
+            validator=self.validator,
+        )
+
+    def _settings_for_method(self, method: LabMethod) -> Settings:
+        updates: dict[str, Any] = {
+            "default_backend": method.backend,
+            "save_debug_artifacts": True,
+            "srpg_enabled": method.tools.srpg_enabled,
+            "guided_rediffusion_enabled": method.tools.guided_rediffusion_enabled,
+            "latent_refinement_enabled": method.tools.latent_refinement_enabled,
+        }
+        unknown_model = set(method.model) - MODEL_SETTING_KEYS
+        unknown_tools = set(method.tools.settings) - TOOL_SETTING_KEYS
+        if unknown_model:
+            raise ValueError(f"unsupported model settings: {sorted(unknown_model)}")
+        if unknown_tools:
+            raise ValueError(f"unsupported tool settings: {sorted(unknown_tools)}")
+        updates.update(method.model)
+        updates.update(method.tools.settings)
+        if method.tools.srpg_enabled:
+            updates["controlnet_pipeline_mode"] = "img2img"
+        return Settings.model_validate({**self.base_settings.model_dump(), **updates})
+
+    @staticmethod
+    def _generation_request(
+        campaign: LabCampaignCreate,
+        method: LabMethod,
+        prompt: str,
+        negative_prompt: str,
+        seed: int,
+    ) -> GenerationRequest:
+        unknown = set(method.generation) - GENERATION_KEYS
+        if unknown:
+            raise ValueError(f"unsupported generation settings: {sorted(unknown)}")
+        values = {
+            "payload": campaign.payload,
+            "prompt": prompt,
+            "negative_prompt": negative_prompt,
+            "backend": method.backend,
+            "error_correction": campaign.error_correction,
+            "seed": seed,
+            "max_attempts": campaign.max_attempts,
+            **method.generation,
+        }
+        return GenerationRequest.model_validate(values)
+
+    @staticmethod
+    def _release_generation_service(service: GenerationService | None) -> None:
+        if service is None:
+            return
+        for backend in service.backends.values():
+            if hasattr(backend, "_pipeline"):
+                backend._pipeline = None
+        gc.collect()
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+        except Exception:
+            logger.debug("lab_cuda_cleanup_failed", exc_info=True)
+
+
+def method_schema(settings: Settings | None = None) -> dict[str, Any]:
+    profiles = laboratory_profiles()
+    if settings is not None:
+        resolved_model = {
+            "base_model_id": settings.base_model_id,
+            "controlnet_model_id": settings.controlnet_model_id,
+            "controlnet_model_subfolder": settings.controlnet_model_subfolder,
+            "controlnet_conditioning_profile": settings.controlnet_conditioning_profile,
+            "controlnet_pipeline_mode": settings.controlnet_pipeline_mode,
+        }
+        for profile in profiles:
+            if profile["backend"] == "controlnet":
+                profile["model"] = {**resolved_model, **profile["model"]}
+    return {
+        "generation": sorted(GENERATION_KEYS),
+        "model": sorted(MODEL_SETTING_KEYS),
+        "tools": sorted(TOOL_SETTING_KEYS),
+        "profiles": profiles,
+        "notes": {
+            "srpg_latent_fusion": (
+                "FreeQR-inspired latent-channel fusion implemented in the Prooftag SRPG loop; "
+                "it is an ablation, not the public DiffQRCoder paper method."
+            ),
+            "payload_storage": (
+                "The clear payload is held only in worker memory and is never persisted."
+            ),
+        },
+    }

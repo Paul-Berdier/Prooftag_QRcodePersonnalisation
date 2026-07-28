@@ -171,3 +171,37 @@ LATENT_REFINEMENT_LOSS = Gauge(
     "Latest SRL and preservation objective components",
     ["component"],
 )
+LAB_CAMPAIGNS = Counter(
+    "prooftag_qr_lab_campaigns_total",
+    "Web laboratory campaigns by terminal outcome",
+    ["status"],
+)
+LAB_TRIALS = Counter(
+    "prooftag_qr_lab_trials_total",
+    "Web laboratory trials by method and terminal outcome",
+    ["method", "status"],
+)
+LAB_ACTIVE_CAMPAIGNS = Gauge(
+    "prooftag_qr_lab_campaigns_active",
+    "Web laboratory campaigns currently executing",
+)
+LAB_TRIAL_DURATION = Histogram(
+    "prooftag_qr_lab_trial_duration_seconds",
+    "End-to-end duration of a web laboratory trial",
+    ["method"],
+    buckets=(1, 5, 10, 30, 60, 120, 180, 300, 600),
+)
+LAB_RATINGS = Counter(
+    "prooftag_qr_lab_ratings_total",
+    "Human ratings recorded in the web laboratory",
+)
+LAB_QUALITY_SCORES = Counter(
+    "prooftag_qr_lab_quality_scores_total",
+    "CLIP and aesthetic scoring outcomes in the web laboratory",
+    ["status"],
+)
+LAB_QUALITY_SCORE_DURATION = Histogram(
+    "prooftag_qr_lab_quality_score_duration_seconds",
+    "CPU duration of CLIP and aesthetic scoring in the web laboratory",
+    buckets=(0.1, 0.5, 1, 2, 5, 10, 30, 60, 120, 300),
+)

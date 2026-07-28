@@ -369,6 +369,11 @@ class ControlNetBackend(GenerationBackend):
                         ),
                         save_step_previews=self.settings.srpg_save_step_previews,
                         preview_interval=self.settings.srpg_preview_interval,
+                        latent_fusion_enabled=self.settings.srpg_latent_fusion_enabled,
+                        latent_fusion_channel=self.settings.srpg_latent_fusion_channel,
+                        latent_fusion_alpha=self.settings.srpg_latent_fusion_alpha,
+                        latent_fusion_start=self.settings.srpg_latent_fusion_start,
+                        latent_fusion_end=self.settings.srpg_latent_fusion_end,
                     ),
                 )
                 if srpg.previews:
@@ -441,6 +446,8 @@ class ControlNetBackend(GenerationBackend):
                                 "noise_delta_rms": item.noise_delta_rms,
                                 "gradient_clipped": item.gradient_clipped,
                                 "guidance_applied": item.guidance_applied,
+                                "latent_fusion_applied": item.latent_fusion_applied,
+                                "latent_fusion_delta_rms": item.latent_fusion_delta_rms,
                             }
                             for item in srpg.steps
                         ],

@@ -389,6 +389,75 @@ data:
           ],
           "title": "Gradient et garde-fou SRPG",
           "type": "table"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "short"}},
+          "gridPos": {"h": 6, "w": 4, "x": 0, "y": 98},
+          "id": 41,
+          "targets": [{"expr": "prooftag_qr_lab_campaigns_active", "refId": "A"}],
+          "title": "Campagnes Lab actives",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "short"}},
+          "gridPos": {"h": 6, "w": 4, "x": 4, "y": 98},
+          "id": 42,
+          "targets": [{"expr": "sum(increase(prooftag_qr_lab_ratings_total[$__range]))", "refId": "A"}],
+          "title": "Notes humaines Lab",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "short"}},
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 98},
+          "id": 43,
+          "targets": [{
+            "expr": "sum by (method, status) (increase(prooftag_qr_lab_trials_total[$__range]))",
+            "legendFormat": "{{method}} / {{status}}",
+            "refId": "A"
+          }],
+          "title": "Essais Lab par méthode et résultat",
+          "type": "barchart"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "s"}},
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 98},
+          "id": 44,
+          "targets": [{
+            "expr": "histogram_quantile(0.95, sum by (le, method) (rate(prooftag_qr_lab_trial_duration_seconds_bucket[30m])))",
+            "legendFormat": "P95 {{method}}",
+            "refId": "A"
+          }],
+          "title": "Durée P95 des essais Lab",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "short"}},
+          "gridPos": {"h": 7, "w": 12, "x": 0, "y": 106},
+          "id": 45,
+          "targets": [{
+            "expr": "sum by (status) (increase(prooftag_qr_lab_quality_scores_total[$__range]))",
+            "legendFormat": "{{status}}",
+            "refId": "A"
+          }],
+          "title": "Scoring CLIP / esthétique du Lab",
+          "type": "barchart"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "s"}},
+          "gridPos": {"h": 7, "w": 12, "x": 12, "y": 106},
+          "id": 46,
+          "targets": [{
+            "expr": "histogram_quantile(0.95, sum by (le) (rate(prooftag_qr_lab_quality_score_duration_seconds_bucket[30m])))",
+            "refId": "A"
+          }],
+          "title": "Scoring CLIP / esthétique P95",
+          "type": "stat"
         }
       ],
       "refresh": "30s",

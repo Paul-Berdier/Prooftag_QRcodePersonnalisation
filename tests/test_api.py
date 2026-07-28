@@ -1,4 +1,7 @@
-def test_api_generation_reports_and_physical_validation(tmp_path, monkeypatch):
+import time
+
+
+def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatch):
     monkeypatch.setenv("PROOFTAG_QR_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("PROOFTAG_QR_MODEL_CACHE_DIR", str(tmp_path / "models"))
     monkeypatch.setenv("PROOFTAG_QR_DEFAULT_BACKEND", "qr")
@@ -40,3 +43,73 @@ def test_api_generation_reports_and_physical_validation(tmp_path, monkeypatch):
     assert "cuda_available" in runtime.json()
     assert runtime.json()["generation_config"]["latent_refinement_enabled"] is False
     assert runtime.json()["generation_config"]["guided_rediffusion_enabled"] is False
+
+    assert client.get("/lab").status_code == 200
+    schema = client.get("/v1/lab/schema")
+    assert schema.status_code == 200
+    assert any(item["id"] == "srpg_paper" for item in schema.json()["profiles"])
+    controlnet_profile = next(
+        item for item in schema.json()["profiles"] if item["id"] == "controlnet_raw"
+    )
+    assert controlnet_profile["model"]["base_model_id"]
+    assert controlnet_profile["model"]["controlnet_model_id"]
+
+    campaign_response = client.post(
+        "/v1/lab/campaigns",
+        json={
+            "name": "API lab smoke",
+            "payload": payload,
+            "error_correction": "M",
+            "prompts": [{"id": "smoke", "text": "reference"}],
+            "seeds": [77],
+            "methods": [
+                {
+                    "id": "reference",
+                    "name": "QR reference",
+                    "backend": "qr",
+                    "generation": {
+                        "steps": 1,
+                        "guidance_scale": 0,
+                        "controlnet_scale": 0,
+                        "strength": 1,
+                    },
+                    "tools": {"settings": {}},
+                }
+            ],
+            "max_attempts": 1,
+        },
+    )
+    assert campaign_response.status_code == 200
+    campaign_id = campaign_response.json()["id"]
+    campaign = None
+    for _ in range(100):
+        campaign = client.get(f"/v1/lab/campaigns/{campaign_id}").json()
+        if campaign["status"] not in {"queued", "running"}:
+            break
+        time.sleep(0.02)
+    assert campaign is not None
+    assert campaign["status"] == "completed"
+    assert campaign["accepted_trials"] == 1
+    trial = campaign["trials"][0]
+    assert trial["generation"]["scan_pass_rate"] == 1.0
+
+    rating = client.put(
+        f"/v1/lab/trials/{trial['id']}/rating",
+        json={
+            "aesthetic_score": 4,
+            "prompt_fidelity_score": 5,
+            "qr_discretion_score": 1,
+            "overall_score": 4,
+            "favorite": True,
+            "notes": "smoke",
+        },
+    )
+    assert rating.status_code == 200
+    assert rating.json()["favorite"] is True
+    campaign_csv = client.get(f"/v1/lab/campaigns/{campaign_id}/results.csv")
+    assert campaign_csv.status_code == 200
+    assert "quality_brightness_mean" in campaign_csv.text.splitlines()[0]
+    artifacts = client.get(
+        f"/v1/generations/{trial['generation_run_id']}/artifacts"
+    ).json()
+    assert artifacts[0]["name"] == "final"
