@@ -91,6 +91,10 @@ def response_from_record(run: RunRecord) -> GenerationResponse:
         status=run.status,
         backend=run.backend,
         seed=run.seed,
+        selected_variant=run.selected_variant,
+        selection_mode=run.selection_mode,
+        stage1_reused=run.stage1_reused,
+        stage1_source_run_id=run.stage1_source_run_id,
         attempts=run.attempts,
         image_url=f"/v1/generations/{run.id}/image" if run.image_path else None,
         qr_version=run.qr_version,
@@ -221,6 +225,7 @@ def list_generation_artifacts(run_id: str) -> list[dict[str, str]]:
     artifacts = [{"name": "final", "url": f"/v1/generations/{run_id}/image"}]
     if run.image_path.startswith("s3://"):
         return artifacts
+    final_digest = hashlib.sha256(Path(run.image_path).read_bytes()).digest()
     variant_dir = Path(run.image_path).parent / "variants"
     if variant_dir.is_dir():
         artifacts.extend(
@@ -230,6 +235,7 @@ def list_generation_artifacts(run_id: str) -> list[dict[str, str]]:
             }
             for path in sorted(variant_dir.glob("*.png"))
             if re.fullmatch(r"[a-z0-9_]+", path.stem)
+            and hashlib.sha256(path.read_bytes()).digest() != final_digest
         )
     return artifacts
 
@@ -388,6 +394,10 @@ def export_lab_campaign(campaign_id: str) -> StreamingResponse:
         "seed",
         "status",
         "generation_run_id",
+        "selected_variant",
+        "selection_mode",
+        "stage1_reused",
+        "stage1_source_run_id",
         "scan_pass_rate",
         "exact_payload_match",
         "module_error_rate",
@@ -412,6 +422,10 @@ def export_lab_campaign(campaign_id: str) -> StreamingResponse:
             "seed": trial["seed"],
             "status": trial["status"],
             "generation_run_id": trial["generation_run_id"],
+            "selected_variant": run.selected_variant if run else None,
+            "selection_mode": run.selection_mode if run else None,
+            "stage1_reused": run.stage1_reused if run else None,
+            "stage1_source_run_id": run.stage1_source_run_id if run else None,
             "scan_pass_rate": run.scan_pass_rate if run else None,
             "exact_payload_match": run.exact_payload_match if run else None,
             "module_error_rate": run.module_error_rate if run else None,

@@ -27,6 +27,16 @@ flowchart LR
 Chaque combinaison `méthode × prompt × seed` devient un essai indépendant. Les essais sont
 exécutés un par un : deux pipelines lourds ne se retrouvent donc pas simultanément en VRAM.
 
+Depuis la correction « candidat forcé », le laboratoire sépare strictement deux usages :
+
+- **recherche** : la sortie demandée (`raw`, `srpg`, `guided` ou `latent`) est évaluée telle
+  quelle, même si elle échoue à la lecture ;
+- **livraison** : la sélection automatique et les réparations déterministes restent disponibles
+  avec la sortie `auto`, mais ne sont pas utilisées par les profils comparatifs fournis.
+
+Une réparation QR binaire ne peut donc plus remplacer silencieusement le candidat artistique
+d'une méthode de recherche.
+
 ## Ouvrir le laboratoire depuis le PC Windows
 
 Une fois l'API déployée sur le serveur :
@@ -92,6 +102,17 @@ démarrage de l'API.
 | `srpg_freeqr` | désactivé | même boucle avec fusion latente FreeQR inspirée, canal et fenêtre configurables |
 | `srpg_preservation` | désactivé | hypothèse anti-flou à bruit et amplitude de changement réduits |
 
+Les profils fournis sélectionnent explicitement leur sortie :
+
+- `qr_reference` et `controlnet_raw` évaluent `raw` ;
+- les trois profils SRPG évaluent le candidat `srpg` lui-même ;
+- `auto` est réservé à une simulation de la chaîne de livraison avec réparation éventuelle.
+
+Quand deux méthodes ont exactement le même modèle, prompt, seed, géométrie et paramètres de
+Stage 1, l'image brute est générée une seule fois puis conservée en RAM CPU. Les méthodes
+suivantes reçoivent cette même image comme entrée. La fiche d'un essai affiche
+`Stage 1 réutilisé — aucune régénération` et conserve l'identifiant du run source.
+
 Point de vocabulaire essentiel : `srpg_paper` reprend les poids de loss publiés et utilise la
 boucle SRPG intégrée à la pipeline de production Prooftag. Ce n'est pas l'exécutable upstream
 DiffQRCoder chargé depuis le checkpoint Cetus. Les résultats ne doivent donc pas être présentés
@@ -138,12 +159,24 @@ La page d'une campagne affiche :
 - notes humaines sur 10 et favoris ;
 - scans réels écran, papier ou étiquette.
 
+La première image d'une fiche est toujours `RÉSULTAT ÉVALUÉ` et indique la variante exacte.
+`STAGE 1 PARTAGÉ` apparaît ensuite uniquement lorsqu'il est visuellement différent. Les fichiers
+strictement identiques au résultat final sont dédupliqués dans la galerie.
+
+Le QR témoin est affiché comme contrôle de décodeurs, mais il est exclu des graphiques de
+classement artistique et du scoring CLIP. Son SSR parfait ne constitue jamais une victoire sur
+une méthode générative.
+
 Le rayon d'un point du graphique structure/lecture augmente lorsqu'une note globale est
 disponible. Un résultat situé en haut à gauche a un SSR élevé et une erreur modules faible.
 
 L'export CSV d'une campagne contient une ligne par essai avec configuration, métriques
 automatiques — y compris toutes les colonnes `quality_*` — et notation humaine. Il constitue
 l'entrée recommandée pour l'analyse statistique et le futur sélecteur de paramètres.
+
+Les colonnes `selected_variant`, `selection_mode`, `stage1_reused` et
+`stage1_source_run_id` empêchent de confondre un candidat de diffusion avec une réparation de
+livraison ou une régénération indépendante.
 
 Le scoring CLIP est activé par `PROOFTAG_QR_LAB_CLIP_SCORING_ENABLED=true` dans Kubernetes.
 Le modèle tourne sur CPU pour laisser les 20 Gio de VRAM à la diffusion. Son premier chargement
@@ -229,12 +262,14 @@ modèles et GPU déjà documentées dans `docs/metrics.md`.
 Pour éviter de recommencer une campagne inutilisable :
 
 1. lancer un smoke test avec `qr_reference`, un prompt et une seed ;
-2. lancer ensuite trois méthodes, quatre prompts et deux seeds ;
-3. vérifier les erreurs et la VRAM avant d'élargir ;
-4. noter les images et réaliser quelques scans physiques ;
-5. dupliquer uniquement les profils prometteurs ;
-6. ne faire varier qu'une famille de paramètres par campagne causale ;
-7. exporter le CSV et inscrire la décision dans `docs/experiment-log.md`.
+2. comparer `controlnet_raw` et `srpg_paper` en conservant « Réutiliser le même Stage 1 » ;
+3. vérifier que la sortie évaluée vaut respectivement `raw` et `srpg` ;
+4. lancer ensuite trois méthodes, quatre prompts et deux seeds ;
+5. vérifier les erreurs et la VRAM avant d'élargir ;
+6. noter les images et réaliser quelques scans physiques ;
+7. dupliquer uniquement les profils prometteurs ;
+8. ne faire varier qu'une famille de paramètres par campagne causale ;
+9. exporter le CSV et inscrire la décision dans `docs/experiment-log.md`.
 
 Une campagne « large » ne remplace pas une campagne bien appariée. Les mêmes latents, prompts,
 seeds, payloads et scénarios sont nécessaires pour attribuer correctement une amélioration à

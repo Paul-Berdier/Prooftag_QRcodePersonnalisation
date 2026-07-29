@@ -7,6 +7,8 @@ import time
 import uuid
 from datetime import UTC, datetime
 
+from PIL import Image
+
 from . import metrics
 from .artifacts import ArtifactStore
 from .backends import GLOBAL_REPAIR_VARIANTS, GenerationBackend
@@ -36,12 +38,32 @@ class GenerationService:
         self.backends = backends
         self.validator = validator
         self._generation_lock = threading.Lock()
+        self._last_raw_candidate: Image.Image | None = None
 
-    def generate(self, request: GenerationRequest) -> RunRecord:
+    @property
+    def last_raw_candidate(self) -> Image.Image | None:
+        return self._last_raw_candidate.copy() if self._last_raw_candidate is not None else None
+
+    @staticmethod
+    def _matches_target_variant(variant_name: str, target_variant: str) -> bool:
+        if target_variant == "latent":
+            return variant_name.endswith("latent_srl")
+        return variant_name == target_variant
+
+    def generate(
+        self,
+        request: GenerationRequest,
+        *,
+        raw_candidate_override: Image.Image | None = None,
+        target_variant: str | None = None,
+        stage1_source_run_id: str | None = None,
+    ) -> RunRecord:
         started = time.perf_counter()
         backend_name = request.backend or self.settings.default_backend
         best_variant = "raw"
         best_attempt = 1
+        best_raw_candidate: Image.Image | None = None
+        self._last_raw_candidate = None
         run = RunRecord(
             id=str(uuid.uuid4()),
             created_at=datetime.now(UTC),
@@ -51,6 +73,9 @@ class GenerationService:
             prompt=request.prompt,
             payload_hash=hashlib.sha256(request.payload.encode()).hexdigest(),
             seed=request.seed,
+            selection_mode="forced" if target_variant else "delivery",
+            stage1_reused=raw_candidate_override is not None,
+            stage1_source_run_id=stage1_source_run_id,
         )
         self.repository.save(run)
         metrics.ACTIVE_RUNS.inc()
@@ -72,7 +97,12 @@ class GenerationService:
                 for attempt in range(max_attempts):
                     run.attempts = attempt + 1
                     generation_started = time.perf_counter()
-                    raw_candidate = backend.generate(request, blueprint, request.seed + attempt)
+                    reuse_override = raw_candidate_override is not None and attempt == 0
+                    raw_candidate = (
+                        raw_candidate_override.copy()
+                        if reuse_override
+                        else backend.generate(request, blueprint, request.seed + attempt)
+                    )
                     attempt_generation_ms = (time.perf_counter() - generation_started) * 1000
                     generation_ms += attempt_generation_ms
                     metrics.DURATION.labels(backend_name, "generation").observe(
@@ -89,20 +119,46 @@ class GenerationService:
                     attempt_best_accepted = False
                     attempt_validation_ms = 0.0
                     attempt_accepted = False
+                    target_found = target_variant is None
                     allow_global_repair = (
                         backend_name != "controlnet"
                         or not self.settings.regenerate_before_global_repair
                         or attempt + 1 == max_attempts
                     )
 
-                    for variant_name, candidate in backend.variants(
-                        raw_candidate,
-                        blueprint,
-                        request=request,
-                        seed=request.seed + attempt,
-                        run_id=run.id,
-                        attempt=attempt + 1,
-                    ):
+                    if self.settings.save_debug_artifacts:
+                        self.artifact_store.save_variant(run.id, "stage1_raw", raw_candidate)
+
+                    variant_iterator = iter(
+                        backend.variants(
+                            raw_candidate,
+                            blueprint,
+                            request=request,
+                            seed=request.seed + attempt,
+                            run_id=run.id,
+                            attempt=attempt + 1,
+                            research_mode=target_variant is not None,
+                        )
+                    )
+                    while True:
+                        variant_generation_started = time.perf_counter()
+                        try:
+                            variant_name, candidate = next(variant_iterator)
+                        except StopIteration:
+                            break
+                        variant_generation_ms = (
+                            time.perf_counter() - variant_generation_started
+                        ) * 1000
+                        generation_ms += variant_generation_ms
+                        attempt_generation_ms += variant_generation_ms
+                        metrics.DURATION.labels(backend_name, "variant_generation").observe(
+                            variant_generation_ms / 1000
+                        )
+                        if target_variant and not self._matches_target_variant(
+                            variant_name, target_variant
+                        ):
+                            continue
+                        target_found = True
                         if variant_name in GLOBAL_REPAIR_VARIANTS and not allow_global_repair:
                             continue
                         validation_started = time.perf_counter()
@@ -262,6 +318,13 @@ class GenerationService:
                             attempt_best_accepted = accepted
                         if accepted:
                             attempt_accepted = True
+                        if target_variant:
+                            break
+
+                    if not target_found:
+                        raise RuntimeError(
+                            f"Requested laboratory variant '{target_variant}' was not produced"
+                        )
 
                     if self.settings.save_debug_artifacts:
                         for artifact_name, artifact_image in backend.debug_artifacts().items():
@@ -290,6 +353,7 @@ class GenerationService:
                         best_changed_pixel_ratio = attempt_best_changed_pixel_ratio
                         best_variant = attempt_best_variant
                         best_attempt = attempt + 1
+                        best_raw_candidate = raw_candidate.copy()
                     run.attempt_details.append(
                         AttemptRecord(
                             attempt=attempt + 1,
@@ -330,6 +394,7 @@ class GenerationService:
             )
             run.module_error_rate = module_error_rate(best, blueprint)
             run.quality_metrics = image_quality_metrics(best)
+            run.selected_variant = best_variant
             if backend_name == "controlnet":
                 metrics.REPAIR_SELECTED.labels(best_variant).inc()
             run.image_path = self.artifact_store.save_image(run.id, best)
@@ -350,6 +415,9 @@ class GenerationService:
             run.error = f"{type(exc).__name__}: {exc}"
             logger.exception("generation_failed", extra={"run_id": run.id, "backend": backend_name})
         finally:
+            self._last_raw_candidate = (
+                best_raw_candidate.copy() if best_raw_candidate is not None else None
+            )
             run.completed_at = datetime.now(UTC)
             run.total_ms = (time.perf_counter() - started) * 1000
             self.repository.save(run)

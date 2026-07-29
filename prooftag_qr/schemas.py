@@ -43,6 +43,10 @@ class GenerationResponse(BaseModel):
     status: Literal["running", "accepted", "rejected", "error"]
     backend: str
     seed: int
+    selected_variant: str | None = None
+    selection_mode: Literal["delivery", "forced"] = "delivery"
+    stage1_reused: bool = False
+    stage1_source_run_id: str | None = None
     attempts: int
     image_url: str | None = None
     qr_version: int | None = None
@@ -127,6 +131,8 @@ class LabMethod(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     backend: Literal["qr", "controlnet"] = "controlnet"
     enabled: bool = True
+    output_variant: Literal["auto", "raw", "srpg", "guided", "latent"] = "auto"
+    reuse_stage1: bool = True
     generation: dict[str, Any] = Field(default_factory=dict)
     model: dict[str, Any] = Field(default_factory=dict)
     tools: LabToolConfig = Field(default_factory=LabToolConfig)

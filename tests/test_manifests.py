@@ -28,7 +28,7 @@ def test_kubernetes_manifests_and_dashboard_are_valid():
     )
     dashboard = json.loads(dashboard_config["data"]["prooftag-qr.json"])
     assert dashboard["uid"] == "prooftag-qr"
-    assert len(dashboard["panels"]) == 40
+    assert len(dashboard["panels"]) == 46
     assert "prooftag_qr_srpg_step_diagnostic" in dashboard_config["data"][
         "prooftag-qr.json"
     ]

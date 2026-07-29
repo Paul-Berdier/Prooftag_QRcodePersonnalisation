@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Prooftag QR Lab</title>
-  <link rel="stylesheet" href="/lab-assets/styles.css?v=20260728-web-lab-3">
+  <link rel="stylesheet" href="/lab-assets/styles.css?v=20260728-web-lab-4">
 </head>
 <body>
   <header class="topbar">
@@ -72,6 +72,11 @@ station | A grand retro-futurist railway station filled with travelers, clocks, 
         </div>
         <button id="add-method" class="button secondary">+ Méthode vide</button>
       </div>
+      <p class="section-note">
+        La sortie évaluée est forcée en mode laboratoire : aucune réparation QR ne peut
+        remplacer silencieusement le candidat artistique. Le même Stage 1 est réutilisé
+        lorsque les paramètres de génération sont identiques.
+      </p>
       <div id="methods" class="method-list" aria-live="polite"></div>
 
       <div class="launch-bar">
@@ -120,12 +125,12 @@ station | A grand retro-futurist railway station filled with travelers, clocks, 
             <div class="charts-grid" aria-label="Graphiques comparatifs">
               <section class="chart-panel">
                 <h3>Scannabilité par méthode</h3>
-                <p class="muted">SSR robuste moyen et part de sorties strictement acceptées.</p>
+                <p class="muted">Sorties artistiques seulement ; le QR témoin est hors classement.</p>
                 <svg id="method-chart" role="img" aria-label="Comparaison de la scannabilité par méthode"></svg>
               </section>
               <section class="chart-panel">
                 <h3>Compromis structure / lecture</h3>
-                <p class="muted">Chaque point est un essai ; en haut à gauche se trouvent les meilleurs compromis.</p>
+                <p class="muted">Candidats artistiques réels ; aucun QR réparé ou témoin n'est classé.</p>
                 <svg id="tradeoff-chart" role="img" aria-label="Erreur de modules comparée au taux de lecture"></svg>
               </section>
             </div>
@@ -211,12 +216,20 @@ station | A grand retro-futurist railway station filled with travelers, clocks, 
         <label>Nom<input class="method-name"></label>
         <label>ID<input class="method-id"></label>
         <label>Backend<select class="method-backend"><option value="controlnet">ControlNet</option><option value="qr">QR témoin</option></select></label>
+        <label>Sortie évaluée<select class="method-output">
+          <option value="auto">Auto — livraison</option>
+          <option value="raw">Stage 1 brut</option>
+          <option value="srpg">Stage 2 SRPG réel</option>
+          <option value="guided">Rediffusion réelle</option>
+          <option value="latent">Raffinement latent réel</option>
+        </select></label>
         <label>Steps<input class="gen-steps" type="number" min="1" max="100"></label>
         <label>CFG<input class="gen-cfg" type="number" min="0" max="30" step="0.1"></label>
         <label>ControlNet<input class="gen-control" type="number" min="0" max="3" step="0.05"></label>
         <label>Strength<input class="gen-strength" type="number" min="0.05" max="1" step="0.05"></label>
       </div>
       <div class="tool-switches">
+        <label><input class="reuse-stage1" type="checkbox"> Réutiliser le même Stage 1</label>
         <label><input class="tool-srpg" type="checkbox"> Stage 2 SRPG</label>
         <label><input class="tool-guided" type="checkbox"> Rediffusion locale</label>
         <label><input class="tool-latent" type="checkbox"> Raffinement latent</label>
@@ -231,6 +244,6 @@ station | A grand retro-futurist railway station filled with travelers, clocks, 
     </article>
   </template>
 
-  <script src="/lab-assets/app.js?v=20260728-web-lab-3" defer></script>
+  <script src="/lab-assets/app.js?v=20260728-web-lab-4" defer></script>
 </body>
 </html>

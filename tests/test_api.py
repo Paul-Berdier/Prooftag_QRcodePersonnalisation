@@ -51,8 +51,14 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     controlnet_profile = next(
         item for item in schema.json()["profiles"] if item["id"] == "controlnet_raw"
     )
+    srpg_profile = next(
+        item for item in schema.json()["profiles"] if item["id"] == "srpg_paper"
+    )
     assert controlnet_profile["model"]["base_model_id"]
     assert controlnet_profile["model"]["controlnet_model_id"]
+    assert controlnet_profile["output_variant"] == "raw"
+    assert srpg_profile["output_variant"] == "srpg"
+    assert srpg_profile["reuse_stage1"] is True
 
     campaign_response = client.post(
         "/v1/lab/campaigns",
@@ -113,3 +119,4 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
         f"/v1/generations/{trial['generation_run_id']}/artifacts"
     ).json()
     assert artifacts[0]["name"] == "final"
+    assert len(artifacts) == 1

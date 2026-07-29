@@ -69,6 +69,7 @@ class GenerationBackend(ABC):
         seed: int | None = None,
         run_id: str | None = None,
         attempt: int | None = None,
+        research_mode: bool = False,
     ) -> Iterable[tuple[str, Image.Image]]:
         yield "raw", candidate
 
@@ -318,6 +319,7 @@ class ControlNetBackend(GenerationBackend):
         seed: int | None = None,
         run_id: str | None = None,
         attempt: int | None = None,
+        research_mode: bool = False,
     ) -> Iterable[tuple[str, Image.Image]]:
         self._debug_artifacts.clear()
         yield "raw", candidate
@@ -558,6 +560,9 @@ class ControlNetBackend(GenerationBackend):
                 if guided.accepted:
                     enhanced_candidate = guided.image
                     enhanced_prefix = "guided_"
+                # A forced laboratory run must observe the rejected candidate itself.
+                # Delivery mode keeps its historical raw fallback.
+                if guided.accepted or research_mode:
                     yield "guided", guided.image
             except Exception:
                 duration = time.perf_counter() - started
@@ -661,10 +666,14 @@ class ControlNetBackend(GenerationBackend):
                         "rejection_reason": result.rejection_reason,
                     },
                 )
+                latent_variant = f"{enhanced_prefix}latent_srl"
                 if result.accepted:
                     enhanced_candidate = result.image
                     enhanced_prefix = f"{enhanced_prefix}latent_"
-                    yield f"{enhanced_prefix}srl", result.image
+                # As with guided rediffusion, rejected candidates are exposed only to
+                # forced research runs and never alter production fallback semantics.
+                if result.accepted or research_mode:
+                    yield latent_variant, result.image
             except Exception:
                 duration = time.perf_counter() - started
                 metrics.LATENT_REFINEMENTS.labels("error").inc()

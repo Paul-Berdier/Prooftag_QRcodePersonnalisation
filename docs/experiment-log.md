@@ -1023,3 +1023,18 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   schéma laboratoire, repository et SRPG ciblés passent ; les deux tests GPU indisponibles
   localement restent explicitement ignorés.
 - **Documentation Web Lab :** [`docs/web-lab.md`](web-lab.md).
+- **Incident Web Lab 02 — faux gagnant réparé :** le laboratoire réutilisait le sélecteur de
+  livraison. Dès que le Stage 1 ou une projection de centres passait la porte stricte, la sortie
+  la moins modifiée pouvait remplacer le candidat SRPG dans `final.png`. Les métriques parfaites
+  décrivaient alors le QR réparé et non la méthode artistique annoncée.
+- **Correction Web Lab 02 :** chaque méthode déclare désormais une `output_variant`. Les profils
+  de recherche forcent `raw` ou `srpg`, arrêtent l'itération avant les réparations déterministes,
+  valident le candidat réel même lorsqu'il est rejeté et persistent la variante effectivement
+  sélectionnée.
+- **Appariement Web Lab 02 :** le Stage 1 est mis en cache par modèle, conditionnement,
+  paramètres, prompt, seed et correction d'erreur. Une méthode compatible réutilise exactement
+  le même raster CPU au lieu de relancer la diffusion. L'export indique la réutilisation et le
+  run source.
+- **Affichage Web Lab 02 :** la galerie nomme explicitement le résultat évalué, montre le Stage 1
+  partagé lorsqu'il diffère et masque les doublons binaires identiques. Les anciennes campagnes
+  restent consultables mais ne deviennent pas rétroactivement des comparaisons causales.

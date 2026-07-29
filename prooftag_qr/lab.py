@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import gc
 import hashlib
+import json
 import logging
 import threading
 import time
@@ -101,6 +102,8 @@ def laboratory_profiles() -> list[dict[str, Any]]:
             "name": "QR témoin",
             "backend": "qr",
             "enabled": True,
+            "output_variant": "raw",
+            "reuse_stage1": False,
             "generation": {"steps": 1, "guidance_scale": 0, "controlnet_scale": 0, "strength": 1},
             "model": {},
             "tools": {"settings": {}},
@@ -111,6 +114,8 @@ def laboratory_profiles() -> list[dict[str, Any]]:
             "name": "ControlNet brut",
             "backend": "controlnet",
             "enabled": True,
+            "output_variant": "raw",
+            "reuse_stage1": True,
             "generation": {
                 "steps": 40,
                 "guidance_scale": 7.5,
@@ -126,6 +131,8 @@ def laboratory_profiles() -> list[dict[str, Any]]:
             "name": "SRPG Prooftag — poids papier",
             "backend": "controlnet",
             "enabled": True,
+            "output_variant": "srpg",
+            "reuse_stage1": True,
             "generation": {
                 "steps": 40,
                 "guidance_scale": 7.5,
@@ -157,6 +164,8 @@ def laboratory_profiles() -> list[dict[str, Any]]:
             "name": "SRPG + fusion latente",
             "backend": "controlnet",
             "enabled": False,
+            "output_variant": "srpg",
+            "reuse_stage1": True,
             "generation": {
                 "steps": 40,
                 "guidance_scale": 7.5,
@@ -193,6 +202,8 @@ def laboratory_profiles() -> list[dict[str, Any]]:
             "name": "SRPG — préservation",
             "backend": "controlnet",
             "enabled": False,
+            "output_variant": "srpg",
+            "reuse_stage1": True,
             "generation": {
                 "steps": 40,
                 "guidance_scale": 7.5,
@@ -250,6 +261,7 @@ class LabService:
         active_methods = [method for method in request.methods if method.enabled]
         for method in active_methods:
             self._settings_for_method(method)
+            self._target_variant_for_method(method)
         campaign_id = str(uuid.uuid4())
         now = datetime.now(UTC)
         specification = request.model_dump(exclude={"payload"})
@@ -326,6 +338,7 @@ class LabService:
         errors = 0
         current_method_id = None
         generation_service = None
+        shared_stage1: dict[str, tuple[Any, str]] = {}
         try:
             for trial_id, prompt, seed, method in trial_plan:
                 if self._is_cancelled(campaign_id):
@@ -349,7 +362,30 @@ class LabService:
                         prompt.negative_prompt,
                         seed,
                     )
-                    run = generation_service.generate(generation_request)
+                    stage1_key = None
+                    stage1_override = None
+                    stage1_source_run_id = None
+                    if method.backend == "controlnet" and method.reuse_stage1:
+                        stage1_key = self._stage1_cache_key(
+                            method,
+                            prompt.text,
+                            prompt.negative_prompt,
+                            seed,
+                            request.error_correction,
+                        )
+                        cached = shared_stage1.get(stage1_key)
+                        if cached is not None:
+                            stage1_override, stage1_source_run_id = cached
+                    run = generation_service.generate(
+                        generation_request,
+                        raw_candidate_override=stage1_override,
+                        target_variant=self._target_variant_for_method(method),
+                        stage1_source_run_id=stage1_source_run_id,
+                    )
+                    if stage1_key is not None and stage1_key not in shared_stage1:
+                        raw_candidate = generation_service.last_raw_candidate
+                        if raw_candidate is not None:
+                            shared_stage1[stage1_key] = (raw_candidate, run.id)
                     self._score_quality(run, prompt.text)
                     status = (
                         run.status
@@ -407,12 +443,17 @@ class LabService:
             logger.exception("lab_campaign_failed", extra={"campaign_id": campaign_id})
         finally:
             self._release_generation_service(generation_service)
+            shared_stage1.clear()
             metrics.LAB_ACTIVE_CAMPAIGNS.dec()
             with self._lock:
                 self._cancelled.discard(campaign_id)
 
     def _score_quality(self, run: RunRecord, prompt: str) -> None:
-        if not self.base_settings.lab_clip_scoring_enabled or not run.image_path:
+        if (
+            run.backend == "qr"
+            or not self.base_settings.lab_clip_scoring_enabled
+            or not run.image_path
+        ):
             return
         started = time.perf_counter()
         try:
@@ -460,6 +501,49 @@ class LabService:
         if method.tools.srpg_enabled:
             updates["controlnet_pipeline_mode"] = "img2img"
         return Settings.model_validate({**self.base_settings.model_dump(), **updates})
+
+    @staticmethod
+    def _target_variant_for_method(method: LabMethod) -> str | None:
+        target = method.output_variant
+        if target == "auto":
+            return None
+        if target == "srpg" and not method.tools.srpg_enabled:
+            raise ValueError("output_variant 'srpg' requires Stage 2 SRPG")
+        if target == "guided" and not method.tools.guided_rediffusion_enabled:
+            raise ValueError("output_variant 'guided' requires guided rediffusion")
+        if target == "latent" and not method.tools.latent_refinement_enabled:
+            raise ValueError("output_variant 'latent' requires latent refinement")
+        if method.backend == "qr" and target != "raw":
+            raise ValueError("the QR reference backend can only expose the raw variant")
+        return target
+
+    def _stage1_cache_key(
+        self,
+        method: LabMethod,
+        prompt: str,
+        negative_prompt: str,
+        seed: int,
+        error_correction: str,
+    ) -> str:
+        settings = self._settings_for_method(method)
+        stage1_specification = {
+            "prompt": prompt,
+            "negative_prompt": negative_prompt,
+            "seed": seed,
+            "error_correction": error_correction,
+            "generation": method.generation,
+            "base_model_id": settings.base_model_id,
+            "controlnet_model_id": settings.controlnet_model_id,
+            "controlnet_model_subfolder": settings.controlnet_model_subfolder,
+            "controlnet_conditioning_profile": settings.controlnet_conditioning_profile,
+            "controlnet_pipeline_mode": settings.controlnet_pipeline_mode,
+        }
+        encoded = json.dumps(
+            stage1_specification,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+        return hashlib.sha256(encoded).hexdigest()
 
     @staticmethod
     def _generation_request(

@@ -53,6 +53,8 @@ function renderMethods() {
     $(".method-name", node).value = method.name;
     $(".method-id", node).value = method.id;
     $(".method-backend", node).value = method.backend;
+    $(".method-output", node).value = method.output_variant || "auto";
+    $(".reuse-stage1", node).checked = method.reuse_stage1 !== false;
     $(".gen-steps", node).value = method.generation?.steps ?? 40;
     $(".gen-cfg", node).value = method.generation?.guidance_scale ?? 7.5;
     $(".gen-control", node).value = method.generation?.controlnet_scale ?? 1.35;
@@ -69,6 +71,8 @@ function renderMethods() {
       item.name = $(".method-name", node).value.trim();
       item.id = $(".method-id", node).value.trim();
       item.backend = $(".method-backend", node).value;
+      item.output_variant = $(".method-output", node).value;
+      item.reuse_stage1 = $(".reuse-stage1", node).checked;
       item.generation = {
         steps: Number($(".gen-steps", node).value),
         guidance_scale: Number($(".gen-cfg", node).value),
@@ -160,6 +164,8 @@ async function launchCampaign() {
       name: method.name,
       backend: method.backend,
       enabled: true,
+      output_variant: method.output_variant || "auto",
+      reuse_stage1: method.reuse_stage1 !== false,
       generation: method.generation,
       model: method.model || {},
       tools: {
@@ -241,6 +247,9 @@ function mean(values) {
 function formatPercent(value) { return value == null ? "—" : `${(100 * value).toFixed(1)}%`; }
 function formatTime(ms) { return ms == null ? "—" : `${(ms / 1000).toFixed(1)} s`; }
 function formatScore(value) { return value == null ? "—" : Number(value).toFixed(2); }
+function isTechnicalControl(trial) {
+  return trial.configuration?.method?.backend === "qr";
+}
 
 function renderCampaign() {
   const campaign = state.selectedCampaign;
@@ -270,8 +279,10 @@ function renderMethodSummary(trials) {
     const time = mean(finished.map((row) => row.generation?.total_ms));
     const card = document.createElement("article");
     card.className = "summary-card";
+    const technicalControl = rows.every(isTechnicalControl);
     card.innerHTML = `
       <strong></strong>
+      ${technicalControl ? '<div class="muted">TÉMOIN TECHNIQUE — HORS CLASSEMENT</div>' : ""}
       <div class="summary-line"><span>Stricts</span><b>${accepted}/${rows.length}</b></div>
       <div class="summary-line"><span>SSR moyen</span><b>${formatPercent(scan)}</b></div>
       <div class="summary-line"><span>Temps moyen</span><b>${formatTime(time)}</b></div>
@@ -301,7 +312,7 @@ function emptyChart(svg, message) {
 
 function renderMethodChart(trials) {
   const svg = $("#method-chart");
-  const complete = trials.filter((trial) => trial.generation);
+  const complete = trials.filter((trial) => trial.generation && !isTechnicalControl(trial));
   if (!complete.length) {
     emptyChart(svg, "Les points apparaîtront après les premières validations.");
     return;
@@ -365,7 +376,9 @@ function renderMethodChart(trials) {
 function renderTradeoffChart(trials) {
   const svg = $("#tradeoff-chart");
   const complete = trials.filter((trial) =>
-    trial.generation?.scan_pass_rate != null && trial.generation?.module_error_rate != null
+    !isTechnicalControl(trial)
+      && trial.generation?.scan_pass_rate != null
+      && trial.generation?.module_error_rate != null
   );
   if (!complete.length) {
     emptyChart(svg, "Les points apparaîtront après les premières validations.");
@@ -461,7 +474,7 @@ function renderTrials() {
       <div class="trial-image">${image}</div>
       <div class="trial-body">
         <div class="trial-title"><strong></strong><span class="status ${trial.status}">${statusLabel(trial.status)}</span></div>
-        <div class="muted">${trial.prompt_id} · seed ${trial.seed}${trial.rating?.favorite ? " · ★" : ""}</div>
+        <div class="muted">${trial.prompt_id} · seed ${trial.seed} · sortie ${trial.generation?.selected_variant || "—"}${trial.rating?.favorite ? " · ★" : ""}</div>
         <div class="trial-metrics">
           <span>SSR<b>${formatPercent(trial.generation?.scan_pass_rate)}</b></span>
           <span>MER<b>${formatPercent(trial.generation?.module_error_rate)}</b></span>
@@ -487,6 +500,9 @@ async function openTrial(id) {
   $("#dialog-title").textContent = `${trial.prompt_id} / ${trial.method_id}`;
   const run = trial.generation;
   const metrics = [
+    ["Sortie réellement notée", run?.selected_variant || "—"],
+    ["Sélection", run?.selection_mode === "forced" ? "Candidat forcé" : "Livraison automatique"],
+    ["Stage 1", run?.stage1_reused ? "Réutilisé — aucune régénération" : "Généré pour cet essai"],
     ["SSR robuste", formatPercent(run?.scan_pass_rate)],
     ["Payload original", run?.exact_payload_match == null ? "—" : run.exact_payload_match ? "Exact" : "Échec"],
     ["MER", formatPercent(run?.module_error_rate)],
@@ -510,7 +526,11 @@ async function openTrial(id) {
       figure.className = "artifact";
       figure.innerHTML = `<img loading="lazy" src="${artifact.url}" alt=""><figcaption></figcaption>`;
       $("img", figure).alt = artifact.name;
-      $("figcaption", figure).textContent = artifact.name;
+      $("figcaption", figure).textContent = artifact.name === "final"
+        ? `RÉSULTAT ÉVALUÉ — ${run.selected_variant || "inconnu"}`
+        : artifact.name === "stage1_raw"
+          ? "STAGE 1 PARTAGÉ — référence artistique"
+          : artifact.name;
       gallery.append(figure);
     });
   }
@@ -580,6 +600,7 @@ async function init() {
     state.methods.push({
       id: `method_${Date.now().toString().slice(-6)}`, name: "Nouvelle méthode",
       backend: "controlnet", enabled: true,
+      output_variant: "raw", reuse_stage1: true,
       generation: { steps: 40, guidance_scale: 7.5, controlnet_scale: 1.35, strength: 1 },
       model: {}, tools: { settings: {} }, description: "Configuration personnalisée.",
     });

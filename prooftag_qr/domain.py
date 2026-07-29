@@ -34,6 +34,10 @@ class RunRecord:
     prompt: str
     payload_hash: str
     seed: int
+    selected_variant: str | None = None
+    selection_mode: str = "delivery"
+    stage1_reused: bool = False
+    stage1_source_run_id: str | None = None
     attempts: int = 0
     image_path: str | None = None
     qr_version: int | None = None

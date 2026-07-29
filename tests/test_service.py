@@ -51,6 +51,20 @@ class TwoAcceptedVariantsBackend(GenerationBackend):
         ]
 
 
+class ForcedResearchBackend(GenerationBackend):
+    def __init__(self):
+        self.generate_calls = 0
+
+    def generate(self, request, blueprint, seed):
+        self.generate_calls += 1
+        return Image.new("RGB", blueprint.image.size, "black")
+
+    def variants(self, candidate, blueprint, **kwargs):
+        yield "raw", candidate
+        yield "srpg", Image.new("RGB", blueprint.image.size, "green")
+        yield "centers_95", blueprint.image
+
+
 class ColorValidator:
     def validate(self, image, expected_payload):
         exact = image.getpixel((0, 0)) != (0, 0, 0)
@@ -244,3 +258,75 @@ def test_pipeline_selects_least_changed_image_among_all_valid_variants(tmp_path,
     assert run.status == "accepted"
     with Image.open(run.image_path) as selected:
         assert selected.getpixel((0, 0)) == (0, 0, 255)
+
+
+def test_forced_laboratory_output_does_not_fall_back_to_qr_repair(tmp_path):
+    settings = Settings(
+        data_dir=tmp_path / "data",
+        model_cache_dir=tmp_path / "models",
+        validation_min_pass_rate=1.0,
+        max_attempts=1,
+        save_debug_artifacts=True,
+    )
+    settings.ensure_directories()
+    backend = ForcedResearchBackend()
+    service = GenerationService(
+        settings=settings,
+        repository=RunRepository(settings.database_url),
+        artifact_store=LocalArtifactStore(settings.artifacts_dir),
+        backends={"controlnet": backend},
+        validator=ColorValidator(),
+    )
+
+    run = service.generate(
+        GenerationRequest(
+            payload="https://example.prooftag.test/t/forced-srpg",
+            backend="controlnet",
+            max_attempts=1,
+        ),
+        target_variant="srpg",
+    )
+
+    assert run.status == "accepted"
+    assert run.selection_mode == "forced"
+    assert run.selected_variant == "srpg"
+    assert backend.generate_calls == 1
+    with Image.open(run.image_path) as selected:
+        assert selected.getpixel((0, 0)) == (0, 128, 0)
+    assert not (settings.artifacts_dir / run.id / "variants" / "centers_95.png").exists()
+
+
+def test_forced_laboratory_output_reuses_supplied_stage1_without_regeneration(tmp_path):
+    settings = Settings(
+        data_dir=tmp_path / "data",
+        model_cache_dir=tmp_path / "models",
+        validation_min_pass_rate=1.0,
+        max_attempts=1,
+    )
+    settings.ensure_directories()
+    backend = ForcedResearchBackend()
+    service = GenerationService(
+        settings=settings,
+        repository=RunRepository(settings.database_url),
+        artifact_store=LocalArtifactStore(settings.artifacts_dir),
+        backends={"controlnet": backend},
+        validator=ColorValidator(),
+    )
+    shared_stage1 = Image.new("RGB", (512, 512), "red")
+
+    run = service.generate(
+        GenerationRequest(
+            payload="https://example.prooftag.test/t/reused-stage1",
+            backend="controlnet",
+            max_attempts=1,
+        ),
+        raw_candidate_override=shared_stage1,
+        target_variant="srpg",
+        stage1_source_run_id="source-run",
+    )
+
+    assert backend.generate_calls == 0
+    assert run.stage1_reused is True
+    assert run.stage1_source_run_id == "source-run"
+    assert run.selected_variant == "srpg"
+    assert service.last_raw_candidate.getpixel((0, 0)) == (255, 0, 0)
