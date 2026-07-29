@@ -21,6 +21,12 @@ from .srpg import SRPGConfig, run_srpg_controlnet_img2img
 
 logger = logging.getLogger(__name__)
 
+
+def _is_single_file_base_model(model_id: str) -> bool:
+    normalized = model_id.lower().split("?", 1)[0]
+    return normalized.endswith((".ckpt", ".safetensors"))
+
+
 GLOBAL_REPAIR_VARIANTS = frozenset(
     {
         "centers_45",
@@ -134,13 +140,26 @@ class ControlNetBackend(GenerationBackend):
                     if self.settings.controlnet_pipeline_mode == "img2img"
                     else StableDiffusionControlNetPipeline
                 )
-                pipe = pipeline_class.from_pretrained(
-                    self.settings.base_model_id,
-                    controlnet=controlnet,
-                    torch_dtype=dtype,
-                    cache_dir=self.settings.model_cache_dir,
-                    safety_checker=None,
-                )
+                pipeline_arguments = {
+                    "controlnet": controlnet,
+                    "torch_dtype": dtype,
+                    "cache_dir": self.settings.model_cache_dir,
+                    "safety_checker": None,
+                }
+                if _is_single_file_base_model(self.settings.base_model_id):
+                    pipe = pipeline_class.from_single_file(
+                        self.settings.base_model_id,
+                        config="stable-diffusion-v1-5/stable-diffusion-v1-5",
+                        use_safetensors=self.settings.base_model_id.lower().split(
+                            "?", 1
+                        )[0].endswith(".safetensors"),
+                        **pipeline_arguments,
+                    )
+                else:
+                    pipe = pipeline_class.from_pretrained(
+                        self.settings.base_model_id,
+                        **pipeline_arguments,
+                    )
                 scheduler_class = (
                     DDIMScheduler
                     if self.settings.controlnet_pipeline_mode == "img2img"

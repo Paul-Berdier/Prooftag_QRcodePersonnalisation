@@ -9,6 +9,7 @@ from prooftag_qr.backends import (
     GLOBAL_REPAIR_VARIANTS,
     ControlNetBackend,
     GuidedRediffusionResult,
+    _is_single_file_base_model,
 )
 from prooftag_qr.config import Settings
 from prooftag_qr.qr import generate_qr
@@ -98,6 +99,14 @@ def test_gpu_dependencies_are_pinned_to_the_torch_base_image():
     assert 'PROOFTAG_QR_LATENT_REFINEMENT_ENABLED: "false"' in manifest
     assert 'PROOFTAG_QR_LATENT_REFINEMENT_MAX_LATENT_DELTA: "0.10"' in manifest
     assert 'PROOFTAG_QR_LATENT_REFINEMENT_MAX_MEAN_ABSOLUTE_CHANGE: "0.08"' in manifest
+
+
+def test_single_file_base_model_detection_supports_cetus_safetensors():
+    assert _is_single_file_base_model(
+        "https://huggingface.co/example/model/resolve/main/model.safetensors"
+    )
+    assert _is_single_file_base_model("C:/models/model.ckpt?download=true")
+    assert not _is_single_file_base_model("stable-diffusion-v1-5/stable-diffusion-v1-5")
 
 
 def test_guided_rediffusion_rejects_an_excessive_scheduler():

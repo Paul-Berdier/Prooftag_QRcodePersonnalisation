@@ -225,3 +225,8 @@ def test_lab_reuses_the_exact_stage1_and_forces_each_research_output(
     assert calls[1]["reused"] is True
     assert calls[1]["source"] == calls[0]["run_id"]
     assert calls[1]["raw_pixel"] == calls[0]["raw_pixel"] == (255, 0, 0)
+    srpg_run = run_repository.get(calls[1]["run_id"])
+    assert srpg_run is not None
+    assert srpg_run.quality_metrics["srpg_requested_steps"] == 40
+    assert srpg_run.quality_metrics["srpg_effective_steps"] == 40
+    assert srpg_run.quality_metrics["srpg_restart_strength"] == 1.0

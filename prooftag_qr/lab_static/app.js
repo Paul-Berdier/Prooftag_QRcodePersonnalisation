@@ -474,7 +474,7 @@ function renderTrials() {
       <div class="trial-image">${image}</div>
       <div class="trial-body">
         <div class="trial-title"><strong></strong><span class="status ${trial.status}">${statusLabel(trial.status)}</span></div>
-        <div class="muted">${trial.prompt_id} · seed ${trial.seed} · sortie ${trial.generation?.selected_variant || "—"}${trial.rating?.favorite ? " · ★" : ""}</div>
+        <div class="muted">${trial.prompt_id} · seed ${trial.seed} · sortie ${trial.generation?.selected_variant || "—"}${trial.generation?.quality_metrics?.stage1_mean_absolute_change == null ? "" : ` · Δ Stage 1 ${formatPercent(trial.generation.quality_metrics.stage1_mean_absolute_change)}`}${trial.rating?.favorite ? " · ★" : ""}</div>
         <div class="trial-metrics">
           <span>SSR<b>${formatPercent(trial.generation?.scan_pass_rate)}</b></span>
           <span>MER<b>${formatPercent(trial.generation?.module_error_rate)}</b></span>

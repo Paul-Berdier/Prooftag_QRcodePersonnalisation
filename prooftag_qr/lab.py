@@ -26,6 +26,18 @@ from .validation import QRValidator
 
 logger = logging.getLogger(__name__)
 
+DIFFQRCODER_BASE_MODEL = (
+    "https://huggingface.co/fp16-guy/Cetus-Mix_Whalefall_fp16_cleaned/"
+    "blob/main/cetusMix_Whalefall2_fp16.safetensors"
+)
+DIFFQRCODER_MODEL_SETTINGS = {
+    "base_model_id": DIFFQRCODER_BASE_MODEL,
+    "controlnet_model_id": "monster-labs/control_v1p_sd15_qrcode_monster",
+    "controlnet_model_subfolder": "v2",
+    "controlnet_conditioning_profile": "gray_quiet_zone",
+    "controlnet_pipeline_mode": "img2img",
+}
+
 GENERATION_KEYS = {
     "steps",
     "guidance_scale",
@@ -111,7 +123,7 @@ def laboratory_profiles() -> list[dict[str, Any]]:
         },
         {
             "id": "controlnet_raw",
-            "name": "ControlNet brut",
+            "name": "DiffQRCoder — Stage 1 brut",
             "backend": "controlnet",
             "enabled": True,
             "output_variant": "raw",
@@ -122,13 +134,13 @@ def laboratory_profiles() -> list[dict[str, Any]]:
                 "controlnet_scale": 1.35,
                 "strength": 1.0,
             },
-            "model": {},
+            "model": DIFFQRCODER_MODEL_SETTINGS.copy(),
             "tools": {"settings": {}},
-            "description": "Première diffusion sans Stage 2.",
+            "description": "Cetus-Mix + QR Monster v2, première diffusion sans Stage 2.",
         },
         {
-            "id": "srpg_paper",
-            "name": "SRPG Prooftag — poids papier",
+            "id": "srpg_late_2",
+            "name": "DiffQRCoder SRPG tardif — 2 pas",
             "backend": "controlnet",
             "enabled": True,
             "output_variant": "srpg",
@@ -139,7 +151,81 @@ def laboratory_profiles() -> list[dict[str, Any]]:
                 "controlnet_scale": 1.35,
                 "strength": 1.0,
             },
-            "model": {"controlnet_pipeline_mode": "img2img"},
+            "model": DIFFQRCODER_MODEL_SETTINGS.copy(),
+            "tools": {
+                "srpg_enabled": True,
+                "settings": {
+                    "srpg_steps": 40,
+                    "srpg_strength": 0.05,
+                    "srpg_controlnet_scale": 1.35,
+                    "srpg_qr_weight": 500.0,
+                    "srpg_perceptual_weight": 3.0,
+                    "srpg_functional_weight": 1.0,
+                    "srpg_dark_threshold": 0.45,
+                    "srpg_light_threshold": 0.65,
+                    "srpg_max_noise_delta_rms": 0.50,
+                    "srpg_max_mean_absolute_change": 0.12,
+                    "srpg_min_relative_module_improvement": 0.0,
+                    "srpg_save_step_previews": True,
+                    "srpg_preview_interval": 1,
+                },
+            },
+            "description": (
+                "Raffinement équilibré : 40 pas DDIM configurés, strength 0,05, "
+                "donc 2 pas tardifs réellement exécutés."
+            ),
+        },
+        {
+            "id": "srpg_late_4",
+            "name": "DiffQRCoder SRPG tardif — 4 pas",
+            "backend": "controlnet",
+            "enabled": True,
+            "output_variant": "srpg",
+            "reuse_stage1": True,
+            "generation": {
+                "steps": 40,
+                "guidance_scale": 7.5,
+                "controlnet_scale": 1.35,
+                "strength": 1.0,
+            },
+            "model": DIFFQRCODER_MODEL_SETTINGS.copy(),
+            "tools": {
+                "srpg_enabled": True,
+                "settings": {
+                    "srpg_steps": 40,
+                    "srpg_strength": 0.10,
+                    "srpg_controlnet_scale": 1.35,
+                    "srpg_qr_weight": 500.0,
+                    "srpg_perceptual_weight": 3.0,
+                    "srpg_functional_weight": 1.0,
+                    "srpg_dark_threshold": 0.45,
+                    "srpg_light_threshold": 0.65,
+                    "srpg_max_noise_delta_rms": 0.75,
+                    "srpg_max_mean_absolute_change": 0.18,
+                    "srpg_min_relative_module_improvement": 0.0,
+                    "srpg_save_step_previews": True,
+                    "srpg_preview_interval": 1,
+                },
+            },
+            "description": (
+                "Raffinement robuste : 40 pas DDIM configurés, strength 0,10, "
+                "donc 4 pas tardifs réellement exécutés."
+            ),
+        },
+        {
+            "id": "srpg_full_restart",
+            "name": "SRPG redémarrage complet — ablation",
+            "backend": "controlnet",
+            "enabled": False,
+            "output_variant": "srpg",
+            "reuse_stage1": True,
+            "generation": {
+                "steps": 40,
+                "guidance_scale": 7.5,
+                "controlnet_scale": 1.35,
+                "strength": 1.0,
+            },
+            "model": DIFFQRCODER_MODEL_SETTINGS.copy(),
             "tools": {
                 "srpg_enabled": True,
                 "settings": {
@@ -157,7 +243,10 @@ def laboratory_profiles() -> list[dict[str, Any]]:
                     "srpg_preview_interval": 5,
                 },
             },
-            "description": "Boucle Prooftag avec SRL + LPIPS du papier, sans fusion FreeQR.",
+            "description": (
+                "Ablation destructive observée : rebruitage complet et 40 pas. "
+                "Ce n’est pas une reproduction bit-à-bit du papier sans son QArt."
+            ),
         },
         {
             "id": "srpg_freeqr",
@@ -172,7 +261,7 @@ def laboratory_profiles() -> list[dict[str, Any]]:
                 "controlnet_scale": 1.35,
                 "strength": 1.0,
             },
-            "model": {"controlnet_pipeline_mode": "img2img"},
+            "model": DIFFQRCODER_MODEL_SETTINGS.copy(),
             "tools": {
                 "srpg_enabled": True,
                 "settings": {
@@ -196,37 +285,6 @@ def laboratory_profiles() -> list[dict[str, Any]]:
                 },
             },
             "description": "Ablation FreeQR inspirée d’E014B, désactivée par défaut.",
-        },
-        {
-            "id": "srpg_preservation",
-            "name": "SRPG — préservation",
-            "backend": "controlnet",
-            "enabled": False,
-            "output_variant": "srpg",
-            "reuse_stage1": True,
-            "generation": {
-                "steps": 40,
-                "guidance_scale": 7.5,
-                "controlnet_scale": 1.35,
-                "strength": 1.0,
-            },
-            "model": {"controlnet_pipeline_mode": "img2img"},
-            "tools": {
-                "srpg_enabled": True,
-                "settings": {
-                    "srpg_steps": 24,
-                    "srpg_strength": 0.60,
-                    "srpg_controlnet_scale": 1.20,
-                    "srpg_qr_weight": 400.0,
-                    "srpg_perceptual_weight": 6.0,
-                    "srpg_functional_weight": 2.0,
-                    "srpg_max_mean_absolute_change": 0.18,
-                    "srpg_min_relative_module_improvement": 0.0,
-                    "srpg_save_step_previews": True,
-                    "srpg_preview_interval": 4,
-                },
-            },
-            "description": "Hypothèse anti-flou à bruit réduit, à comparer au profil papier.",
         },
     ]
 
@@ -386,6 +444,7 @@ class LabService:
                         raw_candidate = generation_service.last_raw_candidate
                         if raw_candidate is not None:
                             shared_stage1[stage1_key] = (raw_candidate, run.id)
+                    self._record_method_diagnostics(run, method)
                     self._score_quality(run, prompt.text)
                     status = (
                         run.status
@@ -471,6 +530,20 @@ class LabService:
             logger.exception("lab_quality_scoring_failed", extra={"run_id": run.id})
         finally:
             metrics.LAB_QUALITY_SCORE_DURATION.observe(time.perf_counter() - started)
+
+    def _record_method_diagnostics(self, run: RunRecord, method: LabMethod) -> None:
+        if method.tools.srpg_enabled:
+            settings = self._settings_for_method(method)
+            run.quality_metrics.update(
+                {
+                    "srpg_requested_steps": float(settings.srpg_steps),
+                    "srpg_effective_steps": float(
+                        max(1, int(settings.srpg_steps * settings.srpg_strength))
+                    ),
+                    "srpg_restart_strength": float(settings.srpg_strength),
+                }
+            )
+        self.run_repository.save(run)
 
     def _generation_service(self, method: LabMethod) -> GenerationService:
         method_settings = self._settings_for_method(method)

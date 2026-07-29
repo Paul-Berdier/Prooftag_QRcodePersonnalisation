@@ -394,6 +394,16 @@ class GenerationService:
             )
             run.module_error_rate = module_error_rate(best, blueprint)
             run.quality_metrics = image_quality_metrics(best)
+            if backend_name == "controlnet" and best_raw_candidate is not None:
+                run.quality_metrics.update(
+                    {
+                        f"stage1_{name}": value
+                        for name, value in image_change_metrics(
+                            best,
+                            best_raw_candidate,
+                        ).items()
+                    }
+                )
             run.selected_variant = best_variant
             if backend_name == "controlnet":
                 metrics.REPAIR_SELECTED.labels(best_variant).inc()

@@ -1038,3 +1038,24 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
 - **Affichage Web Lab 02 :** la galerie nomme explicitement le résultat évalué, montre le Stage 1
   partagé lorsqu'il diffère et masque les doublons binaires identiques. Les anciennes campagnes
   restent consultables mais ne deviennent pas rétroactivement des comparaisons causales.
+- **Diagnostic Web Lab 03 — Stage 2 destructif :** sur les exemples `courtyard` et `station`,
+  l'ancien profil SRPG à `strength=1,0` rediffuse réellement 40 pas. Le résultat perd la netteté
+  et parfois le contenu du prompt ; il reste rejeté malgré une MER localement plus faible.
+  La porte `max_mean_absolute_change` intervient seulement après la génération et ne protège pas
+  le Stage 1 pendant la boucle.
+- **Confrontation au papier :** DiffQRCoder décrit bien un Stage 2 démarrant depuis le Stage 1
+  rebruité, avec SRL `λ1=500`, LPIPS `λ2=3`, Cetus-Mix, QR Monster v2 à `1,35` et une condition
+  QArt. Le transformateur QArt de l'article n'est pas livré par le dépôt public ; le profil local
+  ne peut donc pas être qualifié de reproduction « papier ».
+- **Correction Web Lab 03 :** le profil complet devient l'ablation désactivée
+  `srpg_full_restart`. Les profils actifs `srpg_late_2` et `srpg_late_4` utilisent respectivement
+  `strength=0,05` et `0,10` sur un calendrier de 40 pas, soit deux et quatre pas réellement
+  exécutés. Ils enregistrent le nombre de pas demandé, le nombre effectif, la force de redémarrage
+  et la différence moyenne avec le Stage 1. Il s'agit d'hypothèses à valider, pas d'une nouvelle
+  revendication de 99 %.
+- **Correction de modèle Web Lab 03 :** les profils génératifs ne dépendent plus des valeurs
+  globales SD 1.5 + Dion de la ConfigMap. Ils figent Cetus-Mix Whalefall et QR Monster v2 ; le
+  backend sait charger Cetus depuis son fichier Safetensors avec la configuration SD 1.5.
+- **Déploiement Web Lab 03 :** `scripts/deploy-app-image.sh` construit un tag dérivé du commit,
+  l'importe dans K3s, met à jour l'API et l'initContainer, puis vérifie l'image et le profil dans
+  le pod. Le tag mutable `dev` n'est plus utilisé pour cette procédure.

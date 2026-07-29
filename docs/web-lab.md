@@ -76,14 +76,15 @@ Sur le serveur Linux :
 ```bash
 cd ~/apps/Prooftag_QRcodePersonnalisation
 git pull
-docker build -t prooftag-qr:dev .
-kubectl apply -k deploy/k8s
-kubectl rollout status deployment/prooftag-qr -n qr-core --timeout=1200s
-curl -sS http://127.0.0.1:18080/healthz
+bash scripts/deploy-app-image.sh
 ```
 
-La dernière commande suppose qu'un ancien `port-forward` écoute déjà sur `18080`. Sinon,
-utiliser le script Windows ci-dessus ou lancer temporairement :
+Le script refuse un dépôt sale, construit une image portant les douze premiers caractères du
+commit Git, l'importe dans le containerd de K3s, met à jour le conteneur API et l'initContainer
+de migration, attend le rollout et vérifie le profil `srpg_late_2` jusque dans le pod. Il évite le
+problème récurrent d'un tag `dev` inchangé que Kubernetes ne redéploie pas.
+
+Pour contrôler ensuite l'API, utiliser le script Windows ci-dessus ou lancer temporairement :
 
 ```bash
 kubectl port-forward -n qr-core service/prooftag-qr-svc 18080:8080
@@ -98,14 +99,25 @@ démarrage de l'API.
 |---|---:|---|
 | `qr_reference` | activé | QR binaire témoin, aucune diffusion |
 | `controlnet_raw` | activé | première diffusion ControlNet, sans Stage 2 |
-| `srpg_paper` | activé | boucle SRPG Prooftag, SRL `500` + LPIPS `3`, sans fusion FreeQR |
+| `srpg_late_2` | activé | SRPG Prooftag sur les 2 derniers pas DDIM, `strength=0,05`, limite de gradient `0,50` |
+| `srpg_late_4` | activé | SRPG Prooftag sur les 4 derniers pas DDIM, `strength=0,10`, limite de gradient `0,75` |
+| `srpg_full_restart` | désactivé | ablation avec redémarrage bruité complet et 40 pas ; profil destructif observé |
 | `srpg_freeqr` | désactivé | même boucle avec fusion latente FreeQR inspirée, canal et fenêtre configurables |
-| `srpg_preservation` | désactivé | hypothèse anti-flou à bruit et amplitude de changement réduits |
+
+Tous les profils génératifs fournis figent explicitement le socle DiffQRCoder :
+
+- Cetus-Mix Whalefall fp16 comme modèle Stable Diffusion 1.5 ;
+- QR Code Monster v2 comme ControlNet, sous-dossier `v2` ;
+- conditionnement `gray_quiet_zone` et pipeline `img2img`.
+
+Le chargeur accepte désormais le checkpoint Cetus au format Safetensors « single file » ; il ne
+retombe donc pas silencieusement sur le modèle SD 1.5 + Dion de la ConfigMap. Ces identifiants
+sont visibles dans le JSON « modèle » et persistés dans chaque essai.
 
 Les profils fournis sélectionnent explicitement leur sortie :
 
 - `qr_reference` et `controlnet_raw` évaluent `raw` ;
-- les trois profils SRPG évaluent le candidat `srpg` lui-même ;
+- tous les profils SRPG évaluent le candidat `srpg` lui-même ;
 - `auto` est réservé à une simulation de la chaîne de livraison avec réparation éventuelle.
 
 Quand deux méthodes ont exactement le même modèle, prompt, seed, géométrie et paramètres de
@@ -113,12 +125,29 @@ Stage 1, l'image brute est générée une seule fois puis conservée en RAM CPU.
 suivantes reçoivent cette même image comme entrée. La fiche d'un essai affiche
 `Stage 1 réutilisé — aucune régénération` et conserve l'identifiant du run source.
 
-Point de vocabulaire essentiel : `srpg_paper` reprend les poids de loss publiés et utilise la
-boucle SRPG intégrée à la pipeline de production Prooftag. Ce n'est pas l'exécutable upstream
-DiffQRCoder chargé depuis le checkpoint Cetus. Les résultats ne doivent donc pas être présentés
-comme une reproduction bit-à-bit du dépôt officiel.
+Point de vocabulaire essentiel : aucun profil ne porte désormais le nom `paper`. Les profils
+reprennent les poids de loss SRL `500` et LPIPS `3` publiés, mais utilisent la boucle SRPG
+intégrée à Prooftag. Le papier ajoute en outre un QR transformé par QArt entre les deux stages ;
+ce composant exact n'est pas disponible dans le dépôt DiffQRCoder public. Ces résultats ne sont
+donc jamais présentés comme une reproduction bit-à-bit de l'article.
 
-Le JSON « modèle » est prérempli avec les identifiants réellement résolus par le serveur
+`srpg_full_restart` conserve volontairement l'ancien redémarrage complet pour une ablation. À
+`srpg_steps=40` et `srpg_strength=1,0`, Diffusers exécute réellement 40 pas et le Stage 1 est
+presque entièrement rebruité. Les essais du 29 juillet 2026 montrent que cette configuration peut
+produire flou, saturation et perte du prompt. La limite `srpg_max_mean_absolute_change` est une
+porte de rejet appliquée après génération ; elle n'empêche pas la dégradation pendant la boucle.
+
+Les profils actifs emploient le même calendrier de 40 pas mais n'en sélectionnent que la fin :
+
+- `0,05 × 40 = 2` pas effectifs pour le profil équilibré ;
+- `0,10 × 40 = 4` pas effectifs pour le profil plus robuste.
+
+Ce choix est une hypothèse Prooftag issue d'E014E, pas un résultat déjà généralisé. E014E avait
+observé 148/156 validations pour deux pas et 153/156 pour quatre pas avec son mécanisme de fusion
+masquée. Le laboratoire doit maintenant vérifier si cette fenêtre tardive reste bénéfique avec la
+loss SRPG, sur les mêmes Stage 1, prompts et seeds.
+
+Le JSON « modèle » contient les identifiants réellement choisis par le profil
 (`base_model_id`, `controlnet_model_id`, sous-dossier, profil de conditionnement et mode de
 pipeline). Ces valeurs sont persistées dans chaque essai : un changement de ConfigMap ne peut
 donc pas rendre une ancienne campagne ambiguë.
@@ -222,7 +251,7 @@ avec une interaction dépendante du prompt.
 
 Le laboratoire rend désormais cette causalité testable sans changer de notebook :
 
-1. dupliquer `srpg_paper` ;
+1. dupliquer `srpg_late_2` ou `srpg_late_4` ;
 2. ne modifier qu'un paramètre ou un outil ;
 3. conserver les mêmes prompts et seeds ;
 4. comparer les graphiques et les artefacts ;
@@ -262,7 +291,8 @@ modèles et GPU déjà documentées dans `docs/metrics.md`.
 Pour éviter de recommencer une campagne inutilisable :
 
 1. lancer un smoke test avec `qr_reference`, un prompt et une seed ;
-2. comparer `controlnet_raw` et `srpg_paper` en conservant « Réutiliser le même Stage 1 » ;
+2. comparer `controlnet_raw`, `srpg_late_2` et `srpg_late_4` en conservant
+   « Réutiliser le même Stage 1 » ;
 3. vérifier que la sortie évaluée vaut respectivement `raw` et `srpg` ;
 4. lancer ensuite trois méthodes, quatre prompts et deux seeds ;
 5. vérifier les erreurs et la VRAM avant d'élargir ;

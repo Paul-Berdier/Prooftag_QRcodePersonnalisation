@@ -47,18 +47,33 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     assert client.get("/lab").status_code == 200
     schema = client.get("/v1/lab/schema")
     assert schema.status_code == 200
-    assert any(item["id"] == "srpg_paper" for item in schema.json()["profiles"])
+    assert any(item["id"] == "srpg_late_2" for item in schema.json()["profiles"])
+    assert any(item["id"] == "srpg_late_4" for item in schema.json()["profiles"])
     controlnet_profile = next(
         item for item in schema.json()["profiles"] if item["id"] == "controlnet_raw"
     )
     srpg_profile = next(
-        item for item in schema.json()["profiles"] if item["id"] == "srpg_paper"
+        item for item in schema.json()["profiles"] if item["id"] == "srpg_late_2"
+    )
+    full_restart_profile = next(
+        item
+        for item in schema.json()["profiles"]
+        if item["id"] == "srpg_full_restart"
     )
     assert controlnet_profile["model"]["base_model_id"]
     assert controlnet_profile["model"]["controlnet_model_id"]
+    assert "Cetus-Mix_Whalefall" in controlnet_profile["model"]["base_model_id"]
+    assert (
+        controlnet_profile["model"]["controlnet_model_id"]
+        == "monster-labs/control_v1p_sd15_qrcode_monster"
+    )
+    assert controlnet_profile["model"]["controlnet_model_subfolder"] == "v2"
     assert controlnet_profile["output_variant"] == "raw"
     assert srpg_profile["output_variant"] == "srpg"
     assert srpg_profile["reuse_stage1"] is True
+    assert srpg_profile["enabled"] is True
+    assert srpg_profile["tools"]["settings"]["srpg_strength"] == 0.05
+    assert full_restart_profile["enabled"] is False
 
     campaign_response = client.post(
         "/v1/lab/campaigns",

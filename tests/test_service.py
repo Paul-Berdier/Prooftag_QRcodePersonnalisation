@@ -291,6 +291,8 @@ def test_forced_laboratory_output_does_not_fall_back_to_qr_repair(tmp_path):
     assert run.selection_mode == "forced"
     assert run.selected_variant == "srpg"
     assert backend.generate_calls == 1
+    assert run.quality_metrics["stage1_mean_absolute_change"] > 0
+    assert run.quality_metrics["stage1_changed_pixel_ratio"] > 0
     with Image.open(run.image_path) as selected:
         assert selected.getpixel((0, 0)) == (0, 128, 0)
     assert not (settings.artifacts_dir / run.id / "variants" / "centers_95.png").exists()
