@@ -44,7 +44,13 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     assert runtime.json()["generation_config"]["latent_refinement_enabled"] is False
     assert runtime.json()["generation_config"]["guided_rediffusion_enabled"] is False
 
-    assert client.get("/lab").status_code == 200
+    lab_page = client.get("/lab")
+    assert lab_page.status_code == 200
+    assert "srpg-effective-steps" in lab_page.text
+    assert "20260729-srpg-controls-2" in lab_page.text
+    lab_javascript = client.get("/lab-assets/app.js")
+    assert lab_javascript.status_code == 200
+    assert "effectiveSrpgSteps" in lab_javascript.text
     schema = client.get("/v1/lab/schema")
     assert schema.status_code == 200
     assert any(item["id"] == "srpg_late_2" for item in schema.json()["profiles"])

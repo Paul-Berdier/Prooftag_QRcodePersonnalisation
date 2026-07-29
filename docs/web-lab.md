@@ -160,7 +160,11 @@ diffusion. Cette combinaison n'est pas une méthode publiée par DiffQRCoder.
 
 L'interface expose directement :
 
-- nombre de pas, CFG, poids ControlNet et strength ;
+- pas, CFG, poids ControlNet et strength du Stage 1, nommés explicitement comme tels ;
+- pas planifiés, force de redémarrage, poids ControlNet, poids QR, poids perceptuel, poids
+  fonctionnel et limite de gradient RMS du Stage 2 SRPG ;
+- nombre de pas SRPG réellement exécutés, recalculé instantanément avec
+  `floor(srpg_steps × srpg_strength)` ;
 - activation de SRPG, de la rediffusion guidée ou du raffinement latent ;
 - modèle de base, ControlNet, sous-dossier et mode de pipeline ;
 - paramètres détaillés des losses, seuils, transformations robustes, limites de préservation,
@@ -169,6 +173,13 @@ L'interface expose directement :
 Les deux zones JSON avancées sont validées côté API. Seules les clés explicitement autorisées
 dans `prooftag_qr/lab.py` sont acceptées. SRPG et rediffusion guidée sont mutuellement exclusifs
 dans une même méthode, car ce sont deux variantes concurrentes de Stage 2.
+
+Le champ « Stage 1 — pas de diffusion » ne pilote jamais SRPG. Pour demander 40 pas SRPG
+réellement exécutés, il faut choisir `SRPG — pas planifiés = 40` et
+`SRPG — force de redémarrage = 1,00`. Avec `40` et `0,10`, la boucle exécute volontairement
+quatre pas tardifs. Une combinaison donnant moins d'un pas est rejetée avant de monopoliser le
+GPU. La fiche résultat persiste les valeurs SRPG effectivement résolues afin de prouver ce qui a
+été transmis au backend.
 
 Une campagne est limitée à 500 essais. Cette limite évite une erreur de saisie qui monopoliserait
 le GPU pendant plusieurs jours.

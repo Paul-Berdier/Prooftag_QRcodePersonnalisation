@@ -40,6 +40,28 @@ function slug(value) {
     .replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 90) || "method";
 }
 
+function effectiveSrpgSteps(steps, strength) {
+  if (!Number.isFinite(steps) || !Number.isFinite(strength)) return null;
+  return Math.floor(steps * strength);
+}
+
+function refreshSrpgExplanation(node) {
+  const enabled = $(".tool-srpg", node).checked;
+  node.classList.toggle("uses-srpg", enabled);
+  if (!enabled) return;
+  const steps = Number($(".srpg-steps", node).value);
+  const strength = Number($(".srpg-strength", node).value);
+  const effective = effectiveSrpgSteps(steps, strength);
+  $(".srpg-effective-steps", node).textContent = effective == null
+    ? "Configuration incomplète"
+    : `${effective} pas effectif${effective > 1 ? "s" : ""} / ${steps}`;
+  $(".srpg-warning", node).textContent = effective != null && effective < 1
+    ? "Configuration invalide : augmenter les pas planifiés ou la force afin d’exécuter au moins un pas."
+    : effective < steps
+      ? `${steps} × ${strength.toFixed(2)} = ${effective}. Pour exécuter réellement les ${steps} pas, mettre la force de redémarrage à 1,00.`
+      : `${effective} pas SRPG seront réellement calculés.`;
+}
+
 function renderMethods() {
   const container = $("#methods");
   container.innerHTML = "";
@@ -62,8 +84,16 @@ function renderMethods() {
     $(".tool-srpg", node).checked = !!method.tools?.srpg_enabled;
     $(".tool-guided", node).checked = !!method.tools?.guided_rediffusion_enabled;
     $(".tool-latent", node).checked = !!method.tools?.latent_refinement_enabled;
+    const toolSettings = method.tools?.settings || {};
+    $(".srpg-steps", node).value = toolSettings.srpg_steps ?? 40;
+    $(".srpg-strength", node).value = toolSettings.srpg_strength ?? 1;
+    $(".srpg-control", node).value = toolSettings.srpg_controlnet_scale ?? 1.35;
+    $(".srpg-qr-weight", node).value = toolSettings.srpg_qr_weight ?? 500;
+    $(".srpg-perceptual-weight", node).value = toolSettings.srpg_perceptual_weight ?? 3;
+    $(".srpg-functional-weight", node).value = toolSettings.srpg_functional_weight ?? 4;
+    $(".srpg-noise-limit", node).value = toolSettings.srpg_max_noise_delta_rms ?? 2;
     $(".model-json", node).value = JSON.stringify(method.model || {}, null, 2);
-    $(".tools-json", node).value = JSON.stringify(method.tools?.settings || {}, null, 2);
+    $(".tools-json", node).value = JSON.stringify(toolSettings, null, 2);
 
     const sync = () => {
       const item = state.methods[index];
@@ -83,11 +113,26 @@ function renderMethods() {
       item.tools.srpg_enabled = $(".tool-srpg", node).checked;
       item.tools.guided_rediffusion_enabled = $(".tool-guided", node).checked;
       item.tools.latent_refinement_enabled = $(".tool-latent", node).checked;
+      item.tools.settings = item.tools.settings || {};
+      if (item.tools.srpg_enabled) {
+        Object.assign(item.tools.settings, {
+          srpg_steps: Number($(".srpg-steps", node).value),
+          srpg_strength: Number($(".srpg-strength", node).value),
+          srpg_controlnet_scale: Number($(".srpg-control", node).value),
+          srpg_qr_weight: Number($(".srpg-qr-weight", node).value),
+          srpg_perceptual_weight: Number($(".srpg-perceptual-weight", node).value),
+          srpg_functional_weight: Number($(".srpg-functional-weight", node).value),
+          srpg_max_noise_delta_rms: Number($(".srpg-noise-limit", node).value),
+        });
+        $(".tools-json", node).value = JSON.stringify(item.tools.settings, null, 2);
+      }
       $(".method-name-label", node).textContent = item.name || "Sans nom";
       node.classList.toggle("disabled", !item.enabled);
+      refreshSrpgExplanation(node);
       updateTrialCount();
     };
     $$("input, select", node).forEach((input) => input.addEventListener("change", sync));
+    $$(".srpg-controls input", node).forEach((input) => input.addEventListener("input", sync));
     $(".method-name", node).addEventListener("input", sync);
     $(".model-json", node).addEventListener("change", () => {
       try {
@@ -99,6 +144,7 @@ function renderMethods() {
       try {
         state.methods[index].tools.settings = JSON.parse($(".tools-json", node).value || "{}");
         clearComposeError();
+        renderMethods();
       } catch (error) { showComposeError(`Outils JSON — ${method.name}: ${error.message}`); }
     });
     $(".duplicate-method", node).addEventListener("click", () => {
@@ -114,6 +160,7 @@ function renderMethods() {
       renderMethods();
     });
     container.append(node);
+    refreshSrpgExplanation(node);
   });
   updateTrialCount();
 }
@@ -493,6 +540,19 @@ function renderTrials() {
   });
 }
 
+const QUALITY_METRIC_LABELS = {
+  srpg_requested_steps: "SRPG — pas planifiés",
+  srpg_effective_steps: "SRPG — pas réellement exécutés",
+  srpg_restart_strength: "SRPG — force de redémarrage",
+  srpg_controlnet_scale: "SRPG — ControlNet appliqué",
+  srpg_qr_weight: "SRPG — poids QR appliqué",
+  srpg_perceptual_weight: "SRPG — poids perceptuel appliqué",
+  srpg_functional_weight: "SRPG — poids fonctionnel appliqué",
+  srpg_max_noise_delta_rms: "SRPG — limite gradient RMS appliquée",
+  stage1_changed_pixel_ratio: "Stage 1 — pixels modifiés",
+  stage1_mean_absolute_change: "Stage 1 — changement absolu moyen",
+};
+
 async function openTrial(id) {
   const trial = await api(`/v1/lab/trials/${id}`);
   state.selectedTrial = trial;
@@ -513,7 +573,10 @@ async function openTrial(id) {
   Object.entries(run?.quality_metrics || {}).sort(([left], [right]) =>
     left.localeCompare(right)
   ).forEach(([name, value]) => {
-    metrics.push([name.replaceAll("_", " "), formatScore(value)]);
+    metrics.push([
+      QUALITY_METRIC_LABELS[name] || name.replaceAll("_", " "),
+      formatScore(value),
+    ]);
   });
   $("#dialog-metrics").innerHTML = metrics.map(([label, value]) =>
     `<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join("");

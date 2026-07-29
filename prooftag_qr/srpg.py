@@ -132,6 +132,8 @@ def _validate_config(config: SRPGConfig) -> None:
         raise ValueError("steps must be at least 1")
     if not 0 < config.strength <= 1:
         raise ValueError("strength must be between 0 (exclusive) and 1")
+    if int(config.steps * config.strength) < 1:
+        raise ValueError("steps multiplied by strength must schedule at least one effective step")
     if config.controlnet_scale <= 0:
         raise ValueError("controlnet_scale must be positive")
     if config.qr_weight <= 0 or config.perceptual_weight < 0:

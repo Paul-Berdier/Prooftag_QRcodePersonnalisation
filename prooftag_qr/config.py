@@ -106,6 +106,10 @@ class Settings(BaseSettings):
             raise ValueError("SRPG and legacy guided rediffusion cannot be enabled together")
         if self.srpg_enabled and self.controlnet_pipeline_mode != "img2img":
             raise ValueError("SRPG requires the img2img ControlNet pipeline")
+        if self.srpg_enabled and self.srpg_effective_steps < 1:
+            raise ValueError(
+                "SRPG steps multiplied by strength must schedule at least one effective step"
+            )
         if self.srpg_dark_threshold > self.srpg_light_threshold:
             raise ValueError("SRPG dark threshold cannot exceed light threshold")
         if self.srpg_robust_blur_kernel % 2 == 0:
@@ -113,6 +117,10 @@ class Settings(BaseSettings):
         if self.srpg_latent_fusion_start > self.srpg_latent_fusion_end:
             raise ValueError("SRPG latent fusion start cannot exceed end")
         return self
+
+    @property
+    def srpg_effective_steps(self) -> int:
+        return min(self.srpg_steps, int(self.srpg_steps * self.srpg_strength))
 
     @property
     def database_url(self) -> str:

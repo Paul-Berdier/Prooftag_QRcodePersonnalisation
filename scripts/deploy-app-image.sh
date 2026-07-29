@@ -26,8 +26,9 @@ docker build \
   --label "org.opencontainers.image.revision=${git_sha}" \
   -t "$image" .
 
-docker run --rm --entrypoint python "$image" -c \
-  "from prooftag_qr.lab import laboratory_profiles; assert any(p['id'] == 'srpg_late_2' for p in laboratory_profiles())"
+echo "Image Docker construite : $image"
+docker image inspect "$image" \
+  --format 'id={{.Id}} révision={{index .Config.Labels "org.opencontainers.image.revision"}}'
 
 docker save "$image" | sudo k3s ctr images import -
 
@@ -75,6 +76,9 @@ fi
 kubectl -n "$namespace" exec "$pod" -c "$container" -- \
   python -c \
   "from prooftag_qr.lab import laboratory_profiles; assert any(p['id'] == 'srpg_late_2' for p in laboratory_profiles())"
+kubectl -n "$namespace" exec "$pod" -c "$container" -- \
+  python -c \
+  "from pathlib import Path; import prooftag_qr; path = Path(prooftag_qr.__file__).with_name('lab_static') / 'index.html'; assert '20260729-srpg-controls-2' in path.read_text(encoding='utf-8')"
 
 echo "Image déployée et vérifiée : $image"
 echo "Pod : $pod"

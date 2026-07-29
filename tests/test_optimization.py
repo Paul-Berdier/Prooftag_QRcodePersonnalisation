@@ -223,6 +223,8 @@ def test_srpg_rejects_invalid_robustness_and_eta():
         _validate_config(SRPGConfig(robust_blur_kernel=4))
     with pytest.raises(ValueError, match="downscale_factor"):
         _validate_config(SRPGConfig(robust_downscale_factor=0))
+    with pytest.raises(ValueError, match="at least one effective step"):
+        _validate_config(SRPGConfig(steps=40, strength=0.01))
 
 
 def test_srpg_accepts_preserved_zero_error_without_allowing_regression():

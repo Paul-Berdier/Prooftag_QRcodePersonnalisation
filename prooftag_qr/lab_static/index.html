@@ -223,10 +223,10 @@ station | A grand retro-futurist railway station filled with travelers, clocks, 
           <option value="guided">Rediffusion réelle</option>
           <option value="latent">Raffinement latent réel</option>
         </select></label>
-        <label>Steps<input class="gen-steps" type="number" min="1" max="100"></label>
+        <label>Stage 1 — pas de diffusion<input class="gen-steps" type="number" min="1" max="100"></label>
         <label>CFG<input class="gen-cfg" type="number" min="0" max="30" step="0.1"></label>
-        <label>ControlNet<input class="gen-control" type="number" min="0" max="3" step="0.05"></label>
-        <label>Stage 1 strength<input class="gen-strength" type="number" min="0.05" max="1" step="0.05"></label>
+        <label>Stage 1 — ControlNet<input class="gen-control" type="number" min="0" max="3" step="0.05"></label>
+        <label>Stage 1 — strength<input class="gen-strength" type="number" min="0.05" max="1" step="0.05"></label>
       </div>
       <div class="tool-switches">
         <label><input class="reuse-stage1" type="checkbox"> Réutiliser le même Stage 1</label>
@@ -234,6 +234,28 @@ station | A grand retro-futurist railway station filled with travelers, clocks, 
         <label><input class="tool-guided" type="checkbox"> Rediffusion locale</label>
         <label><input class="tool-latent" type="checkbox"> Raffinement latent</label>
       </div>
+      <section class="srpg-controls">
+        <div class="srpg-heading">
+          <div>
+            <h4>Paramètres réels du Stage 2 SRPG</h4>
+            <p class="muted">
+              Les pas réellement exécutés valent
+              <code>plafond inférieur(pas planifiés × force de redémarrage)</code>.
+            </p>
+          </div>
+          <output class="srpg-effective-steps"></output>
+        </div>
+        <div class="compact-grid">
+          <label>SRPG — pas planifiés<input class="srpg-steps" type="number" min="1" max="100" step="1"></label>
+          <label>SRPG — force de redémarrage<input class="srpg-strength" type="number" min="0.01" max="1" step="0.01"></label>
+          <label>SRPG — ControlNet<input class="srpg-control" type="number" min="0.01" max="3" step="0.05"></label>
+          <label>SRPG — poids QR<input class="srpg-qr-weight" type="number" min="0.01" max="5000" step="10"></label>
+          <label>SRPG — poids perceptuel<input class="srpg-perceptual-weight" type="number" min="0" max="100" step="0.1"></label>
+          <label>SRPG — poids fonctionnel<input class="srpg-functional-weight" type="number" min="1" max="100" step="0.5"></label>
+          <label>SRPG — limite gradient RMS<input class="srpg-noise-limit" type="number" min="0.01" max="100" step="0.05"></label>
+        </div>
+        <p class="srpg-warning muted"></p>
+      </section>
       <details>
         <summary>Paramètres avancés et modèle</summary>
         <div class="json-grid">
@@ -244,6 +266,6 @@ station | A grand retro-futurist railway station filled with travelers, clocks, 
     </article>
   </template>
 
-  <script src="/lab-assets/app.js?v=20260729-stage2-late-1" defer></script>
+  <script src="/lab-assets/app.js?v=20260729-srpg-controls-2" defer></script>
 </body>
 </html>

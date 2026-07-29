@@ -60,6 +60,7 @@ def test_gpu_dependencies_are_pinned_to_the_torch_base_image():
     assert settings.guided_rediffusion_min_relative_module_improvement == 0.01
     assert settings.srpg_enabled is False
     assert settings.srpg_steps == 40
+    assert settings.srpg_effective_steps == 40
     assert settings.srpg_qr_weight == 500.0
     assert settings.srpg_perceptual_weight == 3.0
     assert settings.srpg_min_relative_module_improvement == 0.10
@@ -119,6 +120,8 @@ def test_srpg_rejects_incompatible_pipeline_modes():
         Settings(srpg_enabled=True, guided_rediffusion_enabled=True)
     with pytest.raises(ValueError, match="requires the img2img"):
         Settings(srpg_enabled=True, controlnet_pipeline_mode="text2img")
+    with pytest.raises(ValueError, match="at least one effective step"):
+        Settings(srpg_enabled=True, srpg_steps=40, srpg_strength=0.01)
 
 
 def test_targeted_repairs_run_before_global_module_repairs():

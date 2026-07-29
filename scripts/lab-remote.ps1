@@ -61,11 +61,12 @@ Assert-LocalPortAvailable
 [System.IO.File]::Delete($sshLogFile)
 
 $remoteCommand = (
-    "kubectl port-forward -n {0} service/{1} {2}:8080 --address 127.0.0.1" -f
+    "exec kubectl port-forward -n {0} service/{1} {2}:8080 --address 127.0.0.1" -f
     $Namespace, $Service, $RemotePort
 )
 $arguments = @(
     "-v",
+    "-tt",
     "-E", $sshLogFile,
     "-o", "ExitOnForwardFailure=yes",
     "-o", "ServerAliveInterval=30",

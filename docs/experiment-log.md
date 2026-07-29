@@ -1059,3 +1059,12 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
 - **Déploiement Web Lab 03 :** `scripts/deploy-app-image.sh` construit un tag dérivé du commit,
   l'importe dans K3s, met à jour l'API et l'initContainer, puis vérifie l'image et le profil dans
   le pod. Le tag mutable `dev` n'est plus utilisé pour cette procédure.
+- **Incident Web Lab 04 — pas SRPG ambigus :** le seul champ « Steps » visible modifiait les pas
+  du Stage 1. Les pas SRPG et la force img2img restaient dans le JSON ; une configuration
+  `srpg_steps=40`, `srpg_strength=0,10` affichait donc correctement quatre artefacts, mais
+  l'interface donnait l'impression que 40 pas avaient été ignorés.
+- **Correction Web Lab 04 :** les contrôles Stage 1 et Stage 2 sont séparés. Le formulaire affiche
+  et persiste les pas SRPG planifiés, la force de redémarrage, le nombre effectif
+  `floor(steps × strength)`, ControlNet, les poids QR/perceptuel/fonctionnel et la limite de
+  gradient. Les mêmes valeurs résolues sont ajoutées aux métriques du résultat. Une combinaison
+  qui produirait zéro pas est désormais rejetée avant l'inférence.

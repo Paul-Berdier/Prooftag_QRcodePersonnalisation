@@ -230,3 +230,8 @@ def test_lab_reuses_the_exact_stage1_and_forces_each_research_output(
     assert srpg_run.quality_metrics["srpg_requested_steps"] == 40
     assert srpg_run.quality_metrics["srpg_effective_steps"] == 40
     assert srpg_run.quality_metrics["srpg_restart_strength"] == 1.0
+    assert srpg_run.quality_metrics["srpg_controlnet_scale"] == 1.35
+    assert srpg_run.quality_metrics["srpg_qr_weight"] == 500.0
+    assert srpg_run.quality_metrics["srpg_perceptual_weight"] == 3.0
+    assert srpg_run.quality_metrics["srpg_functional_weight"] == 4.0
+    assert srpg_run.quality_metrics["srpg_max_noise_delta_rms"] == 2.0

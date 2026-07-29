@@ -537,10 +537,13 @@ class LabService:
             run.quality_metrics.update(
                 {
                     "srpg_requested_steps": float(settings.srpg_steps),
-                    "srpg_effective_steps": float(
-                        max(1, int(settings.srpg_steps * settings.srpg_strength))
-                    ),
+                    "srpg_effective_steps": float(settings.srpg_effective_steps),
                     "srpg_restart_strength": float(settings.srpg_strength),
+                    "srpg_controlnet_scale": float(settings.srpg_controlnet_scale),
+                    "srpg_qr_weight": float(settings.srpg_qr_weight),
+                    "srpg_perceptual_weight": float(settings.srpg_perceptual_weight),
+                    "srpg_functional_weight": float(settings.srpg_functional_weight),
+                    "srpg_max_noise_delta_rms": float(settings.srpg_max_noise_delta_rms),
                 }
             )
         self.run_repository.save(run)
