@@ -1032,4 +1032,8 @@ class ControlNetBackend(GenerationBackend):
 
 
 def build_backends(settings: Settings) -> dict[str, GenerationBackend]:
+    if settings.diffqrcoder_upstream_enabled:
+        from .diffqrcoder_backend import UpstreamDiffQRCoderBackend
+
+        return {"qr": QRBackend(), "controlnet": UpstreamDiffQRCoderBackend(settings)}
     return {"qr": QRBackend(), "controlnet": ControlNetBackend(settings)}

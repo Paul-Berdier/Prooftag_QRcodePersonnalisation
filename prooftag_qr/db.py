@@ -169,6 +169,8 @@ lab_ratings = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
     Column("aesthetic_score", Integer),
+    Column("aesthetic_ok", Boolean),
+    Column("human_scan_result", String(20), nullable=False, default="not_tested"),
     Column("prompt_fidelity_score", Integer),
     Column("qr_discretion_score", Integer),
     Column("overall_score", Integer),

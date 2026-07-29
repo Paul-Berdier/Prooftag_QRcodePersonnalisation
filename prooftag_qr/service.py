@@ -14,7 +14,7 @@ from .artifacts import ArtifactStore
 from .backends import GLOBAL_REPAIR_VARIANTS, GenerationBackend
 from .config import Settings
 from .domain import AttemptRecord, RunRecord
-from .qr import generate_qr, module_error_rate
+from .qr import generate_diffqrcoder_qr, generate_qr, module_error_rate
 from .quality import image_change_metrics, image_quality_metrics
 from .repository import RunRepository
 from .schemas import GenerationRequest
@@ -82,7 +82,17 @@ class GenerationService:
         logger.info("generation_started", extra={"run_id": run.id, "backend": backend_name})
 
         try:
-            blueprint = generate_qr(request.payload, request.error_correction)
+            blueprint = (
+                generate_diffqrcoder_qr(
+                    request.payload,
+                    request.error_correction,
+                    version=self.settings.diffqrcoder_qr_version,
+                    mask_pattern=self.settings.diffqrcoder_qr_mask_pattern,
+                    module_size=self.settings.diffqrcoder_qr_module_size,
+                )
+                if self.settings.diffqrcoder_upstream_enabled
+                else generate_qr(request.payload, request.error_correction)
+            )
             run.qr_version = blueprint.version
             backend = self.backends[backend_name]
             max_attempts = request.max_attempts or self.settings.max_attempts

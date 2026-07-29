@@ -2,760 +2,414 @@ const state = {
   schema: null,
   methods: [],
   campaigns: [],
-  selectedCampaign: null,
-  selectedTrial: null,
+  campaign: null,
+  visibleTrials: [],
+  selectedIndex: -1,
   poller: null,
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+const copy = (value) => JSON.parse(JSON.stringify(value));
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    headers: {"Content-Type": "application/json", ...(options.headers || {})},
     ...options,
   });
   if (!response.ok) {
-    let detail = `${response.status} ${response.statusText}`;
+    let message = `${response.status} ${response.statusText}`;
     try {
       const body = await response.json();
-      detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+      message = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
     } catch (_) {}
-    throw new Error(detail);
+    throw new Error(message);
   }
   return response.status === 204 ? null : response.json();
 }
 
-function switchTab(name) {
-  $$(".tab").forEach((button) => button.classList.toggle("active", button.dataset.tab === name));
-  $$(".panel").forEach((panel) => panel.classList.toggle("active", panel.id === `${name}-panel`));
+function slug(text) {
+  return text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 90) || "prompt";
 }
 
-function deepCopy(value) {
-  return JSON.parse(JSON.stringify(value));
+function fmt(value, digits = 1) {
+  return value == null || Number.isNaN(Number(value)) ? "—" : Number(value).toFixed(digits);
 }
 
-function slug(value) {
-  return value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 90) || "method";
-}
-
-function effectiveSrpgSteps(steps, strength) {
-  if (!Number.isFinite(steps) || !Number.isFinite(strength)) return null;
-  return Math.floor(steps * strength);
-}
-
-function refreshSrpgExplanation(node) {
-  const enabled = $(".tool-srpg", node).checked;
-  node.classList.toggle("uses-srpg", enabled);
-  if (!enabled) return;
-  const steps = Number($(".srpg-steps", node).value);
-  const strength = Number($(".srpg-strength", node).value);
-  const effective = effectiveSrpgSteps(steps, strength);
-  $(".srpg-effective-steps", node).textContent = effective == null
-    ? "Configuration incomplète"
-    : `${effective} pas effectif${effective > 1 ? "s" : ""} / ${steps}`;
-  $(".srpg-warning", node).textContent = effective != null && effective < 1
-    ? "Configuration invalide : augmenter les pas planifiés ou la force afin d’exécuter au moins un pas."
-    : effective < steps
-      ? `${steps} × ${strength.toFixed(2)} = ${effective}. Pour exécuter réellement les ${steps} pas, mettre la force de redémarrage à 1,00.`
-      : `${effective} pas SRPG seront réellement calculés.`;
-}
-
-function refreshSrmpgdExplanation(node) {
-  const enabled = $(".tool-srmpgd", node).checked;
-  const srpgEnabled = $(".tool-srpg", node).checked;
-  node.classList.toggle("uses-srmpgd", enabled);
-  if (!enabled) return;
-  $(".srmpgd-warning", node).textContent = srpgEnabled
-    ? "Le latent propre du Stage 2 sera optimisé directement, puis chaque état sera testé par tous les décodeurs."
-    : "Configuration invalide : SR-MPGD exige que Stage 2 SRPG soit aussi activé.";
-}
-
-function renderMethods() {
-  const container = $("#methods");
-  container.innerHTML = "";
-  state.methods.forEach((method, index) => {
-    const node = $("#method-template").content.firstElementChild.cloneNode(true);
-    node.dataset.index = index;
-    node.classList.toggle("disabled", !method.enabled);
-    $(".method-enabled", node).checked = method.enabled;
-    $(".method-name-label", node).textContent = method.name;
-    $(".method-description", node).textContent = method.description || "";
-    $(".method-name", node).value = method.name;
-    $(".method-id", node).value = method.id;
-    $(".method-backend", node).value = method.backend;
-    $(".method-output", node).value = method.output_variant || "auto";
-    $(".reuse-stage1", node).checked = method.reuse_stage1 !== false;
-    $(".gen-steps", node).value = method.generation?.steps ?? 40;
-    $(".gen-cfg", node).value = method.generation?.guidance_scale ?? 7.5;
-    $(".gen-control", node).value = method.generation?.controlnet_scale ?? 1.35;
-    $(".gen-strength", node).value = method.generation?.strength ?? 1;
-    $(".tool-srpg", node).checked = !!method.tools?.srpg_enabled;
-    $(".tool-srmpgd", node).checked = !!method.tools?.srmpgd_enabled;
-    $(".tool-guided", node).checked = !!method.tools?.guided_rediffusion_enabled;
-    $(".tool-latent", node).checked = !!method.tools?.latent_refinement_enabled;
-    const toolSettings = method.tools?.settings || {};
-    $(".srpg-steps", node).value = toolSettings.srpg_steps ?? 40;
-    $(".srpg-strength", node).value = toolSettings.srpg_strength ?? 1;
-    $(".srpg-control", node).value = toolSettings.srpg_controlnet_scale ?? 1.35;
-    $(".srpg-qr-weight", node).value = toolSettings.srpg_qr_weight ?? 500;
-    $(".srpg-perceptual-weight", node).value = toolSettings.srpg_perceptual_weight ?? 3;
-    $(".srpg-functional-weight", node).value = toolSettings.srpg_functional_weight ?? 4;
-    $(".srpg-noise-limit", node).value = toolSettings.srpg_max_noise_delta_rms ?? 2;
-    $(".srpg-quiet-zone-mode", node).value =
-      toolSettings.srpg_quiet_zone_mode ?? "adaptive_light";
-    $(".srpg-quiet-zone-luminance", node).value =
-      toolSettings.srpg_quiet_zone_minimum_luminance ?? 0.90;
-    $(".srpg-functional-tone", node).value =
-      toolSettings.srpg_functional_pattern_tone_factor ?? 0;
-    $(".srmpgd-iterations", node).value = toolSettings.srmpgd_max_iterations ?? 20;
-    $(".srmpgd-step-size", node).value = toolSettings.srmpgd_step_size ?? 1000;
-    $(".srmpgd-lpips-weight", node).value = toolSettings.srmpgd_lpips_weight ?? 0.01;
-    $(".srmpgd-max-initial-mer", node).value =
-      toolSettings.srmpgd_max_initial_module_error_rate ?? 0.10;
-    $(".model-json", node).value = JSON.stringify(method.model || {}, null, 2);
-    $(".tools-json", node).value = JSON.stringify(toolSettings, null, 2);
-
-    const sync = () => {
-      const item = state.methods[index];
-      item.enabled = $(".method-enabled", node).checked;
-      item.name = $(".method-name", node).value.trim();
-      item.id = $(".method-id", node).value.trim();
-      item.backend = $(".method-backend", node).value;
-      item.output_variant = $(".method-output", node).value;
-      item.reuse_stage1 = $(".reuse-stage1", node).checked;
-      item.generation = {
-        steps: Number($(".gen-steps", node).value),
-        guidance_scale: Number($(".gen-cfg", node).value),
-        controlnet_scale: Number($(".gen-control", node).value),
-        strength: Number($(".gen-strength", node).value),
-      };
-      item.tools = item.tools || {};
-      item.tools.srpg_enabled = $(".tool-srpg", node).checked;
-      item.tools.srmpgd_enabled = $(".tool-srmpgd", node).checked;
-      item.tools.guided_rediffusion_enabled = $(".tool-guided", node).checked;
-      item.tools.latent_refinement_enabled = $(".tool-latent", node).checked;
-      item.tools.settings = item.tools.settings || {};
-      if (item.tools.srpg_enabled) {
-        Object.assign(item.tools.settings, {
-          srpg_steps: Number($(".srpg-steps", node).value),
-          srpg_strength: Number($(".srpg-strength", node).value),
-          srpg_controlnet_scale: Number($(".srpg-control", node).value),
-          srpg_qr_weight: Number($(".srpg-qr-weight", node).value),
-          srpg_perceptual_weight: Number($(".srpg-perceptual-weight", node).value),
-          srpg_functional_weight: Number($(".srpg-functional-weight", node).value),
-          srpg_max_noise_delta_rms: Number($(".srpg-noise-limit", node).value),
-          srpg_quiet_zone_mode: $(".srpg-quiet-zone-mode", node).value,
-          srpg_quiet_zone_minimum_luminance: Number(
-            $(".srpg-quiet-zone-luminance", node).value
-          ),
-          srpg_functional_pattern_tone_factor: Number(
-            $(".srpg-functional-tone", node).value
-          ),
-        });
-        $(".tools-json", node).value = JSON.stringify(item.tools.settings, null, 2);
-      }
-      if (item.tools.srmpgd_enabled) {
-        Object.assign(item.tools.settings, {
-          srmpgd_max_iterations: Number($(".srmpgd-iterations", node).value),
-          srmpgd_step_size: Number($(".srmpgd-step-size", node).value),
-          srmpgd_lpips_weight: Number($(".srmpgd-lpips-weight", node).value),
-          srmpgd_lpips_net: item.tools.settings.srmpgd_lpips_net || "vgg",
-          srmpgd_crop_padding_px: item.tools.settings.srmpgd_crop_padding_px ?? -1,
-          srmpgd_dark_threshold: item.tools.settings.srmpgd_dark_threshold ?? 0.5,
-          srmpgd_light_threshold: item.tools.settings.srmpgd_light_threshold ?? 0.5,
-          srmpgd_max_initial_module_error_rate: Number(
-            $(".srmpgd-max-initial-mer", node).value
-          ),
-        });
-        $(".tools-json", node).value = JSON.stringify(item.tools.settings, null, 2);
-      }
-      $(".method-name-label", node).textContent = item.name || "Sans nom";
-      node.classList.toggle("disabled", !item.enabled);
-      refreshSrpgExplanation(node);
-      refreshSrmpgdExplanation(node);
-      updateTrialCount();
-    };
-    $$("input, select", node).forEach((input) => input.addEventListener("change", sync));
-    $$(".srpg-controls input", node).forEach((input) => input.addEventListener("input", sync));
-    $$(".srmpgd-controls input", node).forEach((input) => input.addEventListener("input", sync));
-    $(".method-name", node).addEventListener("input", sync);
-    $(".model-json", node).addEventListener("change", () => {
-      try {
-        state.methods[index].model = JSON.parse($(".model-json", node).value || "{}");
-        clearComposeError();
-      } catch (error) { showComposeError(`Modèle JSON — ${method.name}: ${error.message}`); }
-    });
-    $(".tools-json", node).addEventListener("change", () => {
-      try {
-        state.methods[index].tools.settings = JSON.parse($(".tools-json", node).value || "{}");
-        clearComposeError();
-        renderMethods();
-      } catch (error) { showComposeError(`Outils JSON — ${method.name}: ${error.message}`); }
-    });
-    $(".duplicate-method", node).addEventListener("click", () => {
-      sync();
-      const clone = deepCopy(state.methods[index]);
-      clone.name += " — copie";
-      clone.id = `${slug(clone.id)}_copy_${Date.now().toString().slice(-4)}`;
-      state.methods.splice(index + 1, 0, clone);
-      renderMethods();
-    });
-    $(".remove-method", node).addEventListener("click", () => {
-      state.methods.splice(index, 1);
-      renderMethods();
-    });
-    container.append(node);
-    refreshSrpgExplanation(node);
-    refreshSrmpgdExplanation(node);
-  });
-  updateTrialCount();
+function pct(value) {
+  return value == null ? "—" : `${(Number(value) * 100).toFixed(1)}%`;
 }
 
 function parsePrompts() {
-  return $("#prompts").value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line, i) => {
-    const [rawId, text, negative = ""] = line.split("|").map((part) => part.trim());
-    if (!text) throw new Error(`Prompt ligne ${i + 1}: utiliser "id | prompt".`);
-    return { id: slug(rawId), text, negative_prompt: negative };
+  return $("#prompts").value.split(/\r?\n/).map(v => v.trim()).filter(Boolean).map((line, index) => {
+    const [id, text, negative = ""] = line.split("|").map(v => v.trim());
+    if (!text) throw new Error(`Ligne ${index + 1} : utiliser "id | prompt | négatif".`);
+    return {id: slug(id), text, negative_prompt: negative};
   });
 }
 
 function parseSeeds() {
-  const seeds = $("#seeds").value.split(/[\s,;]+/).filter(Boolean).map(Number);
-  if (!seeds.length || seeds.some((seed) => !Number.isInteger(seed) || seed < 0)) {
-    throw new Error("Les seeds doivent être des entiers positifs séparés par des virgules.");
-  }
-  return seeds;
+  const values = $("#seeds").value.split(",").map(v => Number(v.trim())).filter(Number.isFinite);
+  if (!values.length) throw new Error("Ajoute au moins une seed.");
+  return [...new Set(values)];
 }
 
-function updateTrialCount() {
+function updateCount() {
   try {
-    const prompts = parsePrompts().length;
-    const seeds = parseSeeds().length;
-    const methods = state.methods.filter((method) => method.enabled).length;
-    const total = prompts * seeds * methods;
-    $("#trial-count").textContent = `${total} essai${total > 1 ? "s" : ""}`;
-    $("#launch").disabled = total === 0 || total > 500;
-    $("#launch-hint").textContent = total > 500
-      ? "Maximum 500 essais par campagne."
-      : "Les calculs seront exécutés un par un sur le GPU.";
+    const count = parsePrompts().length * parseSeeds().length * state.methods.filter(m => m.enabled).length;
+    $("#trial-count").textContent = `${count} résultat${count > 1 ? "s" : ""}`;
+    $("#launch-summary").textContent = `${count} génération${count > 1 ? "s" : ""} planifiée${count > 1 ? "s" : ""}`;
   } catch (_) {
     $("#trial-count").textContent = "Configuration incomplète";
   }
 }
 
-function showComposeError(message) { $("#compose-error").textContent = message; }
-function clearComposeError() { $("#compose-error").textContent = ""; }
+function normalizeMethod(method) {
+  method.tools ||= {settings: {}};
+  method.tools.settings ||= {};
+  method.generation ||= {};
+  method.model ||= {};
+  return method;
+}
 
-async function launchCampaign() {
-  clearComposeError();
-  const button = $("#launch");
-  button.disabled = true;
-  button.textContent = "Mise en file…";
-  try {
-    const methods = state.methods.filter((method) => method.enabled).map((method) => ({
-      id: method.id,
-      name: method.name,
-      backend: method.backend,
-      enabled: true,
-      output_variant: method.output_variant || "auto",
-      reuse_stage1: method.reuse_stage1 !== false,
-      generation: method.generation,
-      model: method.model || {},
-      tools: {
-        srpg_enabled: !!method.tools?.srpg_enabled,
-        srmpgd_enabled: !!method.tools?.srmpgd_enabled,
-        guided_rediffusion_enabled: !!method.tools?.guided_rediffusion_enabled,
-        latent_refinement_enabled: !!method.tools?.latent_refinement_enabled,
-        settings: method.tools?.settings || {},
-      },
-    }));
-    const body = {
-      name: $("#campaign-name").value.trim(),
-      payload: $("#payload").value.trim(),
-      error_correction: $("#ecc").value,
-      prompts: parsePrompts(),
-      seeds: parseSeeds(),
-      methods,
-      max_attempts: Number($("#max-attempts").value),
+function renderMethods() {
+  const host = $("#methods");
+  host.innerHTML = "";
+  state.methods.forEach((method, index) => {
+    normalizeMethod(method);
+    const node = $("#method-template").content.firstElementChild.cloneNode(true);
+    const settings = method.tools.settings;
+    $(".enabled", node).checked = method.enabled;
+    $(".method-label", node).textContent = method.name;
+    $(".description", node).textContent = method.description || "";
+    $(".name", node).value = method.name;
+    $(".id", node).value = method.id;
+    $(".output", node).value = method.output_variant;
+    $(".steps", node).value = method.generation.steps ?? 40;
+    $(".cfg", node).value = method.generation.guidance_scale ?? 7.5;
+    $(".control", node).value = method.generation.controlnet_scale ?? 1.35;
+    $(".srpg-steps", node).value = settings.srpg_steps ?? 40;
+    $(".srpg-control", node).value = settings.srpg_controlnet_scale ?? 1.35;
+    $(".srg", node).value = settings.srpg_qr_weight ?? 500;
+    $(".pg", node).value = settings.srpg_perceptual_weight ?? 2;
+    $(".eta", node).value = settings.srpg_eta ?? 0;
+    $(".seed-offset", node).value = settings.srpg_seed_offset ?? 2000003;
+    $(".preview", node).value = settings.srpg_preview_interval ?? 5;
+    $(".mpgd-iterations", node).value = settings.srmpgd_max_iterations ?? 20;
+    $(".mpgd-lr", node).value = settings.srmpgd_step_size ?? 0.1;
+    $(".model-json", node).value = JSON.stringify(method.model, null, 2);
+    node.classList.toggle("disabled", !method.enabled);
+    node.classList.toggle("has-stage2", method.output_variant !== "raw");
+    node.classList.toggle("has-srmpgd", method.output_variant === "srmpgd");
+
+    const sync = () => {
+      const item = state.methods[index];
+      item.enabled = $(".enabled", node).checked;
+      item.name = $(".name", node).value.trim();
+      item.id = slug($(".id", node).value);
+      item.output_variant = $(".output", node).value;
+      item.reuse_stage1 = true;
+      item.generation = {
+        steps: Number($(".steps", node).value),
+        guidance_scale: Number($(".cfg", node).value),
+        controlnet_scale: Number($(".control", node).value),
+        strength: 1,
+      };
+      item.tools.srpg_enabled = item.output_variant !== "raw";
+      item.tools.srmpgd_enabled = item.output_variant === "srmpgd";
+      item.tools.guided_rediffusion_enabled = false;
+      item.tools.latent_refinement_enabled = false;
+      item.tools.settings = item.output_variant === "raw" ? {} : {
+        srpg_steps: Number($(".srpg-steps", node).value),
+        srpg_controlnet_scale: Number($(".srpg-control", node).value),
+        srpg_qr_weight: Number($(".srg", node).value),
+        srpg_perceptual_weight: Number($(".pg", node).value),
+        srpg_eta: Number($(".eta", node).value),
+        srpg_seed_offset: Number($(".seed-offset", node).value),
+        srpg_save_step_previews: true,
+        srpg_preview_interval: Number($(".preview", node).value),
+        diffqrcoder_control_guidance_start: 0,
+        diffqrcoder_control_guidance_end: 1,
+        ...(item.output_variant === "srmpgd" ? {
+          srmpgd_max_iterations: Number($(".mpgd-iterations", node).value),
+          srmpgd_step_size: Number($(".mpgd-lr", node).value),
+        } : {}),
+      };
+      $(".method-label", node).textContent = item.name || "Sans nom";
+      node.classList.toggle("disabled", !item.enabled);
+      node.classList.toggle("has-stage2", item.output_variant !== "raw");
+      node.classList.toggle("has-srmpgd", item.output_variant === "srmpgd");
+      updateCount();
     };
-    const campaign = await api("/v1/lab/campaigns", { method: "POST", body: JSON.stringify(body) });
+    $$("input, select", node).forEach(input => input.addEventListener("input", sync));
+    $(".model-json", node).addEventListener("change", () => {
+      try {
+        state.methods[index].model = JSON.parse($(".model-json", node).value);
+        $("#compose-error").textContent = "";
+      } catch (error) {
+        $("#compose-error").textContent = `JSON modèle invalide : ${error.message}`;
+      }
+    });
+    $(".remove", node).addEventListener("click", () => {
+      state.methods.splice(index, 1);
+      renderMethods();
+    });
+    host.append(node);
+  });
+  updateCount();
+}
+
+function campaignPayload() {
+  return {
+    name: $("#campaign-name").value.trim(),
+    payload: $("#payload").value.trim(),
+    error_correction: $("#ecc").value,
+    prompts: parsePrompts(),
+    seeds: parseSeeds(),
+    methods: state.methods,
+    max_attempts: Number($("#max-attempts").value),
+  };
+}
+
+async function launch() {
+  const button = $("#launch");
+  $("#compose-error").textContent = "";
+  button.disabled = true;
+  try {
+    const campaign = await api("/v1/lab/campaigns", {
+      method: "POST",
+      body: JSON.stringify(campaignPayload()),
+    });
     await loadCampaigns();
-    selectCampaign(campaign.id);
-    switchTab("results");
+    showPanel("results");
+    await selectCampaign(campaign.id);
   } catch (error) {
-    showComposeError(error.message);
+    $("#compose-error").textContent = error.message;
   } finally {
-    button.textContent = "Lancer la campagne";
-    updateTrialCount();
+    button.disabled = false;
   }
 }
 
-function statusLabel(status) {
-  const labels = {
-    queued: "En attente", running: "En cours", completed: "Terminée",
-    completed_with_errors: "Terminée avec erreurs", interrupted: "Interrompue",
-    cancelled: "Arrêtée", accepted: "Accepté", rejected: "Rejeté", error: "Erreur",
-  };
-  return labels[status] || status;
+function showPanel(id) {
+  $$(".panel").forEach(panel => panel.classList.toggle("active", panel.id === id));
+  $$(".tab").forEach(tab => tab.classList.toggle("active", tab.dataset.panel === id));
 }
 
 async function loadCampaigns() {
-  state.campaigns = await api("/v1/lab/campaigns");
+  state.campaigns = await api("/v1/lab/campaigns?limit=100");
   $("#campaign-count").textContent = state.campaigns.length;
-  const list = $("#campaign-list");
-  list.innerHTML = "";
-  state.campaigns.forEach((campaign) => {
-    const button = document.createElement("button");
-    button.className = `campaign-item${state.selectedCampaign?.id === campaign.id ? " active" : ""}`;
-    const percent = campaign.total_trials ? Math.round(100 * campaign.completed_trials / campaign.total_trials) : 0;
-    button.innerHTML = `<strong></strong><span></span>`;
-    $("strong", button).textContent = campaign.name;
-    $("span", button).textContent = `${statusLabel(campaign.status)} · ${percent}% · ${campaign.accepted_trials}/${campaign.total_trials} acceptés`;
-    button.addEventListener("click", () => selectCampaign(campaign.id));
-    list.append(button);
-  });
+  const host = $("#campaigns");
+  host.innerHTML = state.campaigns.map(campaign => `
+    <button class="campaign-item ${state.campaign?.id === campaign.id ? "active" : ""}" data-id="${campaign.id}">
+      <b>${campaign.name}</b>
+      <span>${campaign.completed_trials}/${campaign.total_trials} · ${campaign.status}</span>
+    </button>`).join("");
+  $$(".campaign-item", host).forEach(button => button.addEventListener("click", () => selectCampaign(button.dataset.id)));
 }
 
-async function selectCampaign(id) {
-  state.selectedCampaign = await api(`/v1/lab/campaigns/${id}`);
-  renderCampaign();
-  await loadCampaigns();
-  clearInterval(state.poller);
-  if (["queued", "running"].includes(state.selectedCampaign.status)) {
-    state.poller = setInterval(async () => {
-      state.selectedCampaign = await api(`/v1/lab/campaigns/${id}`);
-      renderCampaign();
-      if (!["queued", "running"].includes(state.selectedCampaign.status)) {
-        clearInterval(state.poller);
-        loadCampaigns();
-      }
-    }, 3000);
-  }
+function autoOriginal(trial) {
+  return (trial.generation?.validations || []).filter(v => v.scenario === "original");
 }
 
-function mean(values) {
-  const clean = values.filter((value) => value !== null && value !== undefined && Number.isFinite(Number(value))).map(Number);
-  return clean.length ? clean.reduce((a, b) => a + b, 0) / clean.length : null;
+function aggregate(trials) {
+  const allGenerated = trials.filter(t => t.generation);
+  const generated = allGenerated.filter(t => t.method_id !== "qr_reference");
+  const rated = generated.filter(t => t.rating && (
+    t.rating.aesthetic_ok != null || t.rating.human_scan_result !== "not_tested"
+  ));
+  const strict = generated.filter(t => t.generation.exact_payload_match && t.generation.scan_pass_rate === 1);
+  const humanScan = generated.filter(t => t.rating?.human_scan_result === "scannable");
+  const aesthetic = generated.filter(t => t.rating?.aesthetic_ok === true);
+  const mean = (items, getter) => items.length ? items.reduce((sum, item) => sum + Number(getter(item) || 0), 0) / items.length : null;
+  return {
+    generated: generated.length,
+    rated: rated.length,
+    strict: strict.length,
+    humanScan: humanScan.length,
+    aesthetic: aesthetic.length,
+    meanSsr: mean(generated, t => t.generation.scan_pass_rate),
+    meanAes: mean(generated.filter(t => t.generation.quality_metrics?.clip_aesthetic != null), t => t.generation.quality_metrics.clip_aesthetic),
+    meanClip: mean(generated.filter(t => t.generation.quality_metrics?.clip_score != null), t => t.generation.quality_metrics.clip_score),
+  };
 }
 
-function formatPercent(value) { return value == null ? "—" : `${(100 * value).toFixed(1)}%`; }
-function formatTime(ms) { return ms == null ? "—" : `${(ms / 1000).toFixed(1)} s`; }
-function formatScore(value) { return value == null ? "—" : Number(value).toFixed(2); }
-function isTechnicalControl(trial) {
-  return trial.configuration?.method?.backend === "qr";
+function renderScores() {
+  const a = aggregate(state.campaign.trials);
+  $("#final-scores").innerHTML = [
+    ["Auto strict", `${a.strict}/${a.generated}`],
+    ["SSR robuste moyen", pct(a.meanSsr)],
+    ["CLIP-aesthetic moyen", fmt(a.meanAes, 2)],
+    ["CLIPScore moyen", fmt(a.meanClip, 2)],
+    ["Tes scans positifs", `${a.humanScan}/${a.rated}`],
+    ["Tes esthétiques positives", `${a.aesthetic}/${a.rated}`],
+    ["Évalués", `${a.rated}/${a.generated}`],
+  ].map(([label, value]) => `<article><span>${label}</span><b>${value}</b></article>`).join("");
 }
 
-function renderCampaign() {
-  const campaign = state.selectedCampaign;
-  $("#empty-results").hidden = true;
-  $("#campaign-content").hidden = false;
-  $("#campaign-title").textContent = campaign.name;
-  $("#campaign-status").textContent = statusLabel(campaign.status).toUpperCase();
-  $("#campaign-meta").textContent = `${campaign.completed_trials}/${campaign.total_trials} essais · ${campaign.accepted_trials} acceptés · payload ${campaign.payload_hash.slice(0, 10)}…`;
-  $("#campaign-progress").style.width = `${campaign.total_trials ? 100 * campaign.completed_trials / campaign.total_trials : 0}%`;
-  $("#export-csv").href = `/v1/lab/campaigns/${campaign.id}/results.csv`;
-  $("#cancel-campaign").hidden = !["queued", "running"].includes(campaign.status);
-  renderMethodSummary(campaign.trials);
-  renderCharts(campaign.trials);
-  renderTrials();
-}
-
-function renderMethodSummary(trials) {
-  const groups = Object.groupBy
-    ? Object.groupBy(trials, (trial) => trial.method_id)
-    : trials.reduce((acc, trial) => ((acc[trial.method_id] ||= []).push(trial), acc), {});
-  const container = $("#method-summary");
-  container.innerHTML = "";
-  Object.entries(groups).forEach(([method, rows]) => {
-    const finished = rows.filter((row) => ["accepted", "rejected", "error"].includes(row.status));
-    const accepted = rows.filter((row) => row.status === "accepted").length;
-    const scan = mean(finished.map((row) => row.generation?.scan_pass_rate));
-    const time = mean(finished.map((row) => row.generation?.total_ms));
-    const card = document.createElement("article");
-    card.className = "summary-card";
-    const technicalControl = rows.every(isTechnicalControl);
-    card.innerHTML = `
-      <strong></strong>
-      ${technicalControl ? '<div class="muted">TÉMOIN TECHNIQUE — HORS CLASSEMENT</div>' : ""}
-      <div class="summary-line"><span>Stricts</span><b>${accepted}/${rows.length}</b></div>
-      <div class="summary-line"><span>SSR moyen</span><b>${formatPercent(scan)}</b></div>
-      <div class="summary-line"><span>Temps moyen</span><b>${formatTime(time)}</b></div>
-      <div class="mini-bar"><span style="width:${scan == null ? 0 : scan * 100}%"></span></div>`;
-    $("strong", card).textContent = method;
-    container.append(card);
-  });
-}
-
-const SVG_NS = "http://www.w3.org/2000/svg";
-const CHART_COLORS = ["#65e6ba", "#38bdf8", "#fbbf24", "#fb7185", "#c084fc", "#fb923c"];
-
-function svgElement(name, attributes = {}, text = null) {
-  const node = document.createElementNS(SVG_NS, name);
-  Object.entries(attributes).forEach(([key, value]) => node.setAttribute(key, value));
-  if (text !== null) node.textContent = text;
-  return node;
-}
-
-function emptyChart(svg, message) {
-  svg.replaceChildren();
-  svg.setAttribute("viewBox", "0 0 620 220");
-  svg.append(svgElement("text", {
-    x: 310, y: 110, "text-anchor": "middle", class: "chart-axis-label",
-  }, message));
-}
-
-function renderMethodChart(trials) {
-  const svg = $("#method-chart");
-  const complete = trials.filter((trial) => trial.generation && !isTechnicalControl(trial));
-  if (!complete.length) {
-    emptyChart(svg, "Les points apparaîtront après les premières validations.");
-    return;
-  }
-  const groups = complete.reduce((result, trial) => {
-    (result[trial.method_id] ||= []).push(trial);
-    return result;
-  }, {});
-  const rows = Object.entries(groups).map(([method, items]) => ({
-    method,
-    ssr: mean(items.map((item) => item.generation?.scan_pass_rate)) ?? 0,
-    strict: items.filter((item) => item.status === "accepted").length / items.length,
-  }));
-  const width = 620;
-  const height = 240;
-  const left = 42;
-  const right = 14;
-  const top = 16;
-  const bottom = 54;
-  const plotWidth = width - left - right;
-  const plotHeight = height - top - bottom;
-  svg.replaceChildren();
-  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-  [0, 0.25, 0.5, 0.75, 1].forEach((tick) => {
-    const y = top + plotHeight * (1 - tick);
-    svg.append(svgElement("line", {
-      x1: left, y1: y, x2: width - right, y2: y, class: "chart-grid-line",
-    }));
-    svg.append(svgElement("text", {
-      x: left - 7, y: y + 3, "text-anchor": "end", class: "chart-tick",
-    }, `${Math.round(tick * 100)}%`));
-  });
-  const groupWidth = plotWidth / rows.length;
-  const barWidth = Math.min(32, groupWidth * 0.28);
-  rows.forEach((row, index) => {
-    const center = left + groupWidth * (index + 0.5);
-    [
-      { value: row.ssr, x: center - barWidth - 2, color: "#38bdf8", label: "SSR moyen" },
-      { value: row.strict, x: center + 2, color: "#65e6ba", label: "Acceptés stricts" },
-    ].forEach((bar) => {
-      const barHeight = plotHeight * bar.value;
-      const rect = svgElement("rect", {
-        x: bar.x, y: top + plotHeight - barHeight, width: barWidth,
-        height: barHeight, rx: 3, fill: bar.color,
-      });
-      rect.append(svgElement("title", {}, `${row.method} · ${bar.label}: ${formatPercent(bar.value)}`));
-      svg.append(rect);
-    });
-    svg.append(svgElement("text", {
-      x: center, y: height - 31, "text-anchor": "middle", class: "chart-method-label",
-    }, row.method.length > 18 ? `${row.method.slice(0, 17)}…` : row.method));
-  });
-  svg.append(svgElement("text", {
-    x: left, y: height - 8, class: "chart-tick", fill: "#38bdf8",
-  }, "■ SSR moyen"));
-  svg.append(svgElement("text", {
-    x: left + 100, y: height - 8, class: "chart-tick", fill: "#65e6ba",
-  }, "■ Acceptés stricts"));
-}
-
-function renderTradeoffChart(trials) {
-  const svg = $("#tradeoff-chart");
-  const complete = trials.filter((trial) =>
-    !isTechnicalControl(trial)
-      && trial.generation?.scan_pass_rate != null
-      && trial.generation?.module_error_rate != null
-  );
-  if (!complete.length) {
-    emptyChart(svg, "Les points apparaîtront après les premières validations.");
-    return;
-  }
-  const width = 620;
-  const height = 240;
-  const left = 48;
-  const right = 20;
-  const top = 16;
-  const bottom = 42;
-  const plotWidth = width - left - right;
-  const plotHeight = height - top - bottom;
-  const methods = [...new Set(complete.map((trial) => trial.method_id))];
-  const maxError = Math.max(0.05, ...complete.map((trial) => trial.generation.module_error_rate));
-  svg.replaceChildren();
-  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-  [0, 0.25, 0.5, 0.75, 1].forEach((tick) => {
-    const y = top + plotHeight * (1 - tick);
-    svg.append(svgElement("line", {
-      x1: left, y1: y, x2: width - right, y2: y, class: "chart-grid-line",
-    }));
-    svg.append(svgElement("text", {
-      x: left - 7, y: y + 3, "text-anchor": "end", class: "chart-tick",
-    }, `${Math.round(tick * 100)}%`));
-  });
-  complete.forEach((trial) => {
-    const x = left + plotWidth * trial.generation.module_error_rate / maxError;
-    const y = top + plotHeight * (1 - trial.generation.scan_pass_rate);
-    const color = CHART_COLORS[methods.indexOf(trial.method_id) % CHART_COLORS.length];
-    const radius = trial.rating?.overall_score ? 4 + trial.rating.overall_score * 0.35 : 5;
-    const circle = svgElement("circle", {
-      cx: x, cy: y, r: radius, fill: color, opacity: 0.82,
-      stroke: trial.status === "accepted" ? "#f3f6fa" : "none",
-      "stroke-width": 1.2,
-    });
-    circle.append(svgElement(
-      "title",
-      {},
-      `${trial.prompt_id} · ${trial.method_id} · seed ${trial.seed}\n`
-        + `SSR ${formatPercent(trial.generation.scan_pass_rate)} · `
-        + `MER ${formatPercent(trial.generation.module_error_rate)}`
-        + (trial.rating?.overall_score ? ` · note ${trial.rating.overall_score}/10` : ""),
-    ));
-    svg.append(circle);
-  });
-  svg.append(svgElement("text", {
-    x: width / 2, y: height - 7, "text-anchor": "middle", class: "chart-axis-label",
-  }, `Erreur modules (0 à ${formatPercent(maxError)}) →`));
-  svg.append(svgElement("text", {
-    x: 11, y: height / 2, transform: `rotate(-90 11 ${height / 2})`,
-    "text-anchor": "middle", class: "chart-axis-label",
-  }, "SSR robuste"));
-}
-
-function renderCharts(trials) {
-  renderMethodChart(trials);
-  renderTradeoffChart(trials);
-}
-
-function visibleTrials() {
-  const filter = $("#status-filter").value;
-  let rows = [...(state.selectedCampaign?.trials || [])];
-  rows = rows.filter((trial) => {
-    if (filter === "all") return true;
-    if (filter === "rated") return !!trial.rating;
-    if (filter === "favorite") return !!trial.rating?.favorite;
-    return trial.status === filter;
-  });
-  const sort = $("#sort-results").value;
-  if (sort === "scan") rows.sort((a, b) => (b.generation?.scan_pass_rate ?? -1) - (a.generation?.scan_pass_rate ?? -1));
-  if (sort === "rating") rows.sort((a, b) => (b.rating?.overall_score ?? -1) - (a.rating?.overall_score ?? -1));
-  if (sort === "time") rows.sort((a, b) => (a.generation?.total_ms ?? Infinity) - (b.generation?.total_ms ?? Infinity));
-  return rows;
+function orderedTrials() {
+  let trials = state.campaign.trials.filter(t => t.generation);
+  const filter = $("#filter").value;
+  if (filter === "unrated") trials = trials.filter(t => !t.rating || (t.rating.aesthetic_ok == null && t.rating.human_scan_result === "not_tested"));
+  if (filter === "scannable" || filter === "not_scannable") trials = trials.filter(t => t.rating?.human_scan_result === filter);
+  if (filter === "auto_pass") trials = trials.filter(t => t.generation.exact_payload_match && t.generation.scan_pass_rate === 1);
+  const sort = $("#sort").value;
+  if (sort === "ssr") trials.sort((a, b) => (b.generation.scan_pass_rate ?? -1) - (a.generation.scan_pass_rate ?? -1));
+  if (sort === "aesthetic") trials.sort((a, b) => (b.generation.quality_metrics?.clip_aesthetic ?? -1) - (a.generation.quality_metrics?.clip_aesthetic ?? -1));
+  if (sort === "time") trials.sort((a, b) => (a.generation.total_ms ?? Infinity) - (b.generation.total_ms ?? Infinity));
+  return trials;
 }
 
 function renderTrials() {
-  const grid = $("#trial-grid");
-  grid.innerHTML = "";
-  visibleTrials().forEach((trial) => {
-    const card = document.createElement("article");
-    card.className = "trial-card";
-    card.tabIndex = 0;
-    card.setAttribute("role", "button");
-    card.setAttribute(
-      "aria-label",
-      `Ouvrir ${trial.prompt_id}, ${trial.method_id}, seed ${trial.seed}`,
-    );
-    const image = trial.generation?.image_url
-      ? `<img loading="lazy" src="${trial.generation.image_url}" alt="Résultat ${trial.prompt_id} ${trial.method_id}">`
-      : `<span class="trial-placeholder">${statusLabel(trial.status)}</span>`;
-    card.innerHTML = `
-      <div class="trial-image">${image}</div>
+  state.visibleTrials = orderedTrials();
+  $("#trials").innerHTML = state.visibleTrials.map((trial, index) => {
+    const run = trial.generation;
+    const rating = trial.rating;
+    const original = autoOriginal(trial);
+    const originalPass = original.filter(v => v.exact_payload_match).length;
+    return `<button class="trial" data-index="${index}">
+      <div class="image"><img src="${run.image_url}" loading="lazy" alt="${trial.prompt_id}"></div>
       <div class="trial-body">
-        <div class="trial-title"><strong></strong><span class="status ${trial.status}">${statusLabel(trial.status)}</span></div>
-        <div class="muted">${trial.prompt_id} · seed ${trial.seed} · sortie ${trial.generation?.selected_variant || "—"}${trial.generation?.quality_metrics?.stage1_mean_absolute_change == null ? "" : ` · Δ Stage 1 ${formatPercent(trial.generation.quality_metrics.stage1_mean_absolute_change)}`}${trial.rating?.favorite ? " · ★" : ""}</div>
-        <div class="trial-metrics">
-          <span>SSR<b>${formatPercent(trial.generation?.scan_pass_rate)}</b></span>
-          <span>MER<b>${formatPercent(trial.generation?.module_error_rate)}</b></span>
-          <span>Note<b>${trial.rating?.overall_score ?? "—"}</b></span>
+        <div class="trial-title"><b>${trial.prompt_id} / ${trial.method_id}</b><span class="status ${trial.status}">${trial.status}</span></div>
+        <p>seed ${trial.seed} · ${run.selected_variant}</p>
+        <div class="trial-stats">
+          <span>SSR<b>${pct(run.scan_pass_rate)}</b></span>
+          <span>Original<b>${originalPass}/${original.length}</b></span>
+          <span>MER<b>${pct(run.module_error_rate)}</b></span>
+          <span>CLIP-AES<b>${fmt(run.quality_metrics?.clip_aesthetic, 2)}</b></span>
         </div>
-      </div>`;
-    $(".trial-title strong", card).textContent = trial.method_id;
-    card.addEventListener("click", () => openTrial(trial.id));
-    card.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        openTrial(trial.id);
-      }
-    });
-    grid.append(card);
-  });
+        <div class="badges">
+          ${rating?.aesthetic_ok === true ? "<i class='good'>Esthétique ✓</i>" : rating?.aesthetic_ok === false ? "<i class='bad'>Esthétique ✕</i>" : "<i>Esthétique ?</i>"}
+          ${rating?.human_scan_result === "scannable" ? "<i class='good'>Scan ✓</i>" : rating?.human_scan_result === "not_scannable" ? "<i class='bad'>Scan ✕</i>" : "<i>Scan ?</i>"}
+        </div>
+      </div>
+    </button>`;
+  }).join("");
+  $$(".trial", $("#trials")).forEach(button => button.addEventListener("click", () => openTrial(Number(button.dataset.index))));
 }
 
-const QUALITY_METRIC_LABELS = {
-  srpg_requested_steps: "SRPG — pas planifiés",
-  srpg_effective_steps: "SRPG — pas réellement exécutés",
-  srpg_restart_strength: "SRPG — force de redémarrage",
-  srpg_controlnet_scale: "SRPG — ControlNet appliqué",
-  srpg_qr_weight: "SRPG — poids QR appliqué",
-  srpg_core_module_error_rate: "SRPG — MER du cœur QR livré",
-  srpg_functional_module_error_rate: "SRPG — MER des motifs fonctionnels",
-  srpg_data_module_error_rate: "SRPG — MER des modules de données",
-  srpg_quiet_zone_module_error_rate: "SRPG — MER de la quiet zone",
-  srpg_quiet_zone_restored: "SRPG — quiet zone restaurée",
-  srpg_quiet_zone_minimum_luminance: "SRPG — luminance minimale de la marge",
-  srpg_functional_pattern_tone_factor: "SRPG — tonification fonctionnelle",
-  srpg_perceptual_weight: "SRPG — poids perceptuel appliqué",
-  srpg_functional_weight: "SRPG — poids fonctionnel appliqué",
-  srpg_max_noise_delta_rms: "SRPG — limite gradient RMS appliquée",
-  srmpgd_initial_core_module_error_rate: "SR-MPGD — MER initial du cœur",
-  srmpgd_final_core_module_error_rate: "SR-MPGD — MER final du cœur",
-  srmpgd_delivered_module_error_rate: "SR-MPGD — MER image livrée",
-  srmpgd_functional_module_error_rate: "SR-MPGD — MER des motifs fonctionnels",
-  srmpgd_data_module_error_rate: "SR-MPGD — MER des modules de données",
-  srmpgd_quiet_zone_module_error_rate: "SR-MPGD — MER de la quiet zone",
-  srmpgd_quiet_zone_restored: "SR-MPGD — quiet zone restaurée",
-  stage1_changed_pixel_ratio: "Stage 1 — pixels modifiés",
-  stage1_mean_absolute_change: "Stage 1 — changement absolu moyen",
-};
-
-async function openTrial(id) {
-  const trial = await api(`/v1/lab/trials/${id}`);
-  state.selectedTrial = trial;
-  $("#dialog-kicker").textContent = `${statusLabel(trial.status)} · seed ${trial.seed}`;
-  $("#dialog-title").textContent = `${trial.prompt_id} / ${trial.method_id}`;
-  const run = trial.generation;
-  const metrics = [
-    ["Sortie réellement notée", run?.selected_variant || "—"],
-    ["Sélection", run?.selection_mode === "forced" ? "Candidat forcé" : "Livraison automatique"],
-    ["Stage 1", run?.stage1_reused ? "Réutilisé — aucune régénération" : "Généré pour cet essai"],
-    ["SSR robuste", formatPercent(run?.scan_pass_rate)],
-    ["Payload original", run?.exact_payload_match == null ? "—" : run.exact_payload_match ? "Exact" : "Échec"],
-    ["MER", formatPercent(run?.module_error_rate)],
-    ["Génération", formatTime(run?.generation_ms)],
-    ["Validation", formatTime(run?.validation_ms)],
-    ["Total", formatTime(run?.total_ms)],
-  ];
-  Object.entries(run?.quality_metrics || {}).sort(([left], [right]) =>
-    left.localeCompare(right)
-  ).forEach(([name, value]) => {
-    metrics.push([
-      QUALITY_METRIC_LABELS[name] || name.replaceAll("_", " "),
-      formatScore(value),
-    ]);
-  });
-  $("#dialog-metrics").innerHTML = metrics.map(([label, value]) =>
-    `<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join("");
-  const gallery = $("#artifact-gallery");
-  gallery.innerHTML = "";
-  if (run) {
-    const artifacts = await api(`/v1/generations/${run.id}/artifacts`);
-    artifacts.forEach((artifact) => {
-      const figure = document.createElement("figure");
-      figure.className = "artifact";
-      figure.innerHTML = `<img loading="lazy" src="${artifact.url}" alt=""><figcaption></figcaption>`;
-      $("img", figure).alt = artifact.name;
-      $("figcaption", figure).textContent = artifact.name === "final"
-        ? `RÉSULTAT ÉVALUÉ — ${run.selected_variant || "inconnu"}`
-        : artifact.name === "stage1_raw"
-          ? "STAGE 1 PARTAGÉ — référence artistique"
-          : artifact.name;
-      gallery.append(figure);
-    });
+async function selectCampaign(id) {
+  state.campaign = await api(`/v1/lab/campaigns/${id}`);
+  $("#empty").hidden = true;
+  $("#campaign-view").hidden = false;
+  $("#campaign-title").textContent = state.campaign.name;
+  $("#campaign-status").textContent = state.campaign.status;
+  $("#campaign-meta").textContent = `${state.campaign.completed_trials}/${state.campaign.total_trials} terminés · ${state.campaign.accepted_trials} strictement acceptés`;
+  $("#progress").style.width = `${state.campaign.total_trials ? 100 * state.campaign.completed_trials / state.campaign.total_trials : 0}%`;
+  $("#export").href = `/v1/lab/campaigns/${id}/results.csv`;
+  $("#cancel").disabled = !["queued", "running"].includes(state.campaign.status);
+  renderScores();
+  renderTrials();
+  await loadCampaigns();
+  clearInterval(state.poller);
+  if (["queued", "running"].includes(state.campaign.status)) {
+    state.poller = setInterval(() => selectCampaign(id).catch(console.error), 2500);
   }
+}
+
+function metric(label, value) {
+  return `<article><span>${label}</span><b>${value}</b></article>`;
+}
+
+async function openTrial(index) {
+  state.selectedIndex = index;
+  const trial = state.visibleTrials[index];
+  const run = trial.generation;
+  $("#dialog-kicker").textContent = `${trial.status} · seed ${trial.seed}`;
+  $("#dialog-title").textContent = `${trial.prompt_id} / ${trial.method_id}`;
+  const original = autoOriginal(trial);
+  $("#dialog-metrics").innerHTML = [
+    metric("Sortie", run.selected_variant),
+    metric("SSR robuste", pct(run.scan_pass_rate)),
+    metric("Payload original", `${original.filter(v => v.exact_payload_match).length}/${original.length}`),
+    metric("MER", pct(run.module_error_rate)),
+    metric("CLIP-aesthetic", fmt(run.quality_metrics?.clip_aesthetic, 3)),
+    metric("CLIPScore", fmt(run.quality_metrics?.clip_score, 3)),
+    metric("Génération", `${fmt((run.generation_ms || 0) / 1000, 1)} s`),
+    metric("Validation", `${fmt((run.validation_ms || 0) / 1000, 1)} s`),
+  ].join("");
+  const artifacts = await api(`/v1/generations/${run.id}/artifacts`);
+  $("#artifacts").innerHTML = artifacts.map(item => `
+    <figure><img src="${item.url}" loading="lazy"><figcaption>${item.name}</figcaption></figure>`).join("");
+  $("#validations").innerHTML = `<table>
+    <thead><tr><th>Décodeur</th><th>Scénario</th><th>Payload exact</th><th>Latence</th></tr></thead>
+    <tbody>${(run.validations || []).map(item => `<tr>
+      <td>${item.decoder}</td><td>${item.scenario}</td>
+      <td class="${item.exact_payload_match ? "pass" : "fail"}">${item.exact_payload_match ? "Oui" : "Non"}</td>
+      <td>${fmt(item.latency_ms, 1)} ms</td>
+    </tr>`).join("")}</tbody>
+  </table>`;
   const rating = trial.rating || {};
-  $("#rating-aesthetic").value = rating.aesthetic_score ?? "";
-  $("#rating-fidelity").value = rating.prompt_fidelity_score ?? "";
-  $("#rating-discretion").value = rating.qr_discretion_score ?? "";
-  $("#rating-overall").value = rating.overall_score ?? "";
-  $("#rating-favorite").checked = !!rating.favorite;
+  $$("input[name='aesthetic-ok']").forEach(input => input.checked = String(rating.aesthetic_ok) === input.value);
+  $$("input[name='human-scan']").forEach(input => input.checked = (rating.human_scan_result || "not_tested") === input.value);
+  $("#aesthetic-score").value = rating.aesthetic_score ?? "";
   $("#rating-notes").value = rating.notes ?? "";
-  $("#physical-payload").value = "";
-  $("#physical-device").value = "";
-  $("#physical-notes").value = "";
   $("#dialog-message").textContent = "";
-  $("#save-physical").disabled = !run;
   $("#trial-dialog").showModal();
 }
 
-function nullableNumber(selector) {
-  const value = $(selector).value;
-  return value === "" ? null : Number(value);
-}
-
-async function saveRating() {
-  const trial = state.selectedTrial;
-  const rating = await api(`/v1/lab/trials/${trial.id}/rating`, {
+async function saveAndMove(direction = 1) {
+  const trial = state.visibleTrials[state.selectedIndex];
+  const aesthetic = $("input[name='aesthetic-ok']:checked")?.value;
+  const scan = $("input[name='human-scan']:checked")?.value || "not_tested";
+  await api(`/v1/lab/trials/${trial.id}/rating`, {
     method: "PUT",
     body: JSON.stringify({
-      aesthetic_score: nullableNumber("#rating-aesthetic"),
-      prompt_fidelity_score: nullableNumber("#rating-fidelity"),
-      qr_discretion_score: nullableNumber("#rating-discretion"),
-      overall_score: nullableNumber("#rating-overall"),
-      favorite: $("#rating-favorite").checked,
+      aesthetic_score: $("#aesthetic-score").value ? Number($("#aesthetic-score").value) : null,
+      aesthetic_ok: aesthetic == null ? null : aesthetic === "true",
+      human_scan_result: scan,
+      prompt_fidelity_score: null,
+      qr_discretion_score: null,
+      overall_score: null,
+      favorite: false,
       notes: $("#rating-notes").value,
     }),
   });
-  $("#dialog-message").textContent = "Note enregistrée.";
-  state.selectedTrial.rating = rating;
-  const row = state.selectedCampaign.trials.find((item) => item.id === trial.id);
-  if (row) row.rating = rating;
-  renderCharts(state.selectedCampaign.trials);
-  renderTrials();
-}
-
-async function savePhysical() {
-  const run = state.selectedTrial?.generation;
-  if (!run) return;
-  const decoded = $("#physical-payload").value.trim();
-  const result = await api(`/v1/generations/${run.id}/physical-validations`, {
-    method: "POST",
-    body: JSON.stringify({
-      decoded_payload: decoded || null,
-      device: $("#physical-device").value.trim() || "unknown",
-      material: $("#physical-material").value,
-      lighting: $("#physical-lighting").value.trim() || "unknown",
-      notes: $("#physical-notes").value,
-    }),
-  });
-  $("#dialog-message").textContent = `Scan enregistré : ${result.outcome}.`;
+  $("#dialog-message").textContent = "Verdict enregistré.";
+  await selectCampaign(state.campaign.id);
+  const next = Math.max(0, Math.min(state.visibleTrials.length - 1, state.selectedIndex + direction));
+  if (next !== state.selectedIndex || direction > 0) await openTrial(next);
 }
 
 async function init() {
-  $$(".tab").forEach((button) => button.addEventListener("click", () => switchTab(button.dataset.tab)));
-  ["prompts", "seeds"].forEach((id) => $(`#${id}`).addEventListener("input", updateTrialCount));
-  $("#launch").addEventListener("click", launchCampaign);
-  $("#add-method").addEventListener("click", () => {
-    state.methods.push({
-      id: `method_${Date.now().toString().slice(-6)}`, name: "Nouvelle méthode",
-      backend: "controlnet", enabled: true,
-      output_variant: "raw", reuse_stage1: true,
-      generation: { steps: 40, guidance_scale: 7.5, controlnet_scale: 1.35, strength: 1 },
-      model: {}, tools: { settings: {} }, description: "Configuration personnalisée.",
-    });
-    renderMethods();
-  });
-  $("#refresh-campaigns").addEventListener("click", loadCampaigns);
-  $("#status-filter").addEventListener("change", renderTrials);
-  $("#sort-results").addEventListener("change", renderTrials);
-  $("#cancel-campaign").addEventListener("click", async () => {
-    await api(`/v1/lab/campaigns/${state.selectedCampaign.id}/cancel`, { method: "POST" });
-    selectCampaign(state.selectedCampaign.id);
-  });
-  $("#save-rating").addEventListener("click", () => saveRating().catch((error) => $("#dialog-message").textContent = error.message));
-  $("#save-physical").addEventListener("click", () => savePhysical().catch((error) => $("#dialog-message").textContent = error.message));
-
   try {
-    const [schema, runtime] = await Promise.all([api("/v1/lab/schema"), api("/v1/runtime")]);
-    state.schema = schema;
-    state.methods = schema.profiles.map(deepCopy);
-    renderMethods();
-    const gpu = runtime.cuda_available ? runtime.cuda_device || "CUDA" : "CPU";
-    const quality = schema.quality_scoring?.clip_enabled ? "CLIP CPU" : "CLIP désactivé";
-    $("#runtime-status").textContent = `${runtime.environment || "API"} · ${gpu} · ${quality}`;
+    const health = await api("/healthz");
+    $("#runtime-status").textContent = `API ${health.version} · prête`;
     $("#runtime-status").classList.add("ok");
+    state.schema = await api("/v1/lab/schema");
+    state.methods = state.schema.profiles.map(normalizeMethod);
+    renderMethods();
     await loadCampaigns();
   } catch (error) {
-    $("#runtime-status").textContent = `API indisponible · ${error.message}`;
-    showComposeError(error.message);
+    $("#runtime-status").textContent = `API indisponible : ${error.message}`;
   }
 }
 
-document.addEventListener("DOMContentLoaded", init);
+$$(".tab").forEach(tab => tab.addEventListener("click", () => showPanel(tab.dataset.panel)));
+$("#launch").addEventListener("click", launch);
+$("#refresh").addEventListener("click", loadCampaigns);
+$("#cancel").addEventListener("click", async () => {
+  await api(`/v1/lab/campaigns/${state.campaign.id}/cancel`, {method: "POST"});
+  await selectCampaign(state.campaign.id);
+});
+$("#filter").addEventListener("change", renderTrials);
+$("#sort").addEventListener("change", renderTrials);
+$("#prompts").addEventListener("input", updateCount);
+$("#seeds").addEventListener("input", updateCount);
+$("#add-method").addEventListener("click", () => {
+  const source = state.methods.find(m => m.backend === "controlnet") || state.methods[0];
+  const clone = copy(source);
+  clone.id = `${slug(clone.id)}_${Date.now().toString().slice(-5)}`;
+  clone.name = `${clone.name} — variante`;
+  clone.enabled = true;
+  state.methods.push(clone);
+  renderMethods();
+});
+$("#close-dialog").addEventListener("click", () => $("#trial-dialog").close());
+$("#save-next").addEventListener("click", () => saveAndMove(1).catch(error => $("#dialog-message").textContent = error.message));
+$("#previous-trial").addEventListener("click", () => {
+  const previous = Math.max(0, state.selectedIndex - 1);
+  if (previous !== state.selectedIndex) openTrial(previous);
+});
+
+init();

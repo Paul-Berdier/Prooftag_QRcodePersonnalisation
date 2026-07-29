@@ -24,6 +24,14 @@ class Settings(BaseSettings):
         "binary", "gray_quiet_zone", "nacholmo_extremes_25"
     ] = "binary"
     controlnet_pipeline_mode: Literal["text2img", "img2img"] = "img2img"
+    diffqrcoder_upstream_enabled: bool = False
+    diffqrcoder_revision: str = "e24ea73ee2e13c7e6e87cb422e8b11784e70ae00"
+    diffqrcoder_qr_version: int = Field(default=3, ge=1, le=40)
+    diffqrcoder_qr_mask_pattern: int = Field(default=4, ge=0, le=7)
+    diffqrcoder_qr_module_size: int = Field(default=20, ge=4, le=64)
+    diffqrcoder_qr_padding_px: int = Field(default=78, ge=0, le=256)
+    diffqrcoder_control_guidance_start: float = Field(default=0.0, ge=0.0, le=1.0)
+    diffqrcoder_control_guidance_end: float = Field(default=1.0, ge=0.0, le=1.0)
     device: str = "cuda"
     validation_min_pass_rate: float = Field(default=1.0, ge=0.0, le=1.0)
     max_attempts: int = Field(default=3, ge=1, le=20)
@@ -125,7 +133,11 @@ class Settings(BaseSettings):
             )
         if self.srpg_enabled and self.guided_rediffusion_enabled:
             raise ValueError("SRPG and legacy guided rediffusion cannot be enabled together")
-        if self.srpg_enabled and self.controlnet_pipeline_mode != "img2img":
+        if (
+            self.srpg_enabled
+            and not self.diffqrcoder_upstream_enabled
+            and self.controlnet_pipeline_mode != "img2img"
+        ):
             raise ValueError("SRPG requires the img2img ControlNet pipeline")
         if self.srpg_enabled and self.srpg_effective_steps < 1:
             raise ValueError(
@@ -141,6 +153,8 @@ class Settings(BaseSettings):
             raise ValueError("SRPG robust blur kernel must be odd")
         if self.srpg_latent_fusion_start > self.srpg_latent_fusion_end:
             raise ValueError("SRPG latent fusion start cannot exceed end")
+        if self.diffqrcoder_control_guidance_start > self.diffqrcoder_control_guidance_end:
+            raise ValueError("DiffQRCoder control guidance start cannot exceed end")
         return self
 
     @property

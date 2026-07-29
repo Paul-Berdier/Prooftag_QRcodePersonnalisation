@@ -34,8 +34,14 @@ DIFFQRCODER_MODEL_SETTINGS = {
     "base_model_id": DIFFQRCODER_BASE_MODEL,
     "controlnet_model_id": "monster-labs/control_v1p_sd15_qrcode_monster",
     "controlnet_model_subfolder": "v2",
-    "controlnet_conditioning_profile": "gray_quiet_zone",
-    "controlnet_pipeline_mode": "img2img",
+    "controlnet_conditioning_profile": "binary",
+    "controlnet_pipeline_mode": "text2img",
+    "diffqrcoder_upstream_enabled": True,
+    "diffqrcoder_revision": "e24ea73ee2e13c7e6e87cb422e8b11784e70ae00",
+    "diffqrcoder_qr_version": 3,
+    "diffqrcoder_qr_mask_pattern": 4,
+    "diffqrcoder_qr_module_size": 20,
+    "diffqrcoder_qr_padding_px": 78,
 }
 
 GENERATION_KEYS = {
@@ -50,6 +56,12 @@ MODEL_SETTING_KEYS = {
     "controlnet_model_subfolder",
     "controlnet_conditioning_profile",
     "controlnet_pipeline_mode",
+    "diffqrcoder_upstream_enabled",
+    "diffqrcoder_revision",
+    "diffqrcoder_qr_version",
+    "diffqrcoder_qr_mask_pattern",
+    "diffqrcoder_qr_module_size",
+    "diffqrcoder_qr_padding_px",
 }
 TOOL_SETTING_KEYS = {
     "srpg_steps",
@@ -78,6 +90,8 @@ TOOL_SETTING_KEYS = {
     "srpg_save_step_previews",
     "srpg_preview_interval",
     "srpg_seed_offset",
+    "diffqrcoder_control_guidance_start",
+    "diffqrcoder_control_guidance_end",
     "srpg_latent_fusion_enabled",
     "srpg_latent_fusion_channel",
     "srpg_latent_fusion_alpha",
@@ -117,7 +131,7 @@ TOOL_SETTING_KEYS = {
 }
 
 
-def laboratory_profiles() -> list[dict[str, Any]]:
+def _legacy_laboratory_profiles() -> list[dict[str, Any]]:
     """Editable starting points; none of them is presented as a production guarantee."""
 
     return [
@@ -129,7 +143,7 @@ def laboratory_profiles() -> list[dict[str, Any]]:
             "output_variant": "raw",
             "reuse_stage1": False,
             "generation": {"steps": 1, "guidance_scale": 0, "controlnet_scale": 0, "strength": 1},
-            "model": {},
+            "model": DIFFQRCODER_MODEL_SETTINGS.copy(),
             "tools": {"settings": {}},
             "description": "Contrôle binaire sans diffusion.",
         },
@@ -499,6 +513,117 @@ def laboratory_profiles() -> list[dict[str, Any]]:
     ]
 
 
+TOOL_SETTING_KEYS = {
+    "srpg_steps",
+    "srpg_controlnet_scale",
+    "srpg_qr_weight",
+    "srpg_perceptual_weight",
+    "srpg_eta",
+    "srpg_seed_offset",
+    "srpg_save_step_previews",
+    "srpg_preview_interval",
+    "srmpgd_max_iterations",
+    "srmpgd_step_size",
+    "diffqrcoder_control_guidance_start",
+    "diffqrcoder_control_guidance_end",
+}
+
+
+def laboratory_profiles() -> list[dict[str, Any]]:
+    """Only the pinned public DiffQRCoder chain and its binary QR control."""
+
+    generation = {
+        "steps": 40,
+        "guidance_scale": 7.5,
+        "controlnet_scale": 1.35,
+        "strength": 1.0,
+    }
+    stage2 = {
+        "srpg_steps": 40,
+        "srpg_controlnet_scale": 1.35,
+        "srpg_qr_weight": 500.0,
+        "srpg_perceptual_weight": 2.0,
+        "srpg_eta": 0.0,
+        "srpg_seed_offset": 2_000_003,
+        "srpg_save_step_previews": True,
+        "srpg_preview_interval": 5,
+        "diffqrcoder_control_guidance_start": 0.0,
+        "diffqrcoder_control_guidance_end": 1.0,
+    }
+    return [
+        {
+            "id": "qr_reference",
+            "name": "QR témoin",
+            "backend": "qr",
+            "enabled": True,
+            "output_variant": "raw",
+            "reuse_stage1": False,
+            "generation": {
+                "steps": 1,
+                "guidance_scale": 0,
+                "controlnet_scale": 0,
+                "strength": 1,
+            },
+            "model": {},
+            "tools": {"settings": {}},
+            "description": "QR binaire exact, sans diffusion. Contrôle des décodeurs.",
+        },
+        {
+            "id": "diffqrcoder_stage1",
+            "name": "DiffQRCoder — Stage 1",
+            "backend": "controlnet",
+            "enabled": True,
+            "output_variant": "raw",
+            "reuse_stage1": True,
+            "generation": generation.copy(),
+            "model": DIFFQRCODER_MODEL_SETTINGS.copy(),
+            "tools": {"settings": {}},
+            "description": "Cetus-Mix Whalefall + QR Monster v2, sortie Stage 1 brute.",
+        },
+        {
+            "id": "diffqrcoder_srpg",
+            "name": "DiffQRCoder — Stage 2 SRPG",
+            "backend": "controlnet",
+            "enabled": True,
+            "output_variant": "srpg",
+            "reuse_stage1": True,
+            "generation": generation.copy(),
+            "model": DIFFQRCODER_MODEL_SETTINGS.copy(),
+            "tools": {
+                "srpg_enabled": True,
+                "settings": stage2.copy(),
+            },
+            "description": (
+                "Stage 2 public : DDIM + Scanning Robust Perceptual Guidance, "
+                "sans projection, masque local, fusion FreeQR ni réparation finale."
+            ),
+        },
+        {
+            "id": "diffqrcoder_srmpgd",
+            "name": "DiffQRCoder — Stage 2 + SR-MPGD",
+            "backend": "controlnet",
+            "enabled": False,
+            "output_variant": "srmpgd",
+            "reuse_stage1": True,
+            "generation": generation.copy(),
+            "model": DIFFQRCODER_MODEL_SETTINGS.copy(),
+            "tools": {
+                "srpg_enabled": True,
+                "srmpgd_enabled": True,
+                "settings": {
+                    **stage2,
+                    "srmpgd_max_iterations": 20,
+                    "srmpgd_step_size": 0.1,
+                },
+            },
+            "description": (
+                "Même Stage 2 puis post-traitement SR-MPGD du dépôt public. "
+                "Le nombre d'itérations et le learning rate sont réglables."
+            ),
+        },
+    ]
+
+
 class LabService:
     def __init__(
         self,
@@ -744,24 +869,47 @@ class LabService:
     def _record_method_diagnostics(self, run: RunRecord, method: LabMethod) -> None:
         if method.tools.srpg_enabled:
             settings = self._settings_for_method(method)
-            run.quality_metrics.update(
-                {
-                    "srpg_requested_steps": float(settings.srpg_steps),
-                    "srpg_effective_steps": float(settings.srpg_effective_steps),
-                    "srpg_restart_strength": float(settings.srpg_strength),
-                    "srpg_controlnet_scale": float(settings.srpg_controlnet_scale),
-                    "srpg_qr_weight": float(settings.srpg_qr_weight),
-                    "srpg_perceptual_weight": float(settings.srpg_perceptual_weight),
-                    "srpg_functional_weight": float(settings.srpg_functional_weight),
-                    "srpg_max_noise_delta_rms": float(settings.srpg_max_noise_delta_rms),
-                    "srpg_quiet_zone_minimum_luminance": float(
-                        settings.srpg_quiet_zone_minimum_luminance
-                    ),
-                    "srpg_functional_pattern_tone_factor": float(
-                        settings.srpg_functional_pattern_tone_factor
-                    ),
-                }
-            )
+            if settings.diffqrcoder_upstream_enabled:
+                run.quality_metrics.update(
+                    {
+                        "diffqrcoder_stage2_steps_requested": float(settings.srpg_steps),
+                        "diffqrcoder_controlnet_scale_requested": float(
+                            settings.srpg_controlnet_scale
+                        ),
+                        "diffqrcoder_srg_requested": float(settings.srpg_qr_weight),
+                        "diffqrcoder_pg_requested": float(
+                            settings.srpg_perceptual_weight
+                        ),
+                        "diffqrcoder_eta_requested": float(settings.srpg_eta),
+                        "diffqrcoder_qr_version": float(
+                            settings.diffqrcoder_qr_version
+                        ),
+                        "diffqrcoder_qr_mask_pattern": float(
+                            settings.diffqrcoder_qr_mask_pattern
+                        ),
+                        "diffqrcoder_qr_module_size": float(
+                            settings.diffqrcoder_qr_module_size
+                        ),
+                        "diffqrcoder_qr_padding_px": float(
+                            settings.diffqrcoder_qr_padding_px
+                        ),
+                    }
+                )
+            else:
+                run.quality_metrics.update(
+                    {
+                        "srpg_requested_steps": float(settings.srpg_steps),
+                        "srpg_effective_steps": float(settings.srpg_effective_steps),
+                        "srpg_restart_strength": float(settings.srpg_strength),
+                        "srpg_controlnet_scale": float(settings.srpg_controlnet_scale),
+                        "srpg_qr_weight": float(settings.srpg_qr_weight),
+                        "srpg_perceptual_weight": float(settings.srpg_perceptual_weight),
+                        "srpg_functional_weight": float(settings.srpg_functional_weight),
+                        "srpg_max_noise_delta_rms": float(
+                            settings.srpg_max_noise_delta_rms
+                        ),
+                    }
+                )
             if method.tools.srmpgd_enabled:
                 run.quality_metrics.update(
                     {
@@ -805,7 +953,7 @@ class LabService:
             raise ValueError(f"unsupported tool settings: {sorted(unknown_tools)}")
         updates.update(method.model)
         updates.update(method.tools.settings)
-        if method.tools.srpg_enabled:
+        if method.tools.srpg_enabled and not updates.get("diffqrcoder_upstream_enabled"):
             updates["controlnet_pipeline_mode"] = "img2img"
         return Settings.model_validate({**self.base_settings.model_dump(), **updates})
 
@@ -846,6 +994,12 @@ class LabService:
             "controlnet_model_subfolder": settings.controlnet_model_subfolder,
             "controlnet_conditioning_profile": settings.controlnet_conditioning_profile,
             "controlnet_pipeline_mode": settings.controlnet_pipeline_mode,
+            "diffqrcoder_upstream_enabled": settings.diffqrcoder_upstream_enabled,
+            "diffqrcoder_revision": settings.diffqrcoder_revision,
+            "diffqrcoder_qr_version": settings.diffqrcoder_qr_version,
+            "diffqrcoder_qr_mask_pattern": settings.diffqrcoder_qr_mask_pattern,
+            "diffqrcoder_qr_module_size": settings.diffqrcoder_qr_module_size,
+            "diffqrcoder_qr_padding_px": settings.diffqrcoder_qr_padding_px,
         }
         encoded = json.dumps(
             stage1_specification,
@@ -904,6 +1058,12 @@ def method_schema(settings: Settings | None = None) -> dict[str, Any]:
             "controlnet_model_subfolder": settings.controlnet_model_subfolder,
             "controlnet_conditioning_profile": settings.controlnet_conditioning_profile,
             "controlnet_pipeline_mode": settings.controlnet_pipeline_mode,
+            "diffqrcoder_upstream_enabled": settings.diffqrcoder_upstream_enabled,
+            "diffqrcoder_revision": settings.diffqrcoder_revision,
+            "diffqrcoder_qr_version": settings.diffqrcoder_qr_version,
+            "diffqrcoder_qr_mask_pattern": settings.diffqrcoder_qr_mask_pattern,
+            "diffqrcoder_qr_module_size": settings.diffqrcoder_qr_module_size,
+            "diffqrcoder_qr_padding_px": settings.diffqrcoder_qr_padding_px,
         }
         for profile in profiles:
             if profile["backend"] == "controlnet":
@@ -914,9 +1074,14 @@ def method_schema(settings: Settings | None = None) -> dict[str, Any]:
         "tools": sorted(TOOL_SETTING_KEYS),
         "profiles": profiles,
         "notes": {
-            "srpg_latent_fusion": (
-                "FreeQR-inspired latent-channel fusion implemented in the Prooftag SRPG loop; "
-                "it is an ablation, not the public DiffQRCoder paper method."
+            "scope": (
+                "Pinned public DiffQRCoder + Cetus-Mix Whalefall + QR Monster v2 only. "
+                "No deterministic repair, FreeQR fusion, local mask or alternative ControlNet."
+            ),
+            "upstream_revision": DIFFQRCODER_MODEL_SETTINGS["diffqrcoder_revision"],
+            "upstream_compatibility_patch": (
+                "PerceptualLoss uses torch.stack instead of torch.tensor so the public "
+                "VGG loss remains connected to autograd; srmpgd_lr is passed explicitly."
             ),
             "payload_storage": (
                 "The clear payload is held only in worker memory and is never persisted."

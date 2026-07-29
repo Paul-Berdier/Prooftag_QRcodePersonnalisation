@@ -124,6 +124,10 @@ class LabToolConfig(BaseModel):
     def validate_exclusive_stage2(self) -> "LabToolConfig":
         if self.srpg_enabled and self.guided_rediffusion_enabled:
             raise ValueError("SRPG and guided rediffusion cannot be enabled together")
+        if self.guided_rediffusion_enabled or self.latent_refinement_enabled:
+            raise ValueError(
+                "the restarted DiffQRCoder lab only supports SRPG and SR-MPGD"
+            )
         if self.srmpgd_enabled and not self.srpg_enabled:
             raise ValueError("paper SR-MPGD requires Stage 2 SRPG")
         return self
@@ -134,7 +138,7 @@ class LabMethod(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     backend: Literal["qr", "controlnet"] = "controlnet"
     enabled: bool = True
-    output_variant: Literal["auto", "raw", "srpg", "srmpgd", "guided", "latent"] = "auto"
+    output_variant: Literal["raw", "srpg", "srmpgd"] = "raw"
     reuse_stage1: bool = True
     generation: dict[str, Any] = Field(default_factory=dict)
     model: dict[str, Any] = Field(default_factory=dict)
@@ -170,6 +174,8 @@ class LabCampaignCreate(BaseModel):
 
 class LabRatingRequest(BaseModel):
     aesthetic_score: int | None = Field(default=None, ge=1, le=10)
+    aesthetic_ok: bool | None = None
+    human_scan_result: Literal["scannable", "not_scannable", "not_tested"] = "not_tested"
     prompt_fidelity_score: int | None = Field(default=None, ge=1, le=10)
     qr_discretion_score: int | None = Field(default=None, ge=1, le=10)
     overall_score: int | None = Field(default=None, ge=1, le=10)

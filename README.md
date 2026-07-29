@@ -5,20 +5,17 @@ mesurer leur qualité et ne publier que les résultats validés.
 
 ## État actuel
 
-La version `0.1.0` fournit :
+La version `0.1.0` fournit désormais un laboratoire volontairement recentré sur
+la chaîne publique DiffQRCoder :
 
 - une API FastAPI ;
 - un laboratoire Web persistant pour composer, lancer, comparer et noter des campagnes ;
 - un générateur QR de référence (`backend=qr`) ;
-- une baseline artistique Stable Diffusion 1.5 + ControlNet (`backend=controlnet`) ;
-- une seconde diffusion img2img guidée par les modules QR incorrects, expérimentale et
-  désactivée par défaut ;
-- une vraie boucle DDIM/SRPG différentiable à 40 pas, avec SRL + LPIPS et garde-fous VRAM/QR,
-  expérimentale et désactivée par défaut ;
-- un verrouillage des motifs fonctionnels et une réparation adaptative des modules incorrects
-  ou peu contrastés, d'abord par luminance et formes arrondies fondues dans l'illustration,
-  puis par profils binaires de secours ;
-- une régénération avec une nouvelle seed avant tout fallback de réparation globale ;
+- DiffQRCoder épinglé au commit `e24ea73ee2e13c7e6e87cb422e8b11784e70ae00` ;
+- Cetus-Mix Whalefall + QR Monster v2 pour le Stage 1 ;
+- le Stage 2 public DDIM/SRPG, puis SR-MPGD en option ;
+- une géométrie entière QR v3/M/masque 4 conforme aux exemples publics ;
+- aucune réparation déterministe ou superposition du QR témoin dans les profils du Web Lab ;
 - plusieurs tentatives avec conservation automatique du meilleur résultat ;
 - une validation exacte du payload par OpenCV, ZBar et ZXing-cpp ;
 - treize scénarios de dégradation ;
@@ -47,11 +44,13 @@ recherche sont désactivés par défaut. Voir [`docs/e005-srpg.md`](docs/e005-sr
 
 ## Laboratoire Web
 
-Le laboratoire est servi par la même API à l'adresse `/lab`. Il exécute séquentiellement chaque
-combinaison méthode × prompt × seed, conserve les configurations et mesures dans PostgreSQL,
-affiche les images, tableaux et graphiques, et permet d'enregistrer les notes humaines et scans
-physiques. CLIPScore et CLIP-aesthetic sont calculés sur CPU dans le déploiement K3s afin de
-réserver la VRAM à la diffusion.
+Le laboratoire est servi par la même API à l'adresse `/lab`. Il exécute
+séquentiellement chaque combinaison recette × prompt × seed, conserve les
+configurations et mesures dans PostgreSQL, puis permet de valider à la chaîne
+chaque image : esthétique bonne/mauvaise, scan téléphone positif/négatif, note
+et commentaire. SSR, payload exact, MER, CLIPScore et CLIP-aesthetic restent
+séparés des verdicts humains. CLIP est calculé sur CPU pour réserver la VRAM à
+la diffusion.
 
 Depuis le PC Windows, lorsque le Deployment est prêt sur le serveur :
 

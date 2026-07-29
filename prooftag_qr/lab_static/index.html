@@ -3,159 +3,126 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Prooftag QR Lab</title>
-  <link rel="stylesheet" href="/lab-assets/styles.css?v=20260728-web-lab-4">
+  <title>Prooftag — DiffQRCoder Lab</title>
+  <link rel="stylesheet" href="/lab-assets/styles.css?v=20260729-diffqrcoder-1">
 </head>
 <body>
   <header class="topbar">
     <div>
-      <p class="eyebrow">PROOFTAG RESEARCH</p>
-      <h1>QR Lab</h1>
+      <p class="eyebrow">PROOFTAG × DIFFQRCODER</p>
+      <h1>Validation à la chaîne</h1>
+      <p class="subtitle">QR Monster v2 · Stage 1 · SRPG · SR-MPGD</p>
     </div>
-    <div class="runtime" id="runtime-status">Connexion à l’API…</div>
+    <div id="runtime-status" class="runtime">Connexion à l’API…</div>
   </header>
 
-  <nav class="tabs" aria-label="Sections du laboratoire">
-    <button class="tab active" data-tab="compose">Nouvelle campagne</button>
-    <button class="tab" data-tab="results">Résultats <span id="campaign-count">0</span></button>
+  <nav class="tabs">
+    <button class="tab active" data-panel="compose">Créer une campagne</button>
+    <button class="tab" data-panel="results">Valider les résultats <span id="campaign-count">0</span></button>
   </nav>
 
   <main>
-    <section id="compose-panel" class="panel active">
-      <div class="section-heading">
+    <section id="compose" class="panel active">
+      <section class="card intro">
         <div>
-          <p class="eyebrow">PROTOCOLE</p>
-          <h2>Construire une comparaison reproductible</h2>
+          <p class="eyebrow">PÉRIMÈTRE VERROUILLÉ</p>
+          <h2>Une seule chaîne, aucun résultat maquillé</h2>
         </div>
-        <p class="section-note">Chaque méthode × prompt × seed devient un essai indépendant.</p>
-      </div>
+        <ol class="pipeline">
+          <li><b>QR témoin</b><span>v3 · M · masque 4</span></li>
+          <li><b>Stage 1</b><span>Cetus-Mix + QR Monster v2</span></li>
+          <li><b>Stage 2</b><span>DiffQRCoder SRPG</span></li>
+          <li><b>Option</b><span>SR-MPGD public</span></li>
+        </ol>
+      </section>
 
-      <div class="form-grid">
-        <label>
-          Nom de campagne
-          <input id="campaign-name" value="Comparaison Stage 2" maxlength="200">
-        </label>
-        <label>
-          Payload QR
-          <input id="payload" value="https://ptag.io/t/lab01" maxlength="2048">
-          <small>Utilisé en mémoire pendant le calcul, jamais enregistré en clair.</small>
-        </label>
-        <label>
-          Correction
-          <select id="ecc">
-            <option value="M" selected>M — protocole DiffQRCoder</option>
-            <option value="Q">Q</option>
-            <option value="H">H</option>
-          </select>
-        </label>
-        <label>
-          Seeds
-          <input id="seeds" value="51001" placeholder="51001, 61001">
-        </label>
-        <label>
-          Tentatives par essai
-          <input id="max-attempts" type="number" min="1" max="20" value="1">
-        </label>
-      </div>
-
-      <label class="wide-field">
-        Prompts
-        <textarea id="prompts" rows="5">courtyard | A Mediterranean courtyard with blue tiles, lemon trees and a stone fountain, warm editorial photograph.
-station | A grand retro-futurist railway station filled with travelers, clocks, glass arches and glowing kiosks.</textarea>
-        <small>Une ligne par prompt : <code>identifiant | prompt | negative prompt optionnel</code>.</small>
-      </label>
-
-      <div class="method-heading">
-        <div>
-          <p class="eyebrow">MÉTHODES</p>
-          <h2>Activer, retirer ou modifier chaque chaîne</h2>
+      <section class="card">
+        <div class="section-title">
+          <div><p class="eyebrow">1 — DONNÉES</p><h2>Prompts et seeds</h2></div>
+          <output id="trial-count">0 résultat</output>
         </div>
-        <button id="add-method" class="button secondary">+ Méthode vide</button>
-      </div>
-      <p class="section-note">
-        La sortie évaluée est forcée en mode laboratoire : aucune réparation QR ne peut
-        remplacer silencieusement le candidat artistique. Le même Stage 1 est réutilisé
-        lorsque les paramètres de génération sont identiques.
-      </p>
-      <div id="methods" class="method-list" aria-live="polite"></div>
-
-      <div class="launch-bar">
-        <div>
-          <strong id="trial-count">0 essai</strong>
-          <span id="launch-hint">Les calculs seront exécutés un par un sur le GPU.</span>
+        <div class="form-grid">
+          <label>Nom de campagne<input id="campaign-name" value="DiffQRCoder — série 1" maxlength="200"></label>
+          <label>URL Prooftag courte<input id="payload" value="https://ptag.io/t/lab01" maxlength="2048"></label>
+          <label>Correction QR
+            <select id="ecc"><option value="M" selected>M — officielle</option><option value="Q">Q</option><option value="H">H</option></select>
+          </label>
+          <label>Seeds, séparées par une virgule<input id="seeds" value="51001" placeholder="51001, 51002"></label>
+          <label>Tentatives par résultat<input id="max-attempts" type="number" min="1" max="20" value="1"></label>
         </div>
-        <button id="launch" class="button primary">Lancer la campagne</button>
+        <label class="wide">Prompts — une ligne par image
+          <textarea id="prompts" rows="8">courtyard | A Mediterranean courtyard with blue tiles, lemon trees and a stone fountain, warm editorial photograph. | easynegative
+aquarium | A monumental blue aquarium filled with sharks and rays, cinematic underwater light. | easynegative
+station | A grand retro-futurist railway station, clocks, glass arches and travelers. | easynegative
+botanical | Delicate botanical engraving with white flowers, cyan leaves and dark ink. | easynegative</textarea>
+          <small>Format : <code>identifiant | prompt | negative prompt</code>. Maximum : 50 prompts et 500 résultats.</small>
+        </label>
+      </section>
+
+      <section class="card">
+        <div class="section-title">
+          <div><p class="eyebrow">2 — MÉTHODES</p><h2>Sorties à comparer</h2></div>
+          <button id="add-method" class="button secondary" type="button">Dupliquer une recette</button>
+        </div>
+        <p class="notice">Chaque carte produit exactement la sortie indiquée. Un rejet reste visible et noté : le laboratoire ne remplace jamais l’image par le QR témoin.</p>
+        <div id="methods" class="method-list"></div>
+      </section>
+
+      <div class="launch">
+        <div><b id="launch-summary">Prêt</b><span>Les générations passent une par une sur la RTX.</span></div>
+        <button id="launch" class="button primary" type="button">Lancer la campagne</button>
       </div>
       <p id="compose-error" class="error" role="alert"></p>
     </section>
 
-    <section id="results-panel" class="panel">
+    <section id="results" class="panel">
       <div class="results-layout">
-        <aside>
-          <div class="aside-heading">
-            <div>
-              <p class="eyebrow">HISTORIQUE</p>
-              <h2>Campagnes</h2>
-            </div>
-            <button id="refresh-campaigns" class="icon-button" aria-label="Rafraîchir">↻</button>
+        <aside class="card">
+          <div class="section-title compact">
+            <h2>Campagnes</h2>
+            <button id="refresh" class="icon-button" type="button" title="Rafraîchir">↻</button>
           </div>
-          <div id="campaign-list" class="campaign-list"></div>
+          <div id="campaigns" class="campaign-list"></div>
         </aside>
 
-        <section class="campaign-detail">
-          <div id="empty-results" class="empty-state">
-            Sélectionne une campagne pour voir ses images et ses métriques.
-          </div>
-          <div id="campaign-content" hidden>
-            <div class="campaign-header">
+        <section class="results-main">
+          <div id="empty" class="card empty">Choisis une campagne pour commencer la validation.</div>
+          <div id="campaign-view" hidden>
+            <section class="card campaign-head">
               <div>
-                <p class="eyebrow" id="campaign-status"></p>
+                <p id="campaign-status" class="eyebrow"></p>
                 <h2 id="campaign-title"></h2>
                 <p id="campaign-meta" class="muted"></p>
               </div>
-              <div class="campaign-actions">
-                <a id="export-csv" class="button secondary" href="#">Exporter CSV</a>
-                <button id="cancel-campaign" class="button danger">Arrêter</button>
+              <div class="actions">
+                <a id="export" class="button secondary">Exporter CSV</a>
+                <button id="cancel" class="button danger" type="button">Arrêter</button>
               </div>
-            </div>
-            <div class="progress-track" aria-label="Progression">
-              <span id="campaign-progress"></span>
-            </div>
-            <div id="method-summary" class="method-summary"></div>
-            <div class="charts-grid" aria-label="Graphiques comparatifs">
-              <section class="chart-panel">
-                <h3>Scannabilité par méthode</h3>
-                <p class="muted">Sorties artistiques seulement ; le QR témoin est hors classement.</p>
-                <svg id="method-chart" role="img" aria-label="Comparaison de la scannabilité par méthode"></svg>
-              </section>
-              <section class="chart-panel">
-                <h3>Compromis structure / lecture</h3>
-                <p class="muted">Candidats artistiques réels ; aucun QR réparé ou témoin n'est classé.</p>
-                <svg id="tradeoff-chart" role="img" aria-label="Erreur de modules comparée au taux de lecture"></svg>
-              </section>
-            </div>
-            <div class="results-toolbar">
-              <label>
-                Filtrer
-                <select id="status-filter">
+              <div class="progress"><span id="progress"></span></div>
+            </section>
+
+            <section id="final-scores" class="score-board"></section>
+
+            <section class="toolbar card">
+              <label>Afficher
+                <select id="filter">
                   <option value="all">Tous</option>
-                  <option value="accepted">Acceptés</option>
-                  <option value="rejected">Rejetés</option>
-                  <option value="rated">Notés</option>
-                  <option value="favorite">Favoris</option>
+                  <option value="unrated">À noter</option>
+                  <option value="scannable">Scannables selon moi</option>
+                  <option value="not_scannable">Non scannables selon moi</option>
+                  <option value="auto_pass">Validés automatiquement</option>
                 </select>
               </label>
-              <label>
-                Trier
-                <select id="sort-results">
-                  <option value="dimensions">Prompt / seed / méthode</option>
-                  <option value="scan">Scannabilité décroissante</option>
-                  <option value="rating">Note décroissante</option>
+              <label>Trier
+                <select id="sort">
+                  <option value="chain">Prompt / seed / méthode</option>
+                  <option value="ssr">SSR décroissant</option>
+                  <option value="aesthetic">Esthétique décroissante</option>
                   <option value="time">Temps croissant</option>
                 </select>
               </label>
-            </div>
-            <div id="trial-grid" class="trial-grid"></div>
+            </section>
+            <div id="trials" class="trial-grid"></div>
           </div>
         </section>
       </div>
@@ -163,145 +130,81 @@ station | A grand retro-futurist railway station filled with travelers, clocks, 
   </main>
 
   <dialog id="trial-dialog">
-    <form method="dialog" class="dialog-shell">
-      <div class="dialog-heading">
+    <div class="dialog-shell">
+      <header class="dialog-head">
+        <div><p id="dialog-kicker" class="eyebrow"></p><h2 id="dialog-title"></h2></div>
+        <button id="close-dialog" class="icon-button" type="button">×</button>
+      </header>
+      <section id="dialog-metrics" class="metrics"></section>
+      <section id="artifacts" class="artifact-grid"></section>
+      <details class="validation-details" open>
+        <summary>Tests automatiques de scannabilité</summary>
+        <div id="validations"></div>
+      </details>
+      <section class="human card">
         <div>
-          <p class="eyebrow" id="dialog-kicker"></p>
-          <h2 id="dialog-title"></h2>
+          <p class="eyebrow">TON VERDICT</p>
+          <h3>L’image est-elle bonne ?</h3>
         </div>
-        <button class="icon-button" value="cancel" aria-label="Fermer">×</button>
-      </div>
-      <div id="dialog-metrics" class="metric-strip"></div>
-      <div id="artifact-gallery" class="artifact-gallery"></div>
-      <div class="evaluation-grid">
-        <section>
-          <h3>Évaluation humaine</h3>
-          <div class="score-grid">
-            <label>Esthétique<input id="rating-aesthetic" type="number" min="1" max="10"></label>
-            <label>Respect du prompt<input id="rating-fidelity" type="number" min="1" max="10"></label>
-            <label>QR dissimulé<input id="rating-discretion" type="number" min="1" max="10"></label>
-            <label>Note globale<input id="rating-overall" type="number" min="1" max="10"></label>
-          </div>
-          <label class="checkbox-label"><input id="rating-favorite" type="checkbox"> Favori</label>
-          <label>Notes<textarea id="rating-notes" rows="4"></textarea></label>
-          <button id="save-rating" type="button" class="button primary">Enregistrer la note</button>
-        </section>
-        <section>
-          <h3>Test réel téléphone / impression</h3>
-          <label>Payload lu<input id="physical-payload" placeholder="Vide si non détecté"></label>
-          <label>Appareil<input id="physical-device" placeholder="Pixel 8, iPhone 15…"></label>
-          <div class="score-grid">
-            <label>Support<select id="physical-material"><option>screen</option><option>paper</option><option>label</option></select></label>
-            <label>Éclairage<input id="physical-lighting" value="office"></label>
-          </div>
-          <label>Notes<textarea id="physical-notes" rows="4"></textarea></label>
-          <button id="save-physical" type="button" class="button secondary">Enregistrer le scan</button>
-        </section>
-      </div>
-      <p id="dialog-message" class="muted" role="status"></p>
-    </form>
+        <div class="verdict-row">
+          <fieldset>
+            <legend>Esthétique</legend>
+            <label class="choice yes"><input type="radio" name="aesthetic-ok" value="true"> Bonne</label>
+            <label class="choice no"><input type="radio" name="aesthetic-ok" value="false"> Mauvaise</label>
+          </fieldset>
+          <fieldset>
+            <legend>Scan téléphone</legend>
+            <label class="choice yes"><input type="radio" name="human-scan" value="scannable"> Scannable</label>
+            <label class="choice no"><input type="radio" name="human-scan" value="not_scannable"> Non scannable</label>
+            <label class="choice"><input type="radio" name="human-scan" value="not_tested"> Non testé</label>
+          </fieldset>
+          <label>Note esthétique /10<input id="aesthetic-score" type="number" min="1" max="10"></label>
+        </div>
+        <label>Notes<textarea id="rating-notes" rows="3" placeholder="Ce qui fonctionne, défauts, conditions du scan…"></textarea></label>
+        <div class="dialog-actions">
+          <button id="previous-trial" class="button secondary" type="button">← Précédent</button>
+          <button id="save-next" class="button primary" type="button">Enregistrer et suivant →</button>
+        </div>
+        <p id="dialog-message" class="muted" role="status"></p>
+      </section>
+    </div>
   </dialog>
 
   <template id="method-template">
-    <article class="method-card">
-      <div class="method-topline">
-        <label class="method-toggle"><input class="method-enabled" type="checkbox"> <span class="method-name-label"></span></label>
-        <div>
-          <button class="duplicate-method icon-button" type="button" aria-label="Dupliquer">⧉</button>
-          <button class="remove-method icon-button" type="button" aria-label="Supprimer">×</button>
-        </div>
+    <article class="method">
+      <header>
+        <label class="toggle"><input class="enabled" type="checkbox"><b class="method-label"></b></label>
+        <button class="remove icon-button" type="button">×</button>
+      </header>
+      <p class="description muted"></p>
+      <div class="params">
+        <label>Nom<input class="name"></label>
+        <label>ID<input class="id"></label>
+        <label>Sortie<select class="output"><option value="raw">Stage 1</option><option value="srpg">Stage 2 SRPG</option><option value="srmpgd">Stage 2 + SR-MPGD</option></select></label>
+        <label>Stage 1 — pas<input class="steps" type="number" min="1" max="100"></label>
+        <label>CFG<input class="cfg" type="number" min="0" max="30" step="0.1"></label>
+        <label>ControlNet Stage 1<input class="control" type="number" min="0" max="3" step="0.05"></label>
       </div>
-      <p class="method-description muted"></p>
-      <div class="compact-grid">
-        <label>Nom<input class="method-name"></label>
-        <label>ID<input class="method-id"></label>
-        <label>Backend<select class="method-backend"><option value="controlnet">ControlNet</option><option value="qr">QR témoin</option></select></label>
-        <label>Sortie évaluée<select class="method-output">
-          <option value="auto">Auto — livraison</option>
-          <option value="raw">Stage 1 brut</option>
-          <option value="srpg">Stage 2 SRPG réel</option>
-          <option value="srmpgd">Stage 2 + SR-MPGD papier</option>
-          <option value="guided">Rediffusion réelle</option>
-          <option value="latent">Ancien raffinement latent Prooftag</option>
-        </select></label>
-        <label>Stage 1 — pas de diffusion<input class="gen-steps" type="number" min="1" max="100"></label>
-        <label>CFG<input class="gen-cfg" type="number" min="0" max="30" step="0.1"></label>
-        <label>Stage 1 — ControlNet<input class="gen-control" type="number" min="0" max="3" step="0.05"></label>
-        <label>Stage 1 — strength<input class="gen-strength" type="number" min="0.05" max="1" step="0.05"></label>
+      <div class="stage2-params">
+        <label>Stage 2 — pas<input class="srpg-steps" type="number" min="1" max="100"></label>
+        <label>ControlNet Stage 2<input class="srpg-control" type="number" min="0" max="3" step="0.05"></label>
+        <label>SRG λ1<input class="srg" type="number" min="0.1" max="5000" step="10"></label>
+        <label>PG λ2<input class="pg" type="number" min="0" max="100" step="0.1"></label>
+        <label>ETA<input class="eta" type="number" min="0" max="1" step="0.05"></label>
+        <label>Seed Stage 2 +<input class="seed-offset" type="number" min="0"></label>
+        <label>Aperçu tous les N pas<input class="preview" type="number" min="1" max="100"></label>
       </div>
-      <div class="tool-switches">
-        <label><input class="reuse-stage1" type="checkbox"> Réutiliser le même Stage 1</label>
-        <label><input class="tool-srpg" type="checkbox"> Stage 2 SRPG</label>
-        <label><input class="tool-srmpgd" type="checkbox"> SR-MPGD papier</label>
-        <label><input class="tool-guided" type="checkbox"> Rediffusion locale</label>
-        <label><input class="tool-latent" type="checkbox"> Ancien raffinement latent</label>
+      <div class="srmpgd-params">
+        <label>SR-MPGD — itérations<input class="mpgd-iterations" type="number" min="1" max="100"></label>
+        <label>SR-MPGD — learning rate<input class="mpgd-lr" type="number" min="0.0001" max="100000" step="0.1"></label>
       </div>
-      <section class="srpg-controls">
-        <div class="srpg-heading">
-          <div>
-            <h4>Paramètres réels du Stage 2 SRPG</h4>
-            <p class="muted">
-              Les pas réellement exécutés valent
-              <code>plafond inférieur(pas planifiés × force de redémarrage)</code>.
-            </p>
-          </div>
-          <output class="srpg-effective-steps"></output>
-        </div>
-        <div class="compact-grid">
-          <label>SRPG — pas planifiés<input class="srpg-steps" type="number" min="1" max="100" step="1"></label>
-          <label>SRPG — force de redémarrage<input class="srpg-strength" type="number" min="0.01" max="1" step="0.01"></label>
-          <label>SRPG — ControlNet<input class="srpg-control" type="number" min="0.01" max="3" step="0.05"></label>
-          <label>SRPG — poids QR<input class="srpg-qr-weight" type="number" min="0.01" max="5000" step="10"></label>
-          <label>SRPG — poids perceptuel<input class="srpg-perceptual-weight" type="number" min="0" max="100" step="0.1"></label>
-          <label>SRPG — poids fonctionnel<input class="srpg-functional-weight" type="number" min="1" max="100" step="0.5"></label>
-          <label>SRPG — limite gradient RMS<input class="srpg-noise-limit" type="number" min="0.01" max="100" step="0.05"></label>
-          <label>Quiet zone<select class="srpg-quiet-zone-mode">
-            <option value="adaptive_light">Claire, couleur adaptée</option>
-            <option value="white">Blanche stricte</option>
-            <option value="none">Aucune — esthétique uniquement</option>
-          </select></label>
-          <label>Luminance minimale de la marge<input class="srpg-quiet-zone-luminance" type="number" min="0.50" max="1" step="0.01"></label>
-          <label>Tonification des motifs fonctionnels<input class="srpg-functional-tone" type="number" min="0" max="1" step="0.01"></label>
-        </div>
-        <p class="muted">La quiet zone doit rester uniforme et claire, mais peut reprendre la
-          palette de l'image. Tonification : 0 désactive le traitement ; une petite valeur
-          positive (0,12) renforce fortement uniquement les repères, timings et alignements.
-          Les modules de données ne sont pas recouverts.</p>
-        <p class="srpg-warning muted"></p>
-      </section>
-      <section class="srmpgd-controls">
-        <div class="srpg-heading">
-          <div>
-            <h4>Post-traitement SR-MPGD — équations 12 à 14</h4>
-            <p class="muted">
-              Part du latent propre exact du Stage 2, sans réencoder le PNG.
-              Chaque état est décodé, validé et conservé.
-            </p>
-          </div>
-          <output class="srmpgd-warning"></output>
-        </div>
-        <div class="compact-grid">
-          <label>SR-MPGD — itérations max<input class="srmpgd-iterations" type="number" min="1" max="100" step="1"></label>
-          <label>SR-MPGD — gamma<input class="srmpgd-step-size" type="number" min="0.001" max="100000" step="1"></label>
-          <label>SR-MPGD — lambda LPIPS<input class="srmpgd-lpips-weight" type="number" min="0" max="100" step="0.001"></label>
-          <label>SR-MPGD — MER initial maximum<input class="srmpgd-max-initial-mer" type="number" min="0" max="1" step="0.01"></label>
-        </div>
-        <p class="muted">
-          Valeurs papier : <code>gamma = 1000</code>, <code>lambda = 0,01</code>.
-          Le nombre d’itérations n’est pas publié ; le laboratoire teste les états 0 à 20
-          et s’arrête à la première validation stricte.
-        </p>
-      </section>
       <details>
-        <summary>Paramètres avancés et modèle</summary>
-        <div class="json-grid">
-          <label>Modèle (JSON)<textarea class="model-json" rows="6"></textarea></label>
-          <label>Outils (JSON)<textarea class="tools-json" rows="12"></textarea></label>
-        </div>
+        <summary>Modèles et géométrie épinglés</summary>
+        <textarea class="model-json" rows="9" spellcheck="false"></textarea>
       </details>
     </article>
   </template>
 
-  <script src="/lab-assets/app.js?v=20260729-functional-patterns-1" defer></script>
+  <script src="/lab-assets/app.js?v=20260729-diffqrcoder-1" defer></script>
 </body>
 </html>

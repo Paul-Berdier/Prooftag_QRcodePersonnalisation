@@ -10,7 +10,7 @@ import prooftag_qr.lab as lab_module
 from prooftag_qr.artifacts import LocalArtifactStore
 from prooftag_qr.config import Settings
 from prooftag_qr.domain import RunRecord
-from prooftag_qr.lab import LabService
+from prooftag_qr.lab import LabService, laboratory_profiles
 from prooftag_qr.lab_repository import LabRepository
 from prooftag_qr.quality_scoring import CLIPQualityScore
 from prooftag_qr.repository import RunRepository
@@ -25,6 +25,25 @@ def test_lab_rejects_conflicting_stage2_tools():
 def test_lab_rejects_srmpgd_without_stage2_srpg():
     with pytest.raises(ValidationError, match="requires Stage 2 SRPG"):
         LabToolConfig(srmpgd_enabled=True)
+
+
+def test_web_lab_exposes_only_the_pinned_diffqrcoder_chain():
+    profiles = laboratory_profiles()
+
+    assert [profile["id"] for profile in profiles] == [
+        "qr_reference",
+        "diffqrcoder_stage1",
+        "diffqrcoder_srpg",
+        "diffqrcoder_srmpgd",
+    ]
+    generated = [profile for profile in profiles if profile["backend"] == "controlnet"]
+    assert all(
+        profile["model"]["diffqrcoder_upstream_enabled"] is True
+        for profile in generated
+    )
+    assert {profile["model"]["controlnet_model_id"] for profile in generated} == {
+        "monster-labs/control_v1p_sd15_qrcode_monster"
+    }
 
 
 def test_lab_limits_cartesian_campaign_size():

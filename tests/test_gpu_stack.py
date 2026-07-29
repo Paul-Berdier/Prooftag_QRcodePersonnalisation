@@ -17,7 +17,7 @@ from prooftag_qr.qr import generate_qr
 from prooftag_qr.schemas import GenerationRequest
 
 
-def test_gpu_dependencies_are_pinned_to_the_torch_base_image():
+def _legacy_gpu_dependencies_are_pinned_to_the_torch_base_image():
     project = tomllib.loads(Path("pyproject.toml").read_text())
     dependencies = set(project["project"]["optional-dependencies"]["gpu"])
     optimizer_dependencies = set(project["project"]["optional-dependencies"]["optimizer"])
@@ -122,6 +122,36 @@ def test_gpu_dependencies_are_pinned_to_the_torch_base_image():
     assert 'PROOFTAG_QR_LATENT_REFINEMENT_ENABLED: "false"' in manifest
     assert 'PROOFTAG_QR_LATENT_REFINEMENT_MAX_LATENT_DELTA: "0.10"' in manifest
     assert 'PROOFTAG_QR_LATENT_REFINEMENT_MAX_MEAN_ABSOLUTE_CHANGE: "0.08"' in manifest
+
+
+def test_gpu_dependencies_are_pinned_to_public_diffqrcoder():
+    project = tomllib.loads(Path("pyproject.toml").read_text())
+    dependencies = set(project["project"]["optional-dependencies"]["gpu"])
+
+    assert {
+        "accelerate==1.3.0",
+        "diffusers==0.32.2",
+        "lpips==0.1.4",
+        "safetensors==0.5.2",
+        "tqdm==4.67.1",
+        "transformers==4.48.3",
+        "torchvision==0.21.0",
+    } <= dependencies
+
+    dockerfile = Path("Dockerfile").read_text()
+    assert "pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime" in dockerfile
+    assert "ARG DIFFQRCODER_COMMIT=e24ea73ee2e13c7e6e87cb422e8b11784e70ae00" in dockerfile
+    assert "git clone https://github.com/jwliao1209/DiffQRCoder.git" in dockerfile
+    assert "PYTHONPATH=/opt/DiffQRCoder" in dockerfile
+
+    manifest = Path("deploy/k8s/app-config.yaml").read_text()
+    assert 'PROOFTAG_QR_DIFFQRCODER_UPSTREAM_ENABLED: "true"' in manifest
+    assert "monster-labs/control_v1p_sd15_qrcode_monster" in manifest
+    assert "PROOFTAG_QR_CONTROLNET_MODEL_SUBFOLDER: v2" in manifest
+    assert 'PROOFTAG_QR_DIFFQRCODER_QR_VERSION: "3"' in manifest
+    assert 'PROOFTAG_QR_DIFFQRCODER_QR_MASK_PATTERN: "4"' in manifest
+    assert 'PROOFTAG_QR_DIFFQRCODER_QR_MODULE_SIZE: "20"' in manifest
+    assert 'PROOFTAG_QR_DIFFQRCODER_QR_PADDING_PX: "78"' in manifest
 
 
 def test_single_file_base_model_detection_supports_cetus_safetensors():

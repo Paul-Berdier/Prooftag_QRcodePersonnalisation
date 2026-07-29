@@ -4,6 +4,7 @@ import numpy as np
 import qrcode
 from PIL import Image
 from qrcode.constants import ERROR_CORRECT_H, ERROR_CORRECT_M, ERROR_CORRECT_Q
+from qrcode.exceptions import DataOverflowError
 from qrcode.util import pattern_position
 
 ERROR_LEVELS = {"M": ERROR_CORRECT_M, "Q": ERROR_CORRECT_Q, "H": ERROR_CORRECT_H}
@@ -32,6 +33,42 @@ def generate_qr(
     image = qr.make_image(fill_color="black", back_color="white").convert("RGB")
     image = image.resize((size, size), Image.Resampling.NEAREST)
     return QRBlueprint(image=image, matrix=matrix, version=qr.version, border=border)
+
+
+def generate_diffqrcoder_qr(
+    payload: str,
+    error_correction: str = "M",
+    *,
+    version: int = 3,
+    mask_pattern: int = 4,
+    module_size: int = 20,
+    border: int = 4,
+) -> QRBlueprint:
+    """Build the exact integer module grid expected by public DiffQRCoder.
+
+    The upstream examples use QR version 3, mask 4, 20 pixels per module and a
+    four-module quiet zone. The resulting 740 px source is preprocessed by
+    Diffusers to 736 px; the upstream 78 px crop then leaves a 580 px core,
+    i.e. 29 modules of exactly 20 px.
+    """
+    qr = qrcode.QRCode(
+        version=version,
+        error_correction=ERROR_LEVELS[error_correction],
+        box_size=module_size,
+        border=border,
+        mask_pattern=mask_pattern,
+    )
+    qr.add_data(payload)
+    try:
+        qr.make(fit=False)
+    except DataOverflowError as exc:
+        raise ValueError(
+            f"payload too long for DiffQRCoder QR v{version}/{error_correction}; "
+            "use a shorter Prooftag URL or explicitly change the QR version"
+        ) from exc
+    matrix = np.asarray(qr.get_matrix(), dtype=np.uint8)
+    image = qr.make_image(fill_color="black", back_color="white").convert("RGB")
+    return QRBlueprint(image=image, matrix=matrix, version=version, border=border)
 
 
 def module_error_rate(candidate: Image.Image, blueprint: QRBlueprint) -> float:

@@ -1145,3 +1145,28 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   brute, SRPG tardif, SRPG tardif avec motifs fonctionnels et la même sortie suivie de SR-MPGD.
   Le critère primaire reste le payload exact/SSR ; CLIP-aesthetic et CLIPScore ne départagent que
   les candidats ayant franchi la porte de lecture.
+# Reprise Web Lab DiffQRCoder — 29 juillet 2026
+
+- **Décision :** abandonner dans le laboratoire actif les mélanges FreeQR,
+  Nacholmo, rediffusion locale, projection de modules et réparation
+  déterministe. Ils restent dans l’historique Git et dans les anciens rapports,
+  mais ne sont plus proposés dans `/lab`.
+- **Référence exécutable :** dépôt `jwliao1209/DiffQRCoder`, commit
+  `e24ea73ee2e13c7e6e87cb422e8b11784e70ae00`, Cetus-Mix Whalefall,
+  QR Monster v2 et DDIM.
+- **Géométrie :** QR v3, correction M par défaut, masque 4, 20 px par module,
+  source 740 px, preprocessing 736 px et crop public de 78 px.
+- **Sorties :** QR témoin, Stage 1 brut, Stage 2 SRPG, Stage 2 SRPG + SR-MPGD.
+  Le candidat demandé est toujours évalué tel quel.
+- **Corrections nécessaires :** `torch.stack` préserve le gradient de la perte
+  VGG que le dépôt détachait avec `torch.tensor`; `srmpgd_lr` est transmis
+  explicitement à `_run_stage2`.
+- **Limite maintenue :** le transformateur QArt Reed–Solomon du papier n’est
+  pas publié. Cette reprise reproduit le chemin du dépôt public et ne revendique
+  pas une reproduction bit-à-bit de toute la Figure 3.
+- **Évaluation :** validation automatique par décodeur et dégradation, SSR,
+  payload original, MER, CLIP-aesthetic, CLIPScore et temps ; puis deux verdicts
+  humains distincts, esthétique et scan téléphone.
+- **Objectif :** constituer une base comparable multi-prompts/multi-seeds avant
+  de chercher une recette générale. Le QR témoin est exclu des scores
+  artistiques et aucune réparation cachée n’est autorisée.

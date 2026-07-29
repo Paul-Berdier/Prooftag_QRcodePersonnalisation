@@ -4,6 +4,7 @@ from PIL import Image
 from prooftag_qr.qr import (
     adaptive_quiet_zone_color,
     functional_pattern_mask,
+    generate_diffqrcoder_qr,
     generate_qr,
     module_error_breakdown,
     module_error_rate,
@@ -31,6 +32,17 @@ def test_reference_qr_passes_original_scenario():
 
     assert original
     assert all(record.exact_payload_match for record in original)
+
+
+def test_diffqrcoder_reference_uses_the_public_integer_geometry():
+    payload = "https://ptag.io/t/lab01"
+    blueprint = generate_diffqrcoder_qr(payload, "M")
+
+    assert blueprint.image.size == (740, 740)
+    assert blueprint.matrix.shape == (37, 37)
+    assert blueprint.version == 3
+    assert blueprint.border == 4
+    assert OpenCVDecoder().decode(blueprint.image) == payload
 
 
 def test_restore_quiet_zone_preserves_the_artistic_core_and_clears_only_the_margin():

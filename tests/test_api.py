@@ -47,46 +47,29 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
 
     lab_page = client.get("/lab")
     assert lab_page.status_code == 200
-    assert "srpg-effective-steps" in lab_page.text
-    assert "20260729-functional-patterns-1" in lab_page.text
+    assert "PROOFTAG × DIFFQRCODER" in lab_page.text
+    assert "20260729-diffqrcoder-1" in lab_page.text
     lab_javascript = client.get("/lab-assets/app.js")
     assert lab_javascript.status_code == 200
-    assert "effectiveSrpgSteps" in lab_javascript.text
+    assert "human_scan_result" in lab_javascript.text
     schema = client.get("/v1/lab/schema")
     assert schema.status_code == 200
-    assert any(item["id"] == "srpg_late_2" for item in schema.json()["profiles"])
-    assert any(item["id"] == "srpg_late_4" for item in schema.json()["profiles"])
-    assert any(
-        item["id"] == "srpg_late_4_srmpgd"
-        for item in schema.json()["profiles"]
-    )
-    assert any(
-        item["id"] == "srpg_full_restart_srmpgd"
-        for item in schema.json()["profiles"]
-    )
-    assert any(
-        item["id"] == "srpg_late_2_functional"
-        for item in schema.json()["profiles"]
-    )
-    assert any(
-        item["id"] == "srpg_late_2_functional_srmpgd"
-        for item in schema.json()["profiles"]
-    )
+    assert {item["id"] for item in schema.json()["profiles"]} == {
+        "qr_reference",
+        "diffqrcoder_stage1",
+        "diffqrcoder_srpg",
+        "diffqrcoder_srmpgd",
+    }
     controlnet_profile = next(
-        item for item in schema.json()["profiles"] if item["id"] == "controlnet_raw"
+        item for item in schema.json()["profiles"] if item["id"] == "diffqrcoder_stage1"
     )
     srpg_profile = next(
-        item for item in schema.json()["profiles"] if item["id"] == "srpg_late_2"
-    )
-    full_restart_profile = next(
-        item
-        for item in schema.json()["profiles"]
-        if item["id"] == "srpg_full_restart"
+        item for item in schema.json()["profiles"] if item["id"] == "diffqrcoder_srpg"
     )
     srmpgd_profile = next(
         item
         for item in schema.json()["profiles"]
-        if item["id"] == "srpg_late_2_functional_srmpgd"
+        if item["id"] == "diffqrcoder_srmpgd"
     )
     assert controlnet_profile["model"]["base_model_id"]
     assert controlnet_profile["model"]["controlnet_model_id"]
@@ -100,30 +83,16 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     assert srpg_profile["output_variant"] == "srpg"
     assert srpg_profile["reuse_stage1"] is True
     assert srpg_profile["enabled"] is True
-    assert srpg_profile["tools"]["settings"]["srpg_strength"] == 0.05
+    assert srpg_profile["tools"]["settings"]["srpg_steps"] == 40
+    assert srpg_profile["tools"]["settings"]["srpg_qr_weight"] == 500.0
+    assert srpg_profile["tools"]["settings"]["srpg_perceptual_weight"] == 2.0
     assert srmpgd_profile["output_variant"] == "srmpgd"
     assert srmpgd_profile["tools"]["srpg_enabled"] is True
     assert srmpgd_profile["tools"]["srmpgd_enabled"] is True
-    assert srmpgd_profile["tools"]["settings"]["srmpgd_step_size"] == 1000.0
-    assert srmpgd_profile["tools"]["settings"]["srmpgd_lpips_weight"] == 0.01
-    assert srmpgd_profile["tools"]["settings"]["srmpgd_crop_padding_px"] == -1
-    assert (
-        srmpgd_profile["tools"]["settings"]["srpg_quiet_zone_mode"]
-        == "adaptive_light"
-    )
-    assert (
-        srmpgd_profile["tools"]["settings"]["srpg_functional_pattern_tone_factor"]
-        == 0.12
-    )
-    assert (
-        srmpgd_profile["tools"]["settings"]["srmpgd_max_initial_module_error_rate"]
-        == 0.10
-    )
-    assert (
-        srmpgd_profile["model"]["controlnet_conditioning_profile"]
-        == "gray_quiet_zone"
-    )
-    assert full_restart_profile["enabled"] is False
+    assert srmpgd_profile["tools"]["settings"]["srmpgd_step_size"] == 0.1
+    assert srmpgd_profile["model"]["controlnet_conditioning_profile"] == "binary"
+    assert srmpgd_profile["model"]["diffqrcoder_upstream_enabled"] is True
+    assert srmpgd_profile["enabled"] is False
 
     campaign_response = client.post(
         "/v1/lab/campaigns",
@@ -168,6 +137,8 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
         f"/v1/lab/trials/{trial['id']}/rating",
         json={
             "aesthetic_score": 4,
+            "aesthetic_ok": True,
+            "human_scan_result": "scannable",
             "prompt_fidelity_score": 5,
             "qr_discretion_score": 1,
             "overall_score": 4,
@@ -177,9 +148,12 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     )
     assert rating.status_code == 200
     assert rating.json()["favorite"] is True
+    assert rating.json()["aesthetic_ok"] is True
+    assert rating.json()["human_scan_result"] == "scannable"
     campaign_csv = client.get(f"/v1/lab/campaigns/{campaign_id}/results.csv")
     assert campaign_csv.status_code == 200
     assert "quality_brightness_mean" in campaign_csv.text.splitlines()[0]
+    assert "human_scan_result" in campaign_csv.text.splitlines()[0]
     artifacts = client.get(
         f"/v1/generations/{trial['generation_run_id']}/artifacts"
     ).json()

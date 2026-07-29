@@ -1,13 +1,16 @@
-FROM pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime
+FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
+
+ARG DIFFQRCODER_COMMIT=e24ea73ee2e13c7e6e87cb422e8b11784e70ae00
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     HF_HOME=/cache/huggingface \
-    TORCH_HOME=/opt/torch-cache
+    TORCH_HOME=/opt/torch-cache \
+    PYTHONPATH=/opt/DiffQRCoder
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl libgl1 libglib2.0-0 libzbar0 \
+    && apt-get install -y --no-install-recommends curl git libgl1 libglib2.0-0 libzbar0 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -16,7 +19,13 @@ COPY prooftag_qr ./prooftag_qr
 COPY migrations ./migrations
 RUN pip install --upgrade pip \
     && pip install '.[gpu]' \
-    && python -c "import lpips, torch, torchvision; from diffusers import ControlNetModel, DDIMScheduler, DPMSolverMultistepScheduler, StableDiffusionControlNetImg2ImgPipeline, StableDiffusionControlNetPipeline; lpips.LPIPS(net='alex', verbose=False); lpips.LPIPS(net='vgg', verbose=False); print('GPU stack and LPIPS weights OK:', torch.__version__, torchvision.__version__)"
+    && python -c "import lpips, torch, torchvision; from diffusers import ControlNetModel, DDIMScheduler; lpips.LPIPS(net='vgg', verbose=False); print('GPU stack and LPIPS weights OK:', torch.__version__, torchvision.__version__)"
+
+RUN git clone https://github.com/jwliao1209/DiffQRCoder.git /opt/DiffQRCoder \
+    && git -C /opt/DiffQRCoder checkout "$DIFFQRCODER_COMMIT" \
+    && test "$(git -C /opt/DiffQRCoder rev-parse HEAD)" = "$DIFFQRCODER_COMMIT" \
+    && rm -rf /opt/DiffQRCoder/.git \
+    && python -c "from diffqrcoder import DiffQRCoderPipeline; print('DiffQRCoder revision OK:', '$DIFFQRCODER_COMMIT')"
 
 RUN useradd --create-home --uid 10001 app \
     && mkdir -p /data /cache /opt/torch-cache \
