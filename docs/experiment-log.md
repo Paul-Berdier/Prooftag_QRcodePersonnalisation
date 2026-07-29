@@ -1170,3 +1170,48 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
 - **Objectif :** constituer une base comparable multi-prompts/multi-seeds avant
   de chercher une recette générale. Le QR témoin est exclu des scores
   artistiques et aucune réparation cachée n’est autorisée.
+
+## Audit du Stage 2 et reconstruction papier — 29 juillet 2026
+
+- **Campagne diagnostiquée :**
+  `prooftag-lab-20c302a1-dab0-4813-9f4f-103968dcc256.csv`, quatre prompts,
+  une seed et quatre sorties appariées. Le Stage 1 atteint en moyenne 0,6 % de
+  SSR et 6,27 de CLIP-aesthetic ; SRPG 9,0 % et 3,98 ; SR-MPGD 4,5 % et 3,32.
+  Le Stage 2 change entre 93 % et 99,95 % des pixels du Stage 1. Les images
+  saturées observées ne sont donc pas un simple problème de note humaine.
+- **Cause principale vérifiée dans le commit amont épinglé :** la méthode
+  publique `_run_stage2` appelle `prepare_latents` et repart d’un bruit
+  aléatoire. L’image du Stage 1 n’intervient alors que dans la perte perceptuelle,
+  alors que l’algorithme 1 et l’équation 9 demandent
+  `sqrt(alpha_T) E(x̂) + sqrt(1-alpha_T) ε`.
+- **Deuxième écart :** la Figure 3 demande `Qart(x̂, y)`, mais le dépôt ne
+  fournit pas le constructeur QArt. Utiliser directement le QR binaire force
+  ControlNet à reconstruire une grille éloignée de l’image et accentue la
+  destruction du Stage 1.
+- **Troisième écart :** le SR-MPGD public réemploie `self.srpg.compute_loss`,
+  donc les poids SRG/PG du Stage 2, et son appel haut niveau ne transmet pas
+  correctement `srmpgd_lr`. Ce n’est pas l’objectif séparé de l’équation 13.
+- **Correction Stage 2 :** le backend encode maintenant le raster Stage 1 avec
+  le VAE, ajoute le bruit DDIM au timestep de départ et injecte explicitement ce
+  latent dans `_run_stage2`. Le mode historique `public_random` reste disponible
+  comme ablation, jamais comme valeur papier implicite.
+- **Correction QArt :** une cible déterministe est reconstruite sur le canvas
+  736 px. Elle préserve l’œuvre et sa périphérie, copie exactement les modules
+  fonctionnels et déplace seulement les centres des modules de données de part
+  et d’autre des seuils 0,45/0,65. Elle est nommée « QArt reconstruite », car
+  elle ne prétend pas être le code Reed–Solomon privé des auteurs.
+- **Correction SR-MPGD :** le latent propre de sortie du Stage 2 est optimisé
+  avec `LSR + 0,01 × LPIPS`, `gamma=1000`, VGG et crop de 78 px. Chaque état est
+  décodé, validé par les vrais décodeurs et classé ; le meilleur est conservé.
+  Un MER initial maximal, les gradients non finis et la validation stricte
+  déclenchent des arrêts explicites.
+- **Garde-fous et transparence :** aucun cadre blanc, QR binaire final ou
+  projection déterministe n’est ajouté. Le Web Lab affiche l’initialisation
+  réellement employée, les pas, l’erreur des centres QArt, la variation au
+  Stage 1, la saturation, la divergence et l’itération SR-MPGD retenue. Une
+  divergence reste visible et rejetable ; elle n’est pas maquillée.
+- **Validation locale avant GPU :** tests unitaires de géométrie QArt, motifs
+  fonctionnels, absence de cadre blanc, schéma API, paramètres du profil,
+  dépendances épinglées, lint Python et syntaxe JavaScript. La validation
+  numérique CUDA doit ensuite être faite sur la RTX Ada avec une nouvelle
+  campagne appariée ; les anciens scores ne sont pas réinterprétés.

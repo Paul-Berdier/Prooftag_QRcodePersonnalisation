@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Prooftag — DiffQRCoder Lab</title>
-  <link rel="stylesheet" href="/lab-assets/styles.css?v=20260729-diffqrcoder-1">
+  <link rel="stylesheet" href="/lab-assets/styles.css?v=20260729-diffqrcoder-paper-3">
 </head>
 <body>
   <header class="topbar">
@@ -31,8 +31,8 @@
         <ol class="pipeline">
           <li><b>QR témoin</b><span>v3 · M · masque 4</span></li>
           <li><b>Stage 1</b><span>Cetus-Mix + QR Monster v2</span></li>
-          <li><b>Stage 2</b><span>DiffQRCoder SRPG</span></li>
-          <li><b>Option</b><span>SR-MPGD public</span></li>
+          <li><b>Stage 2</b><span>Stage 1 bruité + QArt + SRPG</span></li>
+          <li><b>Option</b><span>SR-MPGD Eq. 13–14</span></li>
         </ol>
       </section>
 
@@ -186,17 +186,25 @@ botanical | Delicate botanical engraving with white flowers, cyan leaves and dar
         <label>ControlNet Stage 1<input class="control" type="number" min="0" max="3" step="0.05"></label>
       </div>
       <div class="stage2-params">
+        <label>Initialisation<select class="stage2-init"><option value="paper_stage1_noise">Papier — Stage 1 bruité</option><option value="public_random">Dépôt public — bruit aléatoire</option></select></label>
+        <label>Force de bruit Stage 2<input class="stage2-strength" type="number" min="0.05" max="1" step="0.05"></label>
         <label>Stage 2 — pas<input class="srpg-steps" type="number" min="1" max="100"></label>
         <label>ControlNet Stage 2<input class="srpg-control" type="number" min="0" max="3" step="0.05"></label>
         <label>SRG λ1<input class="srg" type="number" min="0.1" max="5000" step="10"></label>
         <label>PG λ2<input class="pg" type="number" min="0" max="100" step="0.1"></label>
+        <label class="check-field"><input class="qart-enabled" type="checkbox"> Cible QArt reconstruite</label>
+        <label>Centre QArt<input class="qart-center" type="number" min="0.1" max="1" step="0.05"></label>
+        <label>Cible sombre<input class="qart-dark" type="number" min="0" max="0.44" step="0.05"></label>
+        <label>Cible claire<input class="qart-light" type="number" min="0.66" max="1" step="0.05"></label>
         <label>ETA<input class="eta" type="number" min="0" max="1" step="0.05"></label>
         <label>Seed Stage 2 +<input class="seed-offset" type="number" min="0"></label>
         <label>Aperçu tous les N pas<input class="preview" type="number" min="1" max="100"></label>
       </div>
       <div class="srmpgd-params">
         <label>SR-MPGD — itérations<input class="mpgd-iterations" type="number" min="1" max="100"></label>
-        <label>SR-MPGD — learning rate<input class="mpgd-lr" type="number" min="0.0001" max="100000" step="0.1"></label>
+        <label>SR-MPGD — gamma<input class="mpgd-lr" type="number" min="0.0001" max="100000" step="1"></label>
+        <label>SR-MPGD — LPIPS λ<input class="mpgd-lpips" type="number" min="0" max="100" step="0.01"></label>
+        <label>MER initial maximal<input class="mpgd-max-mer" type="number" min="0" max="1" step="0.01"></label>
       </div>
       <details>
         <summary>Modèles et géométrie épinglés</summary>
@@ -205,6 +213,6 @@ botanical | Delicate botanical engraving with white flowers, cyan leaves and dar
     </article>
   </template>
 
-  <script src="/lab-assets/app.js?v=20260729-diffqrcoder-1" defer></script>
+  <script src="/lab-assets/app.js?v=20260729-diffqrcoder-paper-3" defer></script>
 </body>
 </html>

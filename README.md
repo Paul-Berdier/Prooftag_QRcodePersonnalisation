@@ -6,17 +6,19 @@ mesurer leur qualité et ne publier que les résultats validés.
 ## État actuel
 
 La version `0.1.0` fournit désormais un laboratoire volontairement recentré sur
-la chaîne publique DiffQRCoder :
+DiffQRCoder et sur l’algorithme décrit dans son papier :
 
 - une API FastAPI ;
 - un laboratoire Web persistant pour composer, lancer, comparer et noter des campagnes ;
 - un générateur QR de référence (`backend=qr`) ;
 - DiffQRCoder épinglé au commit `e24ea73ee2e13c7e6e87cb422e8b11784e70ae00` ;
 - Cetus-Mix Whalefall + QR Monster v2 pour le Stage 1 ;
-- le Stage 2 public DDIM/SRPG, puis SR-MPGD en option ;
+- le Stage 2 DDIM/SRPG initialisé depuis le latent VAE bruité du Stage 1 ;
+- une cible QArt reconstruite et explicitement distinguée du code QArt non publié ;
+- un SR-MPGD séparé conforme aux équations 13–14, avec validation de chaque état ;
 - une géométrie entière QR v3/M/masque 4 conforme aux exemples publics ;
 - aucune réparation déterministe ou superposition du QR témoin dans les profils du Web Lab ;
-- plusieurs tentatives avec conservation automatique du meilleur résultat ;
+- des garde-fous de divergence et de saturation sans réparation cachée de l’image ;
 - une validation exacte du payload par OpenCV, ZBar et ZXing-cpp ;
 - treize scénarios de dégradation ;
 - PostgreSQL en production, avec migrations Alembic et sauvegardes quotidiennes ;
@@ -26,16 +28,9 @@ la chaîne publique DiffQRCoder :
 - des métriques Prometheus, alertes et un dashboard Grafana ;
 - une image Docker CUDA et des ressources Kubernetes adaptées au cluster Prooftag.
 
-La réparation locale actuelle conserve teinte et texture, remplace les centres carrés visibles
-par des superellipses à bords progressifs et constitue le garde-fou structurel de secours :
-chaque variante est validée et, parmi celles qui atteignent le seuil strict, la moins modifiée
-par rapport à l'image artistique est livrée.
-
-La campagne E004 a rejeté la seconde diffusion localisée : elle augmentait l'erreur QR et le
-nombre de pixels réparés. E005 implémente désormais le gradient SRPG dans chaque timestep DDIM,
-teste sa sortie avec tous les décodeurs et garde la chaîne brute comme secours. E006 ajoute une
-recherche reproductible des paramètres et une porte de validation physique. Tous les modes de
-recherche sont désactivés par défaut. Voir [`docs/e005-srpg.md`](docs/e005-srpg.md),
+Les anciennes réparations locales, projections de modules, fusions FreeQR et
+ControlNet alternatifs restent documentés, mais ils ne font plus partie des
+profils actifs du Web Lab. Voir [`docs/e005-srpg.md`](docs/e005-srpg.md),
 [`docs/e006-parameter-search.md`](docs/e006-parameter-search.md),
 [`docs/e007-contextual-optimizer.md`](docs/e007-contextual-optimizer.md),
 [`docs/e008-controlnet-bakeoff.md`](docs/e008-controlnet-bakeoff.md),

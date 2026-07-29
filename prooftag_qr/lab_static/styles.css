@@ -62,7 +62,9 @@ code { color: var(--green); }
 .params, .stage2-params, .srmpgd-params { display: grid; grid-template-columns: 1.6fr 1.2fr repeat(4,1fr); gap: 9px; }
 .stage2-params, .srmpgd-params { display: none; margin-top: 11px; padding-top: 11px; border-top: 1px solid var(--line); }
 .method.has-stage2 .stage2-params { display: grid; }
-.method.has-srmpgd .srmpgd-params { display: grid; grid-template-columns: repeat(2,minmax(180px,280px)); }
+.method.has-srmpgd .srmpgd-params { display: grid; grid-template-columns: repeat(3,minmax(180px,280px)); }
+.check-field { display: flex; align-items: center; gap: 8px; padding-top: 22px; }
+.check-field input { width: auto; }
 details { margin-top: 13px; border-top: 1px solid var(--line); padding-top: 11px; }
 summary { color: var(--blue); font-size: 12px; cursor: pointer; }
 details textarea { margin-top: 10px; font-family: ui-monospace, Consolas, monospace; font-size: 11px; }
@@ -127,7 +129,9 @@ legend { color: var(--muted); font-size: 11px; }
 .choice.yes { color: var(--green); } .choice.no { color: var(--red); }
 .dialog-actions { display: flex; justify-content: space-between; gap: 10px; margin-top: 13px; }
 @media (max-width: 1050px) {
-  .form-grid, .params, .stage2-params { grid-template-columns: repeat(2,1fr); }
+  .form-grid, .params, .stage2-params, .method.has-srmpgd .srmpgd-params {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
   .score-board { grid-template-columns: repeat(3,1fr); }
   .metrics { grid-template-columns: repeat(4,1fr); }
   .intro, .results-layout { grid-template-columns: 1fr; }
@@ -135,7 +139,8 @@ legend { color: var(--muted); font-size: 11px; }
 }
 @media (max-width: 650px) {
   .topbar, .campaign-head { align-items: start; flex-direction: column; }
-  .form-grid, .params, .stage2-params, .verdict-row { grid-template-columns: 1fr; }
+  .form-grid, .params, .stage2-params, .method.has-srmpgd .srmpgd-params,
+  .verdict-row { grid-template-columns: minmax(0,1fr); }
   .score-board, .metrics { grid-template-columns: repeat(2,1fr); }
   .pipeline { grid-template-columns: 1fr; }
   .pipeline li::after { display: none; }

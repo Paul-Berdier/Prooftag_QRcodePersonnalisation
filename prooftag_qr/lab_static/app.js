@@ -89,15 +89,23 @@ function renderMethods() {
     $(".steps", node).value = method.generation.steps ?? 40;
     $(".cfg", node).value = method.generation.guidance_scale ?? 7.5;
     $(".control", node).value = method.generation.controlnet_scale ?? 1.35;
+    $(".stage2-init", node).value = settings.diffqrcoder_stage2_initialization ?? "paper_stage1_noise";
+    $(".stage2-strength", node).value = settings.diffqrcoder_stage2_strength ?? 1;
     $(".srpg-steps", node).value = settings.srpg_steps ?? 40;
     $(".srpg-control", node).value = settings.srpg_controlnet_scale ?? 1.35;
     $(".srg", node).value = settings.srpg_qr_weight ?? 500;
     $(".pg", node).value = settings.srpg_perceptual_weight ?? 2;
+    $(".qart-enabled", node).checked = settings.diffqrcoder_qart_enabled ?? true;
+    $(".qart-center", node).value = settings.diffqrcoder_qart_center_fraction ?? 0.4;
+    $(".qart-dark", node).value = settings.diffqrcoder_qart_dark_target ?? 0.25;
+    $(".qart-light", node).value = settings.diffqrcoder_qart_light_target ?? 0.75;
     $(".eta", node).value = settings.srpg_eta ?? 0;
     $(".seed-offset", node).value = settings.srpg_seed_offset ?? 2000003;
     $(".preview", node).value = settings.srpg_preview_interval ?? 5;
     $(".mpgd-iterations", node).value = settings.srmpgd_max_iterations ?? 20;
-    $(".mpgd-lr", node).value = settings.srmpgd_step_size ?? 0.1;
+    $(".mpgd-lr", node).value = settings.srmpgd_step_size ?? 1000;
+    $(".mpgd-lpips", node).value = settings.srmpgd_lpips_weight ?? 0.01;
+    $(".mpgd-max-mer", node).value = settings.srmpgd_max_initial_module_error_rate ?? 0.35;
     $(".model-json", node).value = JSON.stringify(method.model, null, 2);
     node.classList.toggle("disabled", !method.enabled);
     node.classList.toggle("has-stage2", method.output_variant !== "raw");
@@ -121,10 +129,19 @@ function renderMethods() {
       item.tools.guided_rediffusion_enabled = false;
       item.tools.latent_refinement_enabled = false;
       item.tools.settings = item.output_variant === "raw" ? {} : {
+        diffqrcoder_stage2_initialization: $(".stage2-init", node).value,
+        diffqrcoder_stage2_strength: Number($(".stage2-strength", node).value),
         srpg_steps: Number($(".srpg-steps", node).value),
         srpg_controlnet_scale: Number($(".srpg-control", node).value),
         srpg_qr_weight: Number($(".srg", node).value),
         srpg_perceptual_weight: Number($(".pg", node).value),
+        diffqrcoder_qart_enabled: $(".qart-enabled", node).checked,
+        diffqrcoder_qart_center_fraction: Number($(".qart-center", node).value),
+        diffqrcoder_qart_dark_target: Number($(".qart-dark", node).value),
+        diffqrcoder_qart_light_target: Number($(".qart-light", node).value),
+        diffqrcoder_guard_max_changed_pixel_ratio: 0.995,
+        diffqrcoder_guard_max_mean_absolute_change: 0.35,
+        diffqrcoder_guard_max_clipped_pixel_ratio: 0.15,
         srpg_eta: Number($(".eta", node).value),
         srpg_seed_offset: Number($(".seed-offset", node).value),
         srpg_save_step_previews: true,
@@ -134,6 +151,13 @@ function renderMethods() {
         ...(item.output_variant === "srmpgd" ? {
           srmpgd_max_iterations: Number($(".mpgd-iterations", node).value),
           srmpgd_step_size: Number($(".mpgd-lr", node).value),
+          srmpgd_lpips_weight: Number($(".mpgd-lpips", node).value),
+          srmpgd_lpips_net: "vgg",
+          srmpgd_crop_padding_px: 78,
+          srmpgd_dark_threshold: 0.45,
+          srmpgd_light_threshold: 0.65,
+          srmpgd_center_fraction: 1 / 3,
+          srmpgd_max_initial_module_error_rate: Number($(".mpgd-max-mer", node).value),
         } : {}),
       };
       $(".method-label", node).textContent = item.name || "Sans nom";
@@ -267,6 +291,7 @@ function renderTrials() {
     const rating = trial.rating;
     const original = autoOriginal(trial);
     const originalPass = original.filter(v => v.exact_payload_match).length;
+    const diverged = Number(run.quality_metrics?.diffqrcoder_guard_diverged || 0) === 1;
     return `<button class="trial" data-index="${index}">
       <div class="image"><img src="${run.image_url}" loading="lazy" alt="${trial.prompt_id}"></div>
       <div class="trial-body">
@@ -279,6 +304,7 @@ function renderTrials() {
           <span>CLIP-AES<b>${fmt(run.quality_metrics?.clip_aesthetic, 2)}</b></span>
         </div>
         <div class="badges">
+          ${diverged ? "<i class='bad'>Divergence Stage 2</i>" : ""}
           ${rating?.aesthetic_ok === true ? "<i class='good'>Esthétique ✓</i>" : rating?.aesthetic_ok === false ? "<i class='bad'>Esthétique ✕</i>" : "<i>Esthétique ?</i>"}
           ${rating?.human_scan_result === "scannable" ? "<i class='good'>Scan ✓</i>" : rating?.human_scan_result === "not_scannable" ? "<i class='bad'>Scan ✕</i>" : "<i>Scan ?</i>"}
         </div>
@@ -315,6 +341,7 @@ async function openTrial(index) {
   state.selectedIndex = index;
   const trial = state.visibleTrials[index];
   const run = trial.generation;
+  const quality = run.quality_metrics || {};
   $("#dialog-kicker").textContent = `${trial.status} · seed ${trial.seed}`;
   $("#dialog-title").textContent = `${trial.prompt_id} / ${trial.method_id}`;
   const original = autoOriginal(trial);
@@ -325,6 +352,14 @@ async function openTrial(index) {
     metric("MER", pct(run.module_error_rate)),
     metric("CLIP-aesthetic", fmt(run.quality_metrics?.clip_aesthetic, 3)),
     metric("CLIPScore", fmt(run.quality_metrics?.clip_score, 3)),
+    metric("Init. papier", Number(quality.diffqrcoder_stage2_paper_initialization || 0) === 1 ? "Oui" : "Non"),
+    metric("Pas Stage 2 effectifs", fmt(quality.diffqrcoder_stage2_effective_steps, 0)),
+    metric("QArt erreur centres", pct(quality.diffqrcoder_qart_center_error_rate)),
+    metric("Changement Stage 1", pct(quality.diffqrcoder_stage2_changed_pixel_ratio)),
+    metric("Divergence", Number(quality.diffqrcoder_guard_diverged || 0) === 1 ? "OUI — résultat à écarter" : "Non"),
+    metric("SR-MPGD gamma", fmt(quality.diffqrcoder_srmpgd_gamma, 3)),
+    metric("SR-MPGD LPIPS lambda", fmt(quality.diffqrcoder_srmpgd_lpips_weight, 3)),
+    metric("Itération retenue", fmt(quality.diffqrcoder_srmpgd_selected_iteration, 0)),
     metric("Génération", `${fmt((run.generation_ms || 0) / 1000, 1)} s`),
     metric("Validation", `${fmt((run.validation_ms || 0) / 1000, 1)} s`),
   ].join("");

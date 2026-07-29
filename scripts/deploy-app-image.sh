@@ -80,7 +80,7 @@ kubectl -n "$namespace" exec "$pod" -c "$container" -- \
   "from prooftag_qr.lab import laboratory_profiles; p = laboratory_profiles(); assert [x['id'] for x in p] == ['qr_reference', 'diffqrcoder_stage1', 'diffqrcoder_srpg', 'diffqrcoder_srmpgd']; assert all(x['model'].get('diffqrcoder_upstream_enabled') for x in p); print([(x['id'], x['output_variant']) for x in p])"
 kubectl -n "$namespace" exec "$pod" -c "$container" -- \
   python -c \
-  "from pathlib import Path; import diffqrcoder, prooftag_qr; path = Path(prooftag_qr.__file__).with_name('lab_static') / 'index.html'; assert '20260729-diffqrcoder-1' in path.read_text(encoding='utf-8'); print('DiffQRCoder importé depuis', Path(diffqrcoder.__file__).resolve()); print('Assets Web DiffQRCoder confirmés')"
+  "from pathlib import Path; import diffqrcoder, prooftag_qr; from prooftag_qr.lab import laboratory_profiles; path = Path(prooftag_qr.__file__).with_name('lab_static') / 'index.html'; text = path.read_text(encoding='utf-8'); assert '20260729-diffqrcoder-paper-3' in text; profiles = laboratory_profiles(); srpg = next(x for x in profiles if x['id'] == 'diffqrcoder_srpg'); srmpgd = next(x for x in profiles if x['id'] == 'diffqrcoder_srmpgd'); assert srpg['tools']['settings']['diffqrcoder_stage2_initialization'] == 'paper_stage1_noise'; assert srpg['tools']['settings']['diffqrcoder_qart_enabled'] is True; assert srmpgd['tools']['settings']['srmpgd_step_size'] == 1000.0; assert srmpgd['tools']['settings']['srmpgd_lpips_weight'] == 0.01; print('DiffQRCoder importé depuis', Path(diffqrcoder.__file__).resolve()); print('Stage 2 papier, QArt reconstruit, SR-MPGD et assets Web confirmés')"
 
 echo "Image déployée et vérifiée : $image"
 echo "Pod : $pod"

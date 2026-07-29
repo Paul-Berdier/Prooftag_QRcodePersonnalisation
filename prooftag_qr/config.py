@@ -32,6 +32,23 @@ class Settings(BaseSettings):
     diffqrcoder_qr_padding_px: int = Field(default=78, ge=0, le=256)
     diffqrcoder_control_guidance_start: float = Field(default=0.0, ge=0.0, le=1.0)
     diffqrcoder_control_guidance_end: float = Field(default=1.0, ge=0.0, le=1.0)
+    diffqrcoder_stage2_initialization: Literal[
+        "paper_stage1_noise", "public_random"
+    ] = "paper_stage1_noise"
+    diffqrcoder_stage2_strength: float = Field(default=1.0, gt=0.0, le=1.0)
+    diffqrcoder_qart_enabled: bool = True
+    diffqrcoder_qart_center_fraction: float = Field(default=0.40, gt=0.0, le=1.0)
+    diffqrcoder_qart_dark_target: float = Field(default=0.25, ge=0.0, lt=0.45)
+    diffqrcoder_qart_light_target: float = Field(default=0.75, gt=0.65, le=1.0)
+    diffqrcoder_guard_max_changed_pixel_ratio: float = Field(
+        default=0.995, gt=0.0, le=1.0
+    )
+    diffqrcoder_guard_max_mean_absolute_change: float = Field(
+        default=0.35, gt=0.0, le=1.0
+    )
+    diffqrcoder_guard_max_clipped_pixel_ratio: float = Field(
+        default=0.15, ge=0.0, le=1.0
+    )
     device: str = "cuda"
     validation_min_pass_rate: float = Field(default=1.0, ge=0.0, le=1.0)
     max_attempts: int = Field(default=3, ge=1, le=20)
@@ -155,6 +172,8 @@ class Settings(BaseSettings):
             raise ValueError("SRPG latent fusion start cannot exceed end")
         if self.diffqrcoder_control_guidance_start > self.diffqrcoder_control_guidance_end:
             raise ValueError("DiffQRCoder control guidance start cannot exceed end")
+        if self.diffqrcoder_qart_dark_target >= self.diffqrcoder_qart_light_target:
+            raise ValueError("DiffQRCoder QArt dark target must be below light target")
         return self
 
     @property

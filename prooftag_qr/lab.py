@@ -524,13 +524,29 @@ TOOL_SETTING_KEYS = {
     "srpg_preview_interval",
     "srmpgd_max_iterations",
     "srmpgd_step_size",
+    "srmpgd_lpips_weight",
+    "srmpgd_lpips_net",
+    "srmpgd_crop_padding_px",
+    "srmpgd_dark_threshold",
+    "srmpgd_light_threshold",
+    "srmpgd_center_fraction",
+    "srmpgd_max_initial_module_error_rate",
     "diffqrcoder_control_guidance_start",
     "diffqrcoder_control_guidance_end",
+    "diffqrcoder_stage2_initialization",
+    "diffqrcoder_stage2_strength",
+    "diffqrcoder_qart_enabled",
+    "diffqrcoder_qart_center_fraction",
+    "diffqrcoder_qart_dark_target",
+    "diffqrcoder_qart_light_target",
+    "diffqrcoder_guard_max_changed_pixel_ratio",
+    "diffqrcoder_guard_max_mean_absolute_change",
+    "diffqrcoder_guard_max_clipped_pixel_ratio",
 }
 
 
 def laboratory_profiles() -> list[dict[str, Any]]:
-    """Only the pinned public DiffQRCoder chain and its binary QR control."""
+    """Pinned models with the Stage-2 algorithm reconstructed from the paper."""
 
     generation = {
         "steps": 40,
@@ -549,6 +565,15 @@ def laboratory_profiles() -> list[dict[str, Any]]:
         "srpg_preview_interval": 5,
         "diffqrcoder_control_guidance_start": 0.0,
         "diffqrcoder_control_guidance_end": 1.0,
+        "diffqrcoder_stage2_initialization": "paper_stage1_noise",
+        "diffqrcoder_stage2_strength": 1.0,
+        "diffqrcoder_qart_enabled": True,
+        "diffqrcoder_qart_center_fraction": 0.40,
+        "diffqrcoder_qart_dark_target": 0.25,
+        "diffqrcoder_qart_light_target": 0.75,
+        "diffqrcoder_guard_max_changed_pixel_ratio": 0.995,
+        "diffqrcoder_guard_max_mean_absolute_change": 0.35,
+        "diffqrcoder_guard_max_clipped_pixel_ratio": 0.15,
     }
     return [
         {
@@ -594,8 +619,8 @@ def laboratory_profiles() -> list[dict[str, Any]]:
                 "settings": stage2.copy(),
             },
             "description": (
-                "Stage 2 public : DDIM + Scanning Robust Perceptual Guidance, "
-                "sans projection, masque local, fusion FreeQR ni réparation finale."
+                "Stage 2 du papier : Stage 1 encodé puis bruité, cible QArt "
+                "reconstruite et Scanning Robust Perceptual Guidance."
             ),
         },
         {
@@ -613,12 +638,19 @@ def laboratory_profiles() -> list[dict[str, Any]]:
                 "settings": {
                     **stage2,
                     "srmpgd_max_iterations": 20,
-                    "srmpgd_step_size": 0.1,
+                    "srmpgd_step_size": 1000.0,
+                    "srmpgd_lpips_weight": 0.01,
+                    "srmpgd_lpips_net": "vgg",
+                    "srmpgd_crop_padding_px": 78,
+                    "srmpgd_dark_threshold": 0.45,
+                    "srmpgd_light_threshold": 0.65,
+                    "srmpgd_center_fraction": 1 / 3,
+                    "srmpgd_max_initial_module_error_rate": 0.35,
                 },
             },
             "description": (
-                "Même Stage 2 puis post-traitement SR-MPGD du dépôt public. "
-                "Le nombre d'itérations et le learning rate sont réglables."
+                "Stage 2 puis Eq. 13-14 : SRL + 0,01 LPIPS, gamma 1000, "
+                "validation à chaque itération et conservation du meilleur état."
             ),
         },
     ]
@@ -881,6 +913,19 @@ class LabService:
                             settings.srpg_perceptual_weight
                         ),
                         "diffqrcoder_eta_requested": float(settings.srpg_eta),
+                        "diffqrcoder_stage2_strength_requested": float(
+                            settings.diffqrcoder_stage2_strength
+                        ),
+                        "diffqrcoder_stage2_paper_initialization_requested": float(
+                            settings.diffqrcoder_stage2_initialization
+                            == "paper_stage1_noise"
+                        ),
+                        "diffqrcoder_qart_requested": float(
+                            settings.diffqrcoder_qart_enabled
+                        ),
+                        "diffqrcoder_qart_center_fraction_requested": float(
+                            settings.diffqrcoder_qart_center_fraction
+                        ),
                         "diffqrcoder_qr_version": float(
                             settings.diffqrcoder_qr_version
                         ),
@@ -921,6 +966,9 @@ class LabService:
                         ),
                         "srmpgd_requested_lpips_weight": float(
                             settings.srmpgd_lpips_weight
+                        ),
+                        "srmpgd_requested_max_initial_mer": float(
+                            settings.srmpgd_max_initial_module_error_rate
                         ),
                     }
                 )
@@ -1075,13 +1123,15 @@ def method_schema(settings: Settings | None = None) -> dict[str, Any]:
         "profiles": profiles,
         "notes": {
             "scope": (
-                "Pinned public DiffQRCoder + Cetus-Mix Whalefall + QR Monster v2 only. "
-                "No deterministic repair, FreeQR fusion, local mask or alternative ControlNet."
+                "Pinned DiffQRCoder + Cetus-Mix Whalefall + QR Monster v2 only. "
+                "Stage 2 follows Algorithm 1 with a reconstructed QArt target; "
+                "no deterministic final repair or alternative ControlNet."
             ),
             "upstream_revision": DIFFQRCODER_MODEL_SETTINGS["diffqrcoder_revision"],
             "upstream_compatibility_patch": (
                 "PerceptualLoss uses torch.stack instead of torch.tensor so the public "
-                "VGG loss remains connected to autograd; srmpgd_lr is passed explicitly."
+                "VGG loss remains connected to autograd. Stage 2 is initialized from the "
+                "noised Stage-1 VAE latent and SR-MPGD uses separate gamma/LPIPS weights."
             ),
             "payload_storage": (
                 "The clear payload is held only in worker memory and is never persisted."

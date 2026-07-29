@@ -8,8 +8,8 @@ contient uniquement :
 
 1. le QR binaire témoin ;
 2. le Stage 1 public de DiffQRCoder ;
-3. le Stage 2 public avec SRPG ;
-4. facultativement, le Stage 2 suivi du SR-MPGD public.
+3. le Stage 2 SRPG initialisé selon l’équation 9 du papier ;
+4. facultativement, le Stage 2 suivi du SR-MPGD des équations 13–14.
 
 Le socle est figé au commit DiffQRCoder
 `e24ea73ee2e13c7e6e87cb422e8b11784e70ae00`, avec Cetus-Mix Whalefall et
@@ -18,8 +18,12 @@ Le socle est figé au commit DiffQRCoder
 ```mermaid
 flowchart LR
     Q["QR v3 / M / masque 4"] --> S1["Stage 1\nCetus-Mix + QR Monster v2"]
-    S1 --> S2["Stage 2\nDDIM + SRPG"]
-    S2 --> M["SR-MPGD optionnel"]
+    S1 --> N["VAE + bruit\nEq. 9"]
+    S1 --> QART["Cible QArt reconstruite"]
+    Q --> QART
+    N --> S2["Stage 2\nDDIM + SRPG"]
+    QART --> S2
+    S2 --> M["SR-MPGD Eq. 13–14\noptionnel"]
     Q --> V["Validation automatique"]
     S1 --> V
     S2 --> V
@@ -36,7 +40,6 @@ flowchart LR
 - Stage 2 avec `ScanningRobustLoss` et perte perceptuelle VGG ;
 - QR Monster v2 et Cetus-Mix Whalefall ;
 - SRG, PG, ControlNet, CFG, pas et ETA configurables ;
-- SR-MPGD interne, avec itérations et learning rate configurables ;
 - QR v3, masque 4, modules de 20 px et source 740×740 ;
 - prétraitement en 736×736 et crop de 78 px, laissant un cœur de
   580×580, soit 29×29 modules de 20 px.
@@ -44,27 +47,35 @@ flowchart LR
 Le laboratoire ne recouvre jamais une sortie artistique avec le QR binaire.
 Une image non scannable reste rejetée et visible.
 
-## Corrections de compatibilité documentées
+## Reconstruction conforme à l’algorithme du papier
 
-Le dépôt public contient deux défauts qui empêchent des réglages d’agir comme
-annoncé :
+Le dépôt public ne reproduit pas seul tout l’algorithme décrit dans le papier :
 
 - `PerceptualLoss.forward` reconstruit un tenseur avec `torch.tensor([...])`,
   ce qui détache les pertes VGG du graphe. Le wrapper emploie `torch.stack`,
   sans changer la formule ;
-- `DiffQRCoderPipeline.__call__` ne transmet pas `srmpgd_lr` à `_run_stage2`.
-  Le wrapper appelle `_run_stage2` explicitement et transmet la valeur choisie.
+- `_run_stage2` génère normalement un nouveau bruit aléatoire. Le wrapper encode
+  réellement l’image du Stage 1 avec le VAE puis lui ajoute le bruit DDIM au
+  timestep de départ, conformément à l’équation 9 ;
+- le constructeur de la cible `Qart(x̂, y)` n’est pas publié. Le wrapper
+  reconstruit une cible déterministe : l’image du Stage 1 reste intacte, les
+  centres des modules de données passent les seuils sombres/clairs de SRL, et
+  les motifs fonctionnels sont copiés exactement ;
+- le SR-MPGD public réutilise la loss pondérée du Stage 2. Le wrapper applique
+  séparément l’équation 13, `LSR + 0,01 × LPIPS`, puis l’équation 14 avec
+  `gamma=1000`.
 
-Ces corrections sont déclarées dans `/v1/lab/schema`. Le commit amont n’est
-pas modifié sur disque.
+SR-MPGD décode et valide chaque état, s’arrête en cas de succès strict ou de
+gradient non fini et livre le meilleur état observé — jamais aveuglément la
+dernière itération. Ces corrections sont déclarées dans `/v1/lab/schema`. Le
+commit amont n’est pas modifié sur disque.
 
-## Limite par rapport au papier
+## Limite honnête de la cible QArt
 
-Le papier décrit une transformation QArt Reed–Solomon entre les deux stages et
-un redémarrage depuis le Stage 1 bruité. Le dépôt public ne fournit pas le
-générateur QArt complet et sa méthode `_run_stage2` initialise un nouveau bruit.
-Ce Web Lab reproduit donc le chemin **exécutable public**, pas une reconstruction
-supposée des éléments absents.
+La cible reconstruite respecte la géométrie, les seuils et le payload du QR
+initial, mais ce n’est pas l’implémentation Reed–Solomon QArt privée employée
+par les auteurs. L’interface la nomme donc explicitement « QArt reconstruite ».
+Elle peut être désactivée pour comparer le QR binaire.
 
 Pour comparer des paramètres, le Stage 2 reçoit une seed dérivée explicite
 (`seed + srpg_seed_offset`). Les recettes d’un même prompt et d’une même seed
@@ -98,13 +109,16 @@ charger plusieurs pipelines en VRAM.
 ### Paramètres exposés
 
 - Stage 1 : pas, CFG, poids ControlNet ;
-- Stage 2 : pas, poids ControlNet, SRG `λ1`, PG `λ2`, ETA, seed offset ;
+- Stage 2 : initialisation papier ou bruit public, quantité de bruit, pas,
+  poids ControlNet, SRG `λ1`, PG `λ2`, ETA et seed offset ;
+- QArt reconstruite : activation, fraction centrale et cibles de luminance ;
 - artefacts : fréquence des aperçus intermédiaires ;
-- SR-MPGD : itérations et learning rate ;
+- SR-MPGD : itérations, `gamma`, poids LPIPS et MER initial maximal ;
 - avancé : modèles, commit et géométrie QR.
 
 Les valeurs initiales sont 40 pas, CFG 7,5, ControlNet 1,35, SRG 500, PG 2
-et ETA 0. SR-MPGD démarre à 20 itérations et LR 0,1. Ce sont des points de
+et ETA 0. SR-MPGD démarre à 20 itérations, `gamma=1000` et
+`LPIPS=0,01`, valeurs annoncées par le papier. Ce sont des points de
 départ, pas une garantie de lecture.
 
 ## Scores automatiques par image
@@ -117,6 +131,9 @@ dégradation du projet. L’interface affiche :
 - **MER** : taux de modules incorrects ;
 - **CLIP-aesthetic**, **CLIPScore** et similarité CLIP ;
 - temps de génération, validation et total ;
+- initialisation réellement employée, pas effectifs et erreur des centres QArt ;
+- variation par rapport au Stage 1 et détection de divergence/saturation ;
+- paramètres SR-MPGD réellement appliqués et itération retenue ;
 - tableau `décodeur × scénario × résultat × latence`.
 
 Une sortie est `accepted` seulement si tous les décodeurs originaux relisent le
@@ -150,7 +167,8 @@ Le script refuse un dépôt sale, construit une image taguée avec le commit Git
 vérifie le commit DiffQRCoder, importe l’image dans containerd K3s, applique la
 migration `0004_human_verdicts`, attend le rollout puis contrôle dans le pod les
 quatre profils, l’import DiffQRCoder et la version
-`20260729-diffqrcoder-1` des assets Web.
+`20260729-diffqrcoder-paper-3` des assets Web, l’initialisation Stage 1 bruitée,
+la cible QArt et les constantes SR-MPGD.
 
 Le taux publiable sera calculé sur les sorties artistiques réellement générées,
 jamais sur le QR témoin ni sur une réparation cachée.
