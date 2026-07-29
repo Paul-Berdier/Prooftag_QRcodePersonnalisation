@@ -3,7 +3,7 @@ import pytest
 from PIL import Image
 
 from prooftag_qr.diffqrcoder_backend import (
-    _preserve_partial_schedule_stride,
+    _install_partial_schedule,
     _qart_center_error_rate,
     build_paper_qart_target,
 )
@@ -107,12 +107,14 @@ def test_reconstructed_qart_rejects_an_unaligned_stage1_canvas():
         )
 
 
-def test_partial_stage2_schedule_keeps_the_original_ddim_stride():
+def test_partial_stage2_schedule_avoids_custom_timesteps_and_keeps_stride():
     class Scheduler:
         num_inference_steps = None
+        timesteps = []
 
-        def set_timesteps(self, *args, **kwargs):
-            self.num_inference_steps = len(kwargs["timesteps"])
+        def set_timesteps(self, num_inference_steps, *args, **kwargs):
+            self.num_inference_steps = num_inference_steps
+            self.timesteps = list(range(num_inference_steps))
 
     class Pipeline:
         scheduler = Scheduler()
@@ -120,12 +122,13 @@ def test_partial_stage2_schedule_keeps_the_original_ddim_stride():
     pipe = Pipeline()
     original = pipe.scheduler.set_timesteps
 
-    with _preserve_partial_schedule_stride(
+    with _install_partial_schedule(
         pipe,
         base_steps=40,
-        timesteps=list(range(20)),
+        effective_steps=20,
     ):
-        pipe.scheduler.set_timesteps(timesteps=list(range(20)), device="cuda")
+        pipe.scheduler.set_timesteps(20, device="cuda")
         assert pipe.scheduler.num_inference_steps == 40
+        assert pipe.scheduler.timesteps == list(range(20, 40))
 
     assert pipe.scheduler.set_timesteps == original

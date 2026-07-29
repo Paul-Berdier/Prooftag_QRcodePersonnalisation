@@ -171,30 +171,35 @@ def _patch_upstream_perceptual_gradient() -> None:
 
 
 @contextmanager
-def _preserve_partial_schedule_stride(pipe, *, base_steps: int, timesteps):
-    """Keep the upstream manual DDIM update aligned with a truncated schedule.
+def _install_partial_schedule(
+    pipe,
+    *,
+    base_steps: int,
+    effective_steps: int,
+):
+    """Install a truncated DDIM schedule without the unsupported custom API.
 
-    DiffQRCoder computes the previous timestep from
-    ``scheduler.num_inference_steps``. Diffusers replaces that value with the
-    length of a custom timestep list, although our list is a suffix of the
-    original ``base_steps`` schedule. Without this compatibility wrapper, a
-    partial Stage-2 restart uses the wrong alpha pair.
+    Diffusers 0.32 rejects ``timesteps=[...]`` for ``DDIMScheduler``. The
+    upstream loop nevertheless supports a suffix of the normal schedule if it
+    is installed directly on the scheduler. Keeping ``num_inference_steps`` at
+    ``base_steps`` is also required because DiffQRCoder computes its previous
+    alpha manually from that value.
     """
-    if timesteps is None or len(timesteps) == base_steps:
+    if effective_steps == base_steps:
         yield
         return
 
     scheduler = pipe.scheduler
     original_set_timesteps = scheduler.set_timesteps
 
-    def set_timesteps_with_original_stride(self, *args, **kwargs):
-        result = original_set_timesteps(*args, **kwargs)
-        if kwargs.get("timesteps") is not None:
-            self.num_inference_steps = base_steps
+    def set_truncated_timesteps(self, num_inference_steps, *args, **kwargs):
+        result = original_set_timesteps(base_steps, *args, **kwargs)
+        self.timesteps = self.timesteps[base_steps - effective_steps :]
+        self.num_inference_steps = base_steps
         return result
 
     scheduler.set_timesteps = MethodType(
-        set_timesteps_with_original_stride,
+        set_truncated_timesteps,
         scheduler,
     )
     try:
@@ -360,7 +365,6 @@ class UpstreamDiffQRCoderBackend:
         )
         return (
             initial.detach(),
-            [int(item) for item in timesteps.detach().cpu().tolist()],
             {
                 "diffqrcoder_stage2_effective_steps": float(effective_steps),
                 "diffqrcoder_stage2_start_timestep": float(first_timestep.item()),
@@ -457,7 +461,6 @@ class UpstreamDiffQRCoderBackend:
         self._debug_artifacts["stage2_reference"] = candidate.copy()
         self._debug_artifacts["stage2_control_target"] = stage2_target.copy()
         initial_latent = None
-        custom_timesteps = None
         initialization_diagnostics = {
             "diffqrcoder_stage2_paper_initialization": 0.0,
             "diffqrcoder_stage2_effective_steps": float(self.settings.srpg_steps),
@@ -468,7 +471,6 @@ class UpstreamDiffQRCoderBackend:
         ):
             (
                 initial_latent,
-                custom_timesteps,
                 initialization_diagnostics,
             ) = self._paper_stage2_initial_latent(
                 pipe,
@@ -492,10 +494,10 @@ class UpstreamDiffQRCoderBackend:
                 )
             return values
 
-        with _preserve_partial_schedule_stride(
+        with _install_partial_schedule(
             pipe,
             base_steps=self.settings.srpg_steps,
-            timesteps=custom_timesteps,
+            effective_steps=effective_steps,
         ):
             output = pipe._run_stage2(
                 prompt=request.prompt,
@@ -505,7 +507,6 @@ class UpstreamDiffQRCoderBackend:
                 ref_image=reference,
                 negative_prompt=request.negative_prompt or None,
                 num_inference_steps=effective_steps,
-                timesteps=custom_timesteps,
                 guidance_scale=request.guidance_scale,
                 eta=self.settings.srpg_eta,
                 generator=generator,

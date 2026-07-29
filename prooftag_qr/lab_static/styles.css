@@ -94,10 +94,15 @@ details textarea { margin-top: 10px; font-family: ui-monospace, Consolas, monosp
 .trial:hover { border-color: var(--blue); transform: translateY(-1px); }
 .image { aspect-ratio: 1; display: grid; place-items: center; background: #070a0e; }
 .image img { width: 100%; height: 100%; object-fit: contain; }
+.missing-image { max-width: 75%; color: var(--red); text-align: center; font-size: 12px; }
 .trial-body { padding: 11px; }
 .trial-title { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
 .trial-title b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .trial-body p { color: var(--muted); font-size: 11px; margin: 5px 0 10px; }
+.trial-body p.run-error {
+  display: -webkit-box; overflow: hidden; color: var(--red);
+  -webkit-box-orient: vertical; -webkit-line-clamp: 3;
+}
 .status { font-size: 8px; text-transform: uppercase; letter-spacing: .08em; }
 .status.accepted { color: var(--green); } .status.rejected, .status.error { color: var(--red); }
 .trial-stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 4px; }

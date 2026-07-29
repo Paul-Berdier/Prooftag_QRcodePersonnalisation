@@ -163,6 +163,7 @@ def test_gpu_dependencies_are_pinned_to_public_diffqrcoder():
     assert "build_paper_qart_target(" in backend
     assert "run_srmpgd(" in backend
     assert "srmpgd_num_iteration=None" in backend
+    assert "timesteps=paper_timesteps" not in backend
 
 
 def test_single_file_base_model_detection_supports_cetus_safetensors():

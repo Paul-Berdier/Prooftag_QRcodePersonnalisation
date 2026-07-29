@@ -293,10 +293,12 @@ function renderTrials() {
     const originalPass = original.filter(v => v.exact_payload_match).length;
     const diverged = Number(run.quality_metrics?.diffqrcoder_guard_diverged || 0) === 1;
     return `<button class="trial" data-index="${index}">
-      <div class="image"><img src="${run.image_url}" loading="lazy" alt="${trial.prompt_id}"></div>
+      <div class="image">${run.image_url
+        ? `<img src="${run.image_url}" loading="lazy" alt="${trial.prompt_id}">`
+        : "<span class='missing-image'>Génération en erreur</span>"}</div>
       <div class="trial-body">
         <div class="trial-title"><b>${trial.prompt_id} / ${trial.method_id}</b><span class="status ${trial.status}">${trial.status}</span></div>
-        <p>seed ${trial.seed} · ${run.selected_variant}</p>
+        <p class="${run.error ? "run-error" : ""}">${run.error || `seed ${trial.seed} · ${run.selected_variant}`}</p>
         <div class="trial-stats">
           <span>SSR<b>${pct(run.scan_pass_rate)}</b></span>
           <span>Original<b>${originalPass}/${original.length}</b></span>
@@ -379,7 +381,8 @@ async function openTrial(index) {
   $$("input[name='human-scan']").forEach(input => input.checked = (rating.human_scan_result || "not_tested") === input.value);
   $("#aesthetic-score").value = rating.aesthetic_score ?? "";
   $("#rating-notes").value = rating.notes ?? "";
-  $("#dialog-message").textContent = "";
+  $("#dialog-message").textContent = run.error || "";
+  $("#dialog-message").classList.toggle("error", Boolean(run.error));
   $("#trial-dialog").showModal();
 }
 

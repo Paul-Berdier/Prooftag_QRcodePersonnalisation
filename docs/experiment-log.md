@@ -1215,3 +1215,15 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   dépendances épinglées, lint Python et syntaxe JavaScript. La validation
   numérique CUDA doit ensuite être faite sur la RTX Ada avec une nouvelle
   campagne appariée ; les anciens scores ne sont pas réinterprétés.
+- **Incident GPU 09 — calendrier DDIM personnalisé refusé :** la première
+  campagne déployée termine avec huit erreurs Stage 2 en environ une seconde.
+  L’API conserve l’exception exacte :
+  `DDIMScheduler.set_timesteps does not support custom timestep schedules`.
+  Les Stage 1 sont valides ; aucune itération SRPG ni SR-MPGD n’a commencé.
+- **Correction GPU 09 :** le backend ne transmet plus `timesteps=[...]` à
+  Diffusers 0.32. Pour 40/40 pas, il laisse DDIM construire son calendrier
+  normal. Pour un redémarrage partiel, il construit d’abord ce même calendrier,
+  en installe le suffixe directement sur le scheduler et conserve les 40 pas
+  comme dénominateur du calcul manuel amont. Un test de non-régression vérifie
+  à la fois le suffixe et l’intervalle. Le Web Lab affiche désormais le message
+  d’erreur des générations sans image au lieu d’une vignette cassée.

@@ -167,7 +167,7 @@ Le script refuse un dépôt sale, construit une image taguée avec le commit Git
 vérifie le commit DiffQRCoder, importe l’image dans containerd K3s, applique la
 migration `0004_human_verdicts`, attend le rollout puis contrôle dans le pod les
 quatre profils, l’import DiffQRCoder et la version
-`20260729-diffqrcoder-paper-3` des assets Web, l’initialisation Stage 1 bruitée,
+`20260729-diffqrcoder-paper-4` des assets Web, l’initialisation Stage 1 bruitée,
 la cible QArt et les constantes SR-MPGD.
 
 Le taux publiable sera calculé sur les sorties artistiques réellement générées,
