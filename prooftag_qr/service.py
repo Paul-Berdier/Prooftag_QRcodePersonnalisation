@@ -18,7 +18,7 @@ from .qr import generate_qr, module_error_rate
 from .quality import image_change_metrics, image_quality_metrics
 from .repository import RunRepository
 from .schemas import GenerationRequest
-from .validation import QRValidator
+from .validation import QRValidator, summarize_validation_records
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +129,27 @@ class GenerationService:
                     if self.settings.save_debug_artifacts:
                         self.artifact_store.save_variant(run.id, "stage1_raw", raw_candidate)
 
+                    def validate_refinement_state(
+                        image: Image.Image,
+                        iteration: int,
+                    ) -> dict[str, object]:
+                        del iteration
+                        refinement_records = self.validator.validate(
+                            image,
+                            request.payload,
+                        )
+                        passed = sum(
+                            item.exact_payload_match for item in refinement_records
+                        )
+                        total = len(refinement_records)
+                        return {
+                            "passed": passed,
+                            "total": total,
+                            "pass_rate": passed / total if total else 0.0,
+                            "strict_all": total > 0 and passed == total,
+                            **summarize_validation_records(refinement_records),
+                        }
+
                     variant_iterator = iter(
                         backend.variants(
                             raw_candidate,
@@ -138,6 +159,7 @@ class GenerationService:
                             run_id=run.id,
                             attempt=attempt + 1,
                             research_mode=target_variant is not None,
+                            validation_callback=validate_refinement_state,
                         )
                     )
                     while True:
@@ -404,6 +426,7 @@ class GenerationService:
                         ).items()
                     }
                 )
+                run.quality_metrics.update(backend.diagnostics())
             run.selected_variant = best_variant
             if backend_name == "controlnet":
                 metrics.REPAIR_SELECTED.labels(best_variant).inc()

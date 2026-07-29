@@ -1068,3 +1068,23 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   `floor(steps × strength)`, ControlNet, les poids QR/perceptuel/fonctionnel et la limite de
   gradient. Les mêmes valeurs résolues sont ajoutées aux métriques du résultat. Une combinaison
   qui produirait zéro pas est désormais rejetée avant l'inférence.
+- **Audit Web Lab 05 — SR-MPGD absent :** l'export
+  `prooftag-lab-fe011965-82af-483a-8350-2fcee96f82a9.csv` contient 48 essais répartis entre
+  `controlnet_raw`, `qr_reference`, `srpg_late_2` et `srpg_late_4`, mais aucune variante
+  SR-MPGD. Les deux profils SRPG génératifs ont zéro payload original exact et une MER moyenne
+  proche de 25 %, tandis que le témoin binaire passe 12/12.
+- **Cause Web Lab 05 :** `run_srmpgd` existait et reproduisait les équations 12-14, mais le
+  backend Web appelait uniquement l'ancien `refine_candidate_latent`. Celui-ci réencodait le PNG
+  et n'avait pas accès au latent propre du Stage 2. `SRPGResult` supprimait en outre ce latent à
+  la fin de la boucle.
+- **Correction Web Lab 05 :** `SRPGResult` conserve maintenant le latent propre exact. Le nouveau
+  profil `srpg_late_4_srmpgd` transmet directement ce tenseur à `run_srmpgd`, teste et sauvegarde
+  tous les états, puis sélectionne scannabilité/MER avant LPIPS. La validation interne utilise
+  la même matrice de décodeurs que la porte finale du service.
+- **Traçabilité Web Lab 05 :** l'interface sépare `SR-MPGD papier` de l'ancien raffinement latent,
+  expose itérations, gamma et lambda LPIPS, exporte les paramètres et résultats dans les colonnes
+  `quality_srmpgd_*`, et ajoute métriques Prometheus, logs détaillés et images
+  `srmpgd_iteration_XX`.
+- **Limite Web Lab 05 :** seul le post-traitement SR-MPGD suit les équations du papier. Le profil
+  actif conserve un Stage 2 tardif Prooftag ; le QArt Reed-Solomon exact de la Figure 3 reste
+  indisponible dans le dépôt public.

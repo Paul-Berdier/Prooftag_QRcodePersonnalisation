@@ -65,6 +65,19 @@ class ForcedResearchBackend(GenerationBackend):
         yield "centers_95", blueprint.image
 
 
+class RefinementCallbackBackend(GenerationBackend):
+    def __init__(self):
+        self.summary = None
+
+    def generate(self, request, blueprint, seed):
+        return blueprint.image.copy()
+
+    def variants(self, candidate, blueprint, **kwargs):
+        callback = kwargs["validation_callback"]
+        self.summary = callback(candidate, 0)
+        yield "srmpgd", candidate
+
+
 class ColorValidator:
     def validate(self, image, expected_payload):
         exact = image.getpixel((0, 0)) != (0, 0, 0)
@@ -296,6 +309,45 @@ def test_forced_laboratory_output_does_not_fall_back_to_qr_repair(tmp_path):
     with Image.open(run.image_path) as selected:
         assert selected.getpixel((0, 0)) == (0, 128, 0)
     assert not (settings.artifacts_dir / run.id / "variants" / "centers_95.png").exists()
+
+
+def test_service_supplies_full_decoder_summary_to_srmpgd(tmp_path):
+    settings = Settings(
+        data_dir=tmp_path / "data",
+        model_cache_dir=tmp_path / "models",
+        validation_min_pass_rate=1.0,
+        max_attempts=1,
+    )
+    settings.ensure_directories()
+    backend = RefinementCallbackBackend()
+    service = GenerationService(
+        settings=settings,
+        repository=RunRepository(settings.database_url),
+        artifact_store=LocalArtifactStore(settings.artifacts_dir),
+        backends={"controlnet": backend},
+        validator=ColorValidator(),
+    )
+
+    run = service.generate(
+        GenerationRequest(
+            payload="https://example.prooftag.test/t/srmpgd-callback",
+            backend="controlnet",
+            max_attempts=1,
+        ),
+        target_variant="srmpgd",
+    )
+
+    assert run.status == "accepted"
+    assert backend.summary == {
+        "passed": 1,
+        "total": 1,
+        "pass_rate": 1.0,
+        "strict_all": True,
+        "decoder_pass_rates": {"fake": 1.0},
+        "scenario_pass_rates": {"original": 1.0},
+        "worst_decoder_pass_rate": 1.0,
+        "worst_scenario_pass_rate": 1.0,
+    }
 
 
 def test_forced_laboratory_output_reuses_supplied_stage1_without_regeneration(tmp_path):

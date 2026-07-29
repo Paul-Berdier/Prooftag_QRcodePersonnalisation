@@ -43,11 +43,12 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     assert "cuda_available" in runtime.json()
     assert runtime.json()["generation_config"]["latent_refinement_enabled"] is False
     assert runtime.json()["generation_config"]["guided_rediffusion_enabled"] is False
+    assert runtime.json()["generation_config"]["srmpgd_enabled"] is False
 
     lab_page = client.get("/lab")
     assert lab_page.status_code == 200
     assert "srpg-effective-steps" in lab_page.text
-    assert "20260729-srpg-controls-2" in lab_page.text
+    assert "20260729-srmpgd-paper-1" in lab_page.text
     lab_javascript = client.get("/lab-assets/app.js")
     assert lab_javascript.status_code == 200
     assert "effectiveSrpgSteps" in lab_javascript.text
@@ -55,6 +56,10 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     assert schema.status_code == 200
     assert any(item["id"] == "srpg_late_2" for item in schema.json()["profiles"])
     assert any(item["id"] == "srpg_late_4" for item in schema.json()["profiles"])
+    assert any(
+        item["id"] == "srpg_late_4_srmpgd"
+        for item in schema.json()["profiles"]
+    )
     controlnet_profile = next(
         item for item in schema.json()["profiles"] if item["id"] == "controlnet_raw"
     )
@@ -65,6 +70,11 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
         item
         for item in schema.json()["profiles"]
         if item["id"] == "srpg_full_restart"
+    )
+    srmpgd_profile = next(
+        item
+        for item in schema.json()["profiles"]
+        if item["id"] == "srpg_late_4_srmpgd"
     )
     assert controlnet_profile["model"]["base_model_id"]
     assert controlnet_profile["model"]["controlnet_model_id"]
@@ -79,6 +89,11 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     assert srpg_profile["reuse_stage1"] is True
     assert srpg_profile["enabled"] is True
     assert srpg_profile["tools"]["settings"]["srpg_strength"] == 0.05
+    assert srmpgd_profile["output_variant"] == "srmpgd"
+    assert srmpgd_profile["tools"]["srpg_enabled"] is True
+    assert srmpgd_profile["tools"]["srmpgd_enabled"] is True
+    assert srmpgd_profile["tools"]["settings"]["srmpgd_step_size"] == 1000.0
+    assert srmpgd_profile["tools"]["settings"]["srmpgd_lpips_weight"] == 0.01
     assert full_restart_profile["enabled"] is False
 
     campaign_response = client.post(

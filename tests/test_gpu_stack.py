@@ -1,3 +1,4 @@
+import sys
 import tomllib
 from pathlib import Path
 from types import SimpleNamespace
@@ -41,6 +42,7 @@ def test_gpu_dependencies_are_pinned_to_the_torch_base_image():
     assert "DDIMScheduler" in dockerfile
     assert "TORCH_HOME=/opt/torch-cache" in dockerfile
     assert "lpips.LPIPS(net='alex'" in dockerfile
+    assert "lpips.LPIPS(net='vgg'" in dockerfile
     assert "TRANSFORMERS_CACHE" not in dockerfile
 
     settings = Settings()
@@ -79,6 +81,11 @@ def test_gpu_dependencies_are_pinned_to_the_torch_base_image():
     assert settings.srpg_robust_contrast_weight == 0
     assert settings.srpg_robust_contrast_factor == pytest.approx(0.70)
     assert settings.srpg_eta == 0
+    assert settings.srmpgd_enabled is False
+    assert settings.srmpgd_max_iterations == 20
+    assert settings.srmpgd_step_size == 1000.0
+    assert settings.srmpgd_lpips_weight == 0.01
+    assert settings.srmpgd_lpips_net == "vgg"
     assert settings.latent_refinement_enabled is False
     assert settings.latent_refinement_iterations == 8
     assert settings.latent_refinement_learning_rate == 0.02
@@ -97,6 +104,9 @@ def test_gpu_dependencies_are_pinned_to_the_torch_base_image():
     assert 'PROOFTAG_QR_SRPG_STEPS: "40"' in manifest
     assert 'PROOFTAG_QR_SRPG_SAVE_STEP_PREVIEWS: "false"' in manifest
     assert 'PROOFTAG_QR_SRPG_PREVIEW_INTERVAL: "5"' in manifest
+    assert 'PROOFTAG_QR_SRMPGD_ENABLED: "false"' in manifest
+    assert 'PROOFTAG_QR_SRMPGD_STEP_SIZE: "1000.0"' in manifest
+    assert 'PROOFTAG_QR_SRMPGD_LPIPS_WEIGHT: "0.01"' in manifest
     assert 'PROOFTAG_QR_LATENT_REFINEMENT_ENABLED: "false"' in manifest
     assert 'PROOFTAG_QR_LATENT_REFINEMENT_MAX_LATENT_DELTA: "0.10"' in manifest
     assert 'PROOFTAG_QR_LATENT_REFINEMENT_MAX_MEAN_ABSOLUTE_CHANGE: "0.08"' in manifest
@@ -122,6 +132,8 @@ def test_srpg_rejects_incompatible_pipeline_modes():
         Settings(srpg_enabled=True, controlnet_pipeline_mode="text2img")
     with pytest.raises(ValueError, match="at least one effective step"):
         Settings(srpg_enabled=True, srpg_steps=40, srpg_strength=0.01)
+    with pytest.raises(ValueError, match="requires Stage 2 SRPG"):
+        Settings(srmpgd_enabled=True)
 
 
 def test_targeted_repairs_run_before_global_module_repairs():
@@ -282,6 +294,103 @@ def test_guided_then_latent_chain_uses_the_combined_prefix(monkeypatch):
     assert names.index("guided") < names.index("guided_latent_srl")
     assert names.index("guided_latent_srl") < names.index("guided_latent_rounded_16")
     assert names.index("guided_latent_rounded_16") < names.index("rounded_16")
+
+
+def test_paper_srmpgd_receives_the_exact_stage2_latent_even_when_srpg_is_rejected(
+    monkeypatch,
+):
+    blueprint = generate_qr("https://example.prooftag.test/t/paper-srmpgd", "M")
+    backend = ControlNetBackend(Settings(srpg_enabled=True, srmpgd_enabled=True))
+    stage2_image = blueprint.image.copy()
+    exact_stage2_latent = object()
+    srpg = SimpleNamespace(
+        image=stage2_image,
+        latent=exact_stage2_latent,
+        steps=(),
+        previews=(),
+        initial_module_error_rate=0.30,
+        final_module_error_rate=0.25,
+        changed_pixel_ratio=0.10,
+        mean_absolute_change=0.05,
+        peak_gpu_memory_allocated_mib=None,
+        accepted=False,
+        rejection_reason="actual_module_error_not_improved",
+    )
+    selected_step = SimpleNamespace(
+        iteration=1,
+        elapsed_s=0.1,
+        scanning_robust_loss=0.2,
+        lpips_loss=0.01,
+        objective=0.2001,
+        surrogate_module_error_rate=0.20,
+        actual_module_error_rate=0.18,
+        passed=1,
+        total=2,
+        pass_rate=0.5,
+        strict_all=False,
+        worst_decoder_pass_rate=0.5,
+        worst_scenario_pass_rate=0.5,
+        gradient_rms=0.01,
+        next_step_rms=10.0,
+    )
+    srmpgd_result = SimpleNamespace(
+        image=blueprint.image.copy(),
+        latent=object(),
+        steps=(selected_step,),
+        selected_iteration=1,
+        stop_reason="max_iterations",
+        duration_s=0.1,
+        initial_module_error_rate=0.25,
+        final_module_error_rate=0.18,
+    )
+    observed = {}
+
+    class FakeGenerator:
+        def __init__(self, device):
+            self.device = device
+
+        def manual_seed(self, seed):
+            self.seed = seed
+            return self
+
+    def fake_srmpgd(pipeline, initial_latent, target, config, **kwargs):
+        observed["latent"] = initial_latent
+        observed["callback"] = kwargs["validation_callback"]
+        kwargs["preview_callback"](srmpgd_result.image, selected_step)
+        return srmpgd_result
+
+    monkeypatch.setattr(backends, "run_srpg_controlnet_img2img", lambda *args, **kwargs: srpg)
+    monkeypatch.setattr(backends, "run_srmpgd", fake_srmpgd)
+    monkeypatch.setattr(backend, "_load", lambda: object())
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(Generator=FakeGenerator))
+    def validation_callback(image, iteration):
+        return {
+            "passed": 0,
+            "total": 2,
+            "pass_rate": 0.0,
+            "strict_all": False,
+        }
+    request = GenerationRequest(
+        payload="https://example.prooftag.test/t/paper-srmpgd"
+    )
+
+    names = [
+        name
+        for name, _ in backend.variants(
+            blueprint.image,
+            blueprint,
+            request=request,
+            seed=47,
+            research_mode=True,
+            validation_callback=validation_callback,
+        )
+    ]
+
+    assert names.index("srpg") < names.index("srmpgd")
+    assert observed["latent"] is exact_stage2_latent
+    assert observed["callback"] is validation_callback
+    assert "srmpgd_iteration_01" in backend.debug_artifacts()
+    assert backend.diagnostics()["srmpgd_selected_iteration"] == 1.0
 
 
 def test_rejected_guided_rediffusion_keeps_diagnostics_and_raw_fallback(monkeypatch):

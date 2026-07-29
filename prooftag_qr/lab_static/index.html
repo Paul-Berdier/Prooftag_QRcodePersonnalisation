@@ -220,8 +220,9 @@ station | A grand retro-futurist railway station filled with travelers, clocks, 
           <option value="auto">Auto — livraison</option>
           <option value="raw">Stage 1 brut</option>
           <option value="srpg">Stage 2 SRPG réel</option>
+          <option value="srmpgd">Stage 2 + SR-MPGD papier</option>
           <option value="guided">Rediffusion réelle</option>
-          <option value="latent">Raffinement latent réel</option>
+          <option value="latent">Ancien raffinement latent Prooftag</option>
         </select></label>
         <label>Stage 1 — pas de diffusion<input class="gen-steps" type="number" min="1" max="100"></label>
         <label>CFG<input class="gen-cfg" type="number" min="0" max="30" step="0.1"></label>
@@ -231,8 +232,9 @@ station | A grand retro-futurist railway station filled with travelers, clocks, 
       <div class="tool-switches">
         <label><input class="reuse-stage1" type="checkbox"> Réutiliser le même Stage 1</label>
         <label><input class="tool-srpg" type="checkbox"> Stage 2 SRPG</label>
+        <label><input class="tool-srmpgd" type="checkbox"> SR-MPGD papier</label>
         <label><input class="tool-guided" type="checkbox"> Rediffusion locale</label>
-        <label><input class="tool-latent" type="checkbox"> Raffinement latent</label>
+        <label><input class="tool-latent" type="checkbox"> Ancien raffinement latent</label>
       </div>
       <section class="srpg-controls">
         <div class="srpg-heading">
@@ -256,6 +258,28 @@ station | A grand retro-futurist railway station filled with travelers, clocks, 
         </div>
         <p class="srpg-warning muted"></p>
       </section>
+      <section class="srmpgd-controls">
+        <div class="srpg-heading">
+          <div>
+            <h4>Post-traitement SR-MPGD — équations 12 à 14</h4>
+            <p class="muted">
+              Part du latent propre exact du Stage 2, sans réencoder le PNG.
+              Chaque état est décodé, validé et conservé.
+            </p>
+          </div>
+          <output class="srmpgd-warning"></output>
+        </div>
+        <div class="compact-grid">
+          <label>SR-MPGD — itérations max<input class="srmpgd-iterations" type="number" min="1" max="100" step="1"></label>
+          <label>SR-MPGD — gamma<input class="srmpgd-step-size" type="number" min="0.001" max="100000" step="1"></label>
+          <label>SR-MPGD — lambda LPIPS<input class="srmpgd-lpips-weight" type="number" min="0" max="100" step="0.001"></label>
+        </div>
+        <p class="muted">
+          Valeurs papier : <code>gamma = 1000</code>, <code>lambda = 0,01</code>.
+          Le nombre d’itérations n’est pas publié ; le laboratoire teste les états 0 à 20
+          et s’arrête à la première validation stricte.
+        </p>
+      </section>
       <details>
         <summary>Paramètres avancés et modèle</summary>
         <div class="json-grid">
@@ -266,6 +290,6 @@ station | A grand retro-futurist railway station filled with travelers, clocks, 
     </article>
   </template>
 
-  <script src="/lab-assets/app.js?v=20260729-srpg-controls-2" defer></script>
+  <script src="/lab-assets/app.js?v=20260729-srmpgd-paper-1" defer></script>
 </body>
 </html>

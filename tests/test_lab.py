@@ -22,6 +22,11 @@ def test_lab_rejects_conflicting_stage2_tools():
         LabToolConfig(srpg_enabled=True, guided_rediffusion_enabled=True)
 
 
+def test_lab_rejects_srmpgd_without_stage2_srpg():
+    with pytest.raises(ValidationError, match="requires Stage 2 SRPG"):
+        LabToolConfig(srmpgd_enabled=True)
+
+
 def test_lab_limits_cartesian_campaign_size():
     methods = [
         LabMethod(id=f"m{index}", name=f"Method {index}") for index in range(11)

@@ -87,6 +87,13 @@ textarea { resize: vertical; line-height: 1.45; }
   background: rgba(56,189,248,.045);
 }
 .method-card.uses-srpg .srpg-controls { display: block; }
+.srmpgd-controls {
+  display: none; margin-top: 14px; padding: 14px;
+  border: 1px solid rgba(167,139,250,.30); border-radius: 11px;
+  background: rgba(167,139,250,.05);
+}
+.method-card.uses-srmpgd .srmpgd-controls { display: block; }
+.srmpgd-warning { color: var(--warning); font-size: 12px; font-weight: 700; }
 .srpg-heading {
   display: flex; align-items: start; justify-content: space-between;
   gap: 18px; margin-bottom: 12px;

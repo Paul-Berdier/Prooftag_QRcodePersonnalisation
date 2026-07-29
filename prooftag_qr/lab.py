@@ -83,6 +83,14 @@ TOOL_SETTING_KEYS = {
     "srpg_latent_fusion_alpha",
     "srpg_latent_fusion_start",
     "srpg_latent_fusion_end",
+    "srmpgd_max_iterations",
+    "srmpgd_step_size",
+    "srmpgd_lpips_weight",
+    "srmpgd_lpips_net",
+    "srmpgd_crop_padding_px",
+    "srmpgd_dark_threshold",
+    "srmpgd_light_threshold",
+    "srmpgd_center_fraction",
     "guided_rediffusion_steps",
     "guided_rediffusion_strength",
     "guided_rediffusion_controlnet_scale",
@@ -210,6 +218,50 @@ def laboratory_profiles() -> list[dict[str, Any]]:
             "description": (
                 "Raffinement robuste : 40 pas DDIM configurés, strength 0,10, "
                 "donc 4 pas tardifs réellement exécutés."
+            ),
+        },
+        {
+            "id": "srpg_late_4_srmpgd",
+            "name": "DiffQRCoder — 4 pas SRPG + SR-MPGD papier",
+            "backend": "controlnet",
+            "enabled": True,
+            "output_variant": "srmpgd",
+            "reuse_stage1": True,
+            "generation": {
+                "steps": 40,
+                "guidance_scale": 7.5,
+                "controlnet_scale": 1.35,
+                "strength": 1.0,
+            },
+            "model": DIFFQRCODER_MODEL_SETTINGS.copy(),
+            "tools": {
+                "srpg_enabled": True,
+                "srmpgd_enabled": True,
+                "settings": {
+                    "srpg_steps": 40,
+                    "srpg_strength": 0.10,
+                    "srpg_controlnet_scale": 1.35,
+                    "srpg_qr_weight": 500.0,
+                    "srpg_perceptual_weight": 3.0,
+                    "srpg_functional_weight": 1.0,
+                    "srpg_dark_threshold": 0.45,
+                    "srpg_light_threshold": 0.65,
+                    "srpg_max_noise_delta_rms": 0.75,
+                    "srpg_max_mean_absolute_change": 0.18,
+                    "srpg_min_relative_module_improvement": 0.0,
+                    "srpg_save_step_previews": True,
+                    "srpg_preview_interval": 1,
+                    "srmpgd_max_iterations": 20,
+                    "srmpgd_step_size": 1000.0,
+                    "srmpgd_lpips_weight": 0.01,
+                    "srmpgd_lpips_net": "vgg",
+                },
+            },
+            "description": (
+                "Même Stage 1 et même Stage 2 tardif que srpg_late_4, puis équations "
+                "12-14 sur le latent propre exact : SRL + 0,01 LPIPS, gamma 1000. "
+                "Le Stage 2 reste une adaptation tardive car le QArt Reed-Solomon du "
+                "papier n'est pas publié."
             ),
         },
         {
@@ -546,6 +598,20 @@ class LabService:
                     "srpg_max_noise_delta_rms": float(settings.srpg_max_noise_delta_rms),
                 }
             )
+            if method.tools.srmpgd_enabled:
+                run.quality_metrics.update(
+                    {
+                        "srmpgd_requested_max_iterations": float(
+                            settings.srmpgd_max_iterations
+                        ),
+                        "srmpgd_requested_step_size": float(
+                            settings.srmpgd_step_size
+                        ),
+                        "srmpgd_requested_lpips_weight": float(
+                            settings.srmpgd_lpips_weight
+                        ),
+                    }
+                )
         self.run_repository.save(run)
 
     def _generation_service(self, method: LabMethod) -> GenerationService:
@@ -563,6 +629,7 @@ class LabService:
             "default_backend": method.backend,
             "save_debug_artifacts": True,
             "srpg_enabled": method.tools.srpg_enabled,
+            "srmpgd_enabled": method.tools.srmpgd_enabled,
             "guided_rediffusion_enabled": method.tools.guided_rediffusion_enabled,
             "latent_refinement_enabled": method.tools.latent_refinement_enabled,
         }
@@ -585,6 +652,8 @@ class LabService:
             return None
         if target == "srpg" and not method.tools.srpg_enabled:
             raise ValueError("output_variant 'srpg' requires Stage 2 SRPG")
+        if target == "srmpgd" and not method.tools.srmpgd_enabled:
+            raise ValueError("output_variant 'srmpgd' requires paper SR-MPGD")
         if target == "guided" and not method.tools.guided_rediffusion_enabled:
             raise ValueError("output_variant 'guided' requires guided rediffusion")
         if target == "latent" and not method.tools.latent_refinement_enabled:

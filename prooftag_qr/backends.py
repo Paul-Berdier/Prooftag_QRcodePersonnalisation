@@ -4,9 +4,10 @@ import logging
 import threading
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from math import ceil
+from typing import Any
 
 from PIL import Image
 
@@ -17,9 +18,12 @@ from .guidance import LatentRefinementConfig, refine_candidate_latent
 from .qr import QRBlueprint, module_error_rate, repair_qr_modules
 from .quality import composite_guided_regions, image_change_metrics
 from .schemas import GenerationRequest
+from .srmpgd import SRMPGDConfig, SRMPGDStep, run_srmpgd
 from .srpg import SRPGConfig, run_srpg_controlnet_img2img
 
 logger = logging.getLogger(__name__)
+
+RefinementValidationCallback = Callable[[Image.Image, int], Mapping[str, Any]]
 
 
 def _is_single_file_base_model(model_id: str) -> bool:
@@ -76,10 +80,14 @@ class GenerationBackend(ABC):
         run_id: str | None = None,
         attempt: int | None = None,
         research_mode: bool = False,
+        validation_callback: RefinementValidationCallback | None = None,
     ) -> Iterable[tuple[str, Image.Image]]:
         yield "raw", candidate
 
     def debug_artifacts(self) -> dict[str, Image.Image]:
+        return {}
+
+    def diagnostics(self) -> dict[str, float]:
         return {}
 
 
@@ -99,9 +107,13 @@ class ControlNetBackend(GenerationBackend):
         self.settings = settings
         self._pipeline = None
         self._debug_artifacts: dict[str, Image.Image] = {}
+        self._diagnostics: dict[str, float] = {}
 
     def debug_artifacts(self) -> dict[str, Image.Image]:
         return self._debug_artifacts.copy()
+
+    def diagnostics(self) -> dict[str, float]:
+        return self._diagnostics.copy()
 
     def _load(self):
         if self._pipeline is not None:
@@ -339,11 +351,14 @@ class ControlNetBackend(GenerationBackend):
         run_id: str | None = None,
         attempt: int | None = None,
         research_mode: bool = False,
+        validation_callback: RefinementValidationCallback | None = None,
     ) -> Iterable[tuple[str, Image.Image]]:
         self._debug_artifacts.clear()
+        self._diagnostics.clear()
         yield "raw", candidate
         enhanced_candidate = candidate
         enhanced_prefix = ""
+        stage2_latent = None
         if self.settings.srpg_enabled:
             started = time.perf_counter()
             try:
@@ -477,6 +492,7 @@ class ControlNetBackend(GenerationBackend):
                 # The service must independently validate every SRPG output with the
                 # complete decoder/degradation matrix.  The internal gate only decides
                 # whether deterministic repairs may use it as their new visual base.
+                stage2_latent = srpg.latent
                 yield "srpg", srpg.image
                 if srpg.accepted:
                     enhanced_candidate = srpg.image
@@ -504,6 +520,155 @@ class ControlNetBackend(GenerationBackend):
                         torch.cuda.empty_cache()
                 except Exception:
                     logger.debug("srpg_cuda_cache_cleanup_failed", exc_info=True)
+        if self.settings.srmpgd_enabled:
+            started = time.perf_counter()
+            try:
+                if stage2_latent is None:
+                    raise RuntimeError(
+                        "paper SR-MPGD requires the exact clean latent produced by Stage 2 SRPG"
+                    )
+                if validation_callback is None:
+                    raise RuntimeError(
+                        "paper SR-MPGD requires the complete decoder validation callback"
+                    )
+
+                def save_srmpgd_preview(image: Image.Image, step: SRMPGDStep) -> None:
+                    self._debug_artifacts[
+                        f"srmpgd_iteration_{step.iteration:02d}"
+                    ] = image.copy()
+
+                srmpgd = run_srmpgd(
+                    self._load(),
+                    stage2_latent,
+                    blueprint,
+                    SRMPGDConfig(
+                        max_iterations=self.settings.srmpgd_max_iterations,
+                        step_size=self.settings.srmpgd_step_size,
+                        lpips_weight=self.settings.srmpgd_lpips_weight,
+                        lpips_net=self.settings.srmpgd_lpips_net,
+                        crop_padding_px=self.settings.srmpgd_crop_padding_px,
+                        dark_threshold=self.settings.srmpgd_dark_threshold,
+                        light_threshold=self.settings.srmpgd_light_threshold,
+                        center_fraction=self.settings.srmpgd_center_fraction,
+                    ),
+                    validation_callback=validation_callback,
+                    preview_callback=save_srmpgd_preview,
+                )
+                duration = time.perf_counter() - started
+                selected_step = next(
+                    item
+                    for item in srmpgd.steps
+                    if item.iteration == srmpgd.selected_iteration
+                )
+                outcome = (
+                    "strict_validation_passed"
+                    if selected_step.strict_all
+                    else srmpgd.stop_reason
+                )
+                metrics.SRMPGD_RUNS.labels(outcome).inc()
+                metrics.SRMPGD_DURATION.observe(duration)
+                metrics.SRMPGD_ITERATIONS.observe(max(0, len(srmpgd.steps) - 1))
+                metrics.SRMPGD_SELECTED_ITERATION.set(srmpgd.selected_iteration)
+                metrics.DURATION.labels("controlnet", "srmpgd").observe(duration)
+                for step in srmpgd.steps:
+                    iteration_label = str(step.iteration)
+                    for metric_name, value in (
+                        ("scanning_robust_loss", step.scanning_robust_loss),
+                        ("lpips_loss", step.lpips_loss),
+                        ("objective", step.objective),
+                        ("surrogate_module_error_rate", step.surrogate_module_error_rate),
+                        ("actual_module_error_rate", step.actual_module_error_rate),
+                        ("pass_rate", step.pass_rate),
+                    ):
+                        metrics.SRMPGD_STEP_DIAGNOSTIC.labels(
+                            iteration_label, metric_name
+                        ).set(value)
+                self._diagnostics.update(
+                    {
+                        "srmpgd_max_iterations": float(
+                            self.settings.srmpgd_max_iterations
+                        ),
+                        "srmpgd_states_evaluated": float(len(srmpgd.steps)),
+                        "srmpgd_selected_iteration": float(srmpgd.selected_iteration),
+                        "srmpgd_step_size": float(self.settings.srmpgd_step_size),
+                        "srmpgd_lpips_weight": float(
+                            self.settings.srmpgd_lpips_weight
+                        ),
+                        "srmpgd_initial_module_error_rate": float(
+                            srmpgd.initial_module_error_rate
+                        ),
+                        "srmpgd_final_module_error_rate": float(
+                            srmpgd.final_module_error_rate
+                        ),
+                        "srmpgd_selected_scan_pass_rate": float(
+                            selected_step.pass_rate
+                        ),
+                        "srmpgd_selected_strict_all": float(
+                            selected_step.strict_all
+                        ),
+                        "srmpgd_duration_s": float(srmpgd.duration_s),
+                    }
+                )
+                logger.info(
+                    "srmpgd_completed",
+                    extra={
+                        "run_id": run_id,
+                        "backend": "controlnet",
+                        "status": outcome,
+                        "attempt": attempt,
+                        "seed": seed,
+                        "duration_ms": round(duration * 1000, 2),
+                        "states_evaluated": len(srmpgd.steps),
+                        "selected_iteration": srmpgd.selected_iteration,
+                        "stop_reason": srmpgd.stop_reason,
+                        "initial_module_error_rate": (
+                            srmpgd.initial_module_error_rate
+                        ),
+                        "final_module_error_rate": srmpgd.final_module_error_rate,
+                        "selected_pass_rate": selected_step.pass_rate,
+                        "selected_strict_all": selected_step.strict_all,
+                        "step_metrics": [
+                            {
+                                "iteration": item.iteration,
+                                "srl": item.scanning_robust_loss,
+                                "lpips": item.lpips_loss,
+                                "objective": item.objective,
+                                "actual_module_error_rate": (
+                                    item.actual_module_error_rate
+                                ),
+                                "passed": item.passed,
+                                "total": item.total,
+                                "pass_rate": item.pass_rate,
+                                "strict_all": item.strict_all,
+                                "gradient_rms": item.gradient_rms,
+                                "next_step_rms": item.next_step_rms,
+                            }
+                            for item in srmpgd.steps
+                        ],
+                    },
+                )
+                # A forced laboratory run always exposes the selected SR-MPGD state.
+                # Delivery mode still lets the service's independent validation gate decide.
+                yield "srmpgd", srmpgd.image
+                if selected_step.strict_all:
+                    enhanced_candidate = srmpgd.image
+                    enhanced_prefix = "srmpgd_"
+            except Exception:
+                duration = time.perf_counter() - started
+                metrics.SRMPGD_RUNS.labels("error").inc()
+                metrics.SRMPGD_DURATION.observe(duration)
+                metrics.DURATION.labels("controlnet", "srmpgd").observe(duration)
+                logger.exception(
+                    "srmpgd_failed",
+                    extra={
+                        "run_id": run_id,
+                        "backend": "controlnet",
+                        "status": "error",
+                        "attempt": attempt,
+                        "seed": seed,
+                        "duration_ms": round(duration * 1000, 2),
+                    },
+                )
         if self.settings.guided_rediffusion_enabled:
             started = time.perf_counter()
             try:

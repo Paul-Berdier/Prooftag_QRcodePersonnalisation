@@ -62,6 +62,16 @@ function refreshSrpgExplanation(node) {
       : `${effective} pas SRPG seront réellement calculés.`;
 }
 
+function refreshSrmpgdExplanation(node) {
+  const enabled = $(".tool-srmpgd", node).checked;
+  const srpgEnabled = $(".tool-srpg", node).checked;
+  node.classList.toggle("uses-srmpgd", enabled);
+  if (!enabled) return;
+  $(".srmpgd-warning", node).textContent = srpgEnabled
+    ? "Le latent propre du Stage 2 sera optimisé directement, puis chaque état sera testé par tous les décodeurs."
+    : "Configuration invalide : SR-MPGD exige que Stage 2 SRPG soit aussi activé.";
+}
+
 function renderMethods() {
   const container = $("#methods");
   container.innerHTML = "";
@@ -82,6 +92,7 @@ function renderMethods() {
     $(".gen-control", node).value = method.generation?.controlnet_scale ?? 1.35;
     $(".gen-strength", node).value = method.generation?.strength ?? 1;
     $(".tool-srpg", node).checked = !!method.tools?.srpg_enabled;
+    $(".tool-srmpgd", node).checked = !!method.tools?.srmpgd_enabled;
     $(".tool-guided", node).checked = !!method.tools?.guided_rediffusion_enabled;
     $(".tool-latent", node).checked = !!method.tools?.latent_refinement_enabled;
     const toolSettings = method.tools?.settings || {};
@@ -92,6 +103,9 @@ function renderMethods() {
     $(".srpg-perceptual-weight", node).value = toolSettings.srpg_perceptual_weight ?? 3;
     $(".srpg-functional-weight", node).value = toolSettings.srpg_functional_weight ?? 4;
     $(".srpg-noise-limit", node).value = toolSettings.srpg_max_noise_delta_rms ?? 2;
+    $(".srmpgd-iterations", node).value = toolSettings.srmpgd_max_iterations ?? 20;
+    $(".srmpgd-step-size", node).value = toolSettings.srmpgd_step_size ?? 1000;
+    $(".srmpgd-lpips-weight", node).value = toolSettings.srmpgd_lpips_weight ?? 0.01;
     $(".model-json", node).value = JSON.stringify(method.model || {}, null, 2);
     $(".tools-json", node).value = JSON.stringify(toolSettings, null, 2);
 
@@ -111,6 +125,7 @@ function renderMethods() {
       };
       item.tools = item.tools || {};
       item.tools.srpg_enabled = $(".tool-srpg", node).checked;
+      item.tools.srmpgd_enabled = $(".tool-srmpgd", node).checked;
       item.tools.guided_rediffusion_enabled = $(".tool-guided", node).checked;
       item.tools.latent_refinement_enabled = $(".tool-latent", node).checked;
       item.tools.settings = item.tools.settings || {};
@@ -126,13 +141,24 @@ function renderMethods() {
         });
         $(".tools-json", node).value = JSON.stringify(item.tools.settings, null, 2);
       }
+      if (item.tools.srmpgd_enabled) {
+        Object.assign(item.tools.settings, {
+          srmpgd_max_iterations: Number($(".srmpgd-iterations", node).value),
+          srmpgd_step_size: Number($(".srmpgd-step-size", node).value),
+          srmpgd_lpips_weight: Number($(".srmpgd-lpips-weight", node).value),
+          srmpgd_lpips_net: item.tools.settings.srmpgd_lpips_net || "vgg",
+        });
+        $(".tools-json", node).value = JSON.stringify(item.tools.settings, null, 2);
+      }
       $(".method-name-label", node).textContent = item.name || "Sans nom";
       node.classList.toggle("disabled", !item.enabled);
       refreshSrpgExplanation(node);
+      refreshSrmpgdExplanation(node);
       updateTrialCount();
     };
     $$("input, select", node).forEach((input) => input.addEventListener("change", sync));
     $$(".srpg-controls input", node).forEach((input) => input.addEventListener("input", sync));
+    $$(".srmpgd-controls input", node).forEach((input) => input.addEventListener("input", sync));
     $(".method-name", node).addEventListener("input", sync);
     $(".model-json", node).addEventListener("change", () => {
       try {
@@ -161,6 +187,7 @@ function renderMethods() {
     });
     container.append(node);
     refreshSrpgExplanation(node);
+    refreshSrmpgdExplanation(node);
   });
   updateTrialCount();
 }
@@ -217,6 +244,7 @@ async function launchCampaign() {
       model: method.model || {},
       tools: {
         srpg_enabled: !!method.tools?.srpg_enabled,
+        srmpgd_enabled: !!method.tools?.srmpgd_enabled,
         guided_rediffusion_enabled: !!method.tools?.guided_rediffusion_enabled,
         latent_refinement_enabled: !!method.tools?.latent_refinement_enabled,
         settings: method.tools?.settings || {},

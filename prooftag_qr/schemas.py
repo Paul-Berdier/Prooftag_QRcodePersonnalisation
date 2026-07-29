@@ -115,6 +115,7 @@ class LabPrompt(BaseModel):
 
 class LabToolConfig(BaseModel):
     srpg_enabled: bool = False
+    srmpgd_enabled: bool = False
     guided_rediffusion_enabled: bool = False
     latent_refinement_enabled: bool = False
     settings: dict[str, Any] = Field(default_factory=dict)
@@ -123,6 +124,8 @@ class LabToolConfig(BaseModel):
     def validate_exclusive_stage2(self) -> "LabToolConfig":
         if self.srpg_enabled and self.guided_rediffusion_enabled:
             raise ValueError("SRPG and guided rediffusion cannot be enabled together")
+        if self.srmpgd_enabled and not self.srpg_enabled:
+            raise ValueError("paper SR-MPGD requires Stage 2 SRPG")
         return self
 
 
@@ -131,7 +134,7 @@ class LabMethod(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     backend: Literal["qr", "controlnet"] = "controlnet"
     enabled: bool = True
-    output_variant: Literal["auto", "raw", "srpg", "guided", "latent"] = "auto"
+    output_variant: Literal["auto", "raw", "srpg", "srmpgd", "guided", "latent"] = "auto"
     reuse_stage1: bool = True
     generation: dict[str, Any] = Field(default_factory=dict)
     model: dict[str, Any] = Field(default_factory=dict)

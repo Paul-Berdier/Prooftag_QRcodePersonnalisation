@@ -214,8 +214,9 @@ def _rank_step(step: SRMPGDStep) -> tuple[Any, ...]:
         step.pass_rate,
         step.worst_decoder_pass_rate,
         step.worst_scenario_pass_rate,
-        -step.lpips_loss,
         -step.actual_module_error_rate,
+        -step.scanning_robust_loss,
+        -step.lpips_loss,
         -step.iteration,
     )
 

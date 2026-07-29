@@ -146,6 +146,30 @@ SRPG_GRADIENT_CLIPS = Counter(
     "prooftag_qr_srpg_gradient_clips_total",
     "SRPG steps whose noise delta reached its safety cap",
 )
+SRMPGD_RUNS = Counter(
+    "prooftag_qr_srmpgd_runs_total",
+    "Paper-equation SR-MPGD outcomes",
+    ["outcome"],
+)
+SRMPGD_DURATION = Histogram(
+    "prooftag_qr_srmpgd_duration_seconds",
+    "Time spent optimizing the exact clean Stage-2 latent",
+    buckets=(0.1, 0.25, 0.5, 1, 2, 5, 10, 20, 30, 60, 120, 300),
+)
+SRMPGD_ITERATIONS = Histogram(
+    "prooftag_qr_srmpgd_iterations",
+    "Number of evaluated SR-MPGD updates, excluding state zero",
+    buckets=(0, 1, 2, 4, 8, 12, 16, 20, 32, 64, 100),
+)
+SRMPGD_SELECTED_ITERATION = Gauge(
+    "prooftag_qr_srmpgd_selected_iteration",
+    "Iteration selected by strict validation, then scan robustness",
+)
+SRMPGD_STEP_DIAGNOSTIC = Gauge(
+    "prooftag_qr_srmpgd_step_diagnostic",
+    "Diagnostics retained for every state of the latest SR-MPGD run",
+    ["iteration", "metric"],
+)
 LATENT_REFINEMENTS = Counter(
     "prooftag_qr_latent_refinements_total",
     "Latent SRL refinement outcomes",

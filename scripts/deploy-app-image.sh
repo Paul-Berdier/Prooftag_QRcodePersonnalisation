@@ -32,6 +32,8 @@ docker image inspect "$image" \
 
 docker save "$image" | sudo k3s ctr images import -
 
+kubectl apply -f deploy/k8s/app-config.yaml
+
 image_patch="$(
   printf \
     '{"spec":{"template":{"spec":{"containers":[{"name":"%s","image":"%s"}],"initContainers":[{"name":"%s","image":"%s"}]}}}}' \
@@ -75,10 +77,10 @@ fi
 
 kubectl -n "$namespace" exec "$pod" -c "$container" -- \
   python -c \
-  "from prooftag_qr.lab import laboratory_profiles; assert any(p['id'] == 'srpg_late_2' for p in laboratory_profiles())"
+  "from prooftag_qr.lab import laboratory_profiles; p = next(p for p in laboratory_profiles() if p['id'] == 'srpg_late_4_srmpgd'); assert p['output_variant'] == 'srmpgd' and p['tools']['srmpgd_enabled'] is True; print(p['id'], p['output_variant'], p['tools']['srmpgd_enabled'])"
 kubectl -n "$namespace" exec "$pod" -c "$container" -- \
   python -c \
-  "from pathlib import Path; import prooftag_qr; path = Path(prooftag_qr.__file__).with_name('lab_static') / 'index.html'; assert '20260729-srpg-controls-2' in path.read_text(encoding='utf-8')"
+  "from pathlib import Path; import prooftag_qr; path = Path(prooftag_qr.__file__).with_name('lab_static') / 'index.html'; assert '20260729-srmpgd-paper-1' in path.read_text(encoding='utf-8'); print('Assets Web SR-MPGD confirmés')"
 
 echo "Image déployée et vérifiée : $image"
 echo "Pod : $pod"

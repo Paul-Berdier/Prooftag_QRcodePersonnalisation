@@ -16,7 +16,7 @@ COPY prooftag_qr ./prooftag_qr
 COPY migrations ./migrations
 RUN pip install --upgrade pip \
     && pip install '.[gpu]' \
-    && python -c "import lpips, torch, torchvision; from diffusers import ControlNetModel, DDIMScheduler, DPMSolverMultistepScheduler, StableDiffusionControlNetImg2ImgPipeline, StableDiffusionControlNetPipeline; lpips.LPIPS(net='alex', verbose=False); print('GPU stack and LPIPS weights OK:', torch.__version__, torchvision.__version__)"
+    && python -c "import lpips, torch, torchvision; from diffusers import ControlNetModel, DDIMScheduler, DPMSolverMultistepScheduler, StableDiffusionControlNetImg2ImgPipeline, StableDiffusionControlNetPipeline; lpips.LPIPS(net='alex', verbose=False); lpips.LPIPS(net='vgg', verbose=False); print('GPU stack and LPIPS weights OK:', torch.__version__, torchvision.__version__)"
 
 RUN useradd --create-home --uid 10001 app \
     && mkdir -p /data /cache /opt/torch-cache \

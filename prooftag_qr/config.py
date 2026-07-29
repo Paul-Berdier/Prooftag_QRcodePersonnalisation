@@ -71,6 +71,15 @@ class Settings(BaseSettings):
     srpg_latent_fusion_alpha: float = Field(default=0.15, ge=0.0, le=1.0)
     srpg_latent_fusion_start: float = Field(default=0.0, ge=0.0, le=1.0)
     srpg_latent_fusion_end: float = Field(default=1.0, ge=0.0, le=1.0)
+    srmpgd_enabled: bool = False
+    srmpgd_max_iterations: int = Field(default=20, ge=1, le=100)
+    srmpgd_step_size: float = Field(default=1000.0, gt=0.0, le=100_000.0)
+    srmpgd_lpips_weight: float = Field(default=0.01, ge=0.0, le=100.0)
+    srmpgd_lpips_net: Literal["alex", "vgg", "squeeze"] = "vgg"
+    srmpgd_crop_padding_px: int = Field(default=0, ge=0, le=256)
+    srmpgd_dark_threshold: float = Field(default=0.45, gt=0.0, lt=1.0)
+    srmpgd_light_threshold: float = Field(default=0.65, gt=0.0, lt=1.0)
+    srmpgd_center_fraction: float = Field(default=1 / 3, gt=0.0, le=1.0)
     latent_refinement_enabled: bool = False
     latent_refinement_iterations: int = Field(default=8, ge=1, le=100)
     latent_refinement_learning_rate: float = Field(default=0.02, gt=0.0, le=10.0)
@@ -110,6 +119,10 @@ class Settings(BaseSettings):
             raise ValueError(
                 "SRPG steps multiplied by strength must schedule at least one effective step"
             )
+        if self.srmpgd_enabled and not self.srpg_enabled:
+            raise ValueError("paper SR-MPGD requires Stage 2 SRPG and its exact clean latent")
+        if self.srmpgd_dark_threshold > self.srmpgd_light_threshold:
+            raise ValueError("SR-MPGD dark threshold cannot exceed light threshold")
         if self.srpg_dark_threshold > self.srpg_light_threshold:
             raise ValueError("SRPG dark threshold cannot exceed light threshold")
         if self.srpg_robust_blur_kernel % 2 == 0:

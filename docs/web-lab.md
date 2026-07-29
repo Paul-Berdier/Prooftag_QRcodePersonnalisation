@@ -29,7 +29,7 @@ exécutés un par un : deux pipelines lourds ne se retrouvent donc pas simultan�
 
 Depuis la correction « candidat forcé », le laboratoire sépare strictement deux usages :
 
-- **recherche** : la sortie demandée (`raw`, `srpg`, `guided` ou `latent`) est évaluée telle
+- **recherche** : la sortie demandée (`raw`, `srpg`, `srmpgd`, `guided` ou `latent`) est évaluée telle
   quelle, même si elle échoue à la lecture ;
 - **livraison** : la sélection automatique et les réparations déterministes restent disponibles
   avec la sortie `auto`, mais ne sont pas utilisées par les profils comparatifs fournis.
@@ -101,6 +101,7 @@ démarrage de l'API.
 | `controlnet_raw` | activé | première diffusion ControlNet, sans Stage 2 |
 | `srpg_late_2` | activé | SRPG Prooftag sur les 2 derniers pas DDIM, `strength=0,05`, limite de gradient `0,50` |
 | `srpg_late_4` | activé | SRPG Prooftag sur les 4 derniers pas DDIM, `strength=0,10`, limite de gradient `0,75` |
+| `srpg_late_4_srmpgd` | activé | même Stage 2 tardif, puis SR-MPGD équations 12-14 sur son latent propre exact, états 0 à 20 |
 | `srpg_full_restart` | désactivé | ablation avec redémarrage bruité complet et 40 pas ; profil destructif observé |
 | `srpg_freeqr` | désactivé | même boucle avec fusion latente FreeQR inspirée, canal et fenêtre configurables |
 
@@ -118,6 +119,7 @@ Les profils fournis sélectionnent explicitement leur sortie :
 
 - `qr_reference` et `controlnet_raw` évaluent `raw` ;
 - tous les profils SRPG évaluent le candidat `srpg` lui-même ;
+- `srpg_late_4_srmpgd` évalue le meilleur état `srmpgd`, jamais l'ancien raffinement latent ;
 - `auto` est réservé à une simulation de la chaîne de livraison avec réparation éventuelle.
 
 Quand deux méthodes ont exactement le même modèle, prompt, seed, géométrie et paramètres de
@@ -125,11 +127,16 @@ Stage 1, l'image brute est générée une seule fois puis conservée en RAM CPU.
 suivantes reçoivent cette même image comme entrée. La fiche d'un essai affiche
 `Stage 1 réutilisé — aucune régénération` et conserve l'identifiant du run source.
 
-Point de vocabulaire essentiel : aucun profil ne porte désormais le nom `paper`. Les profils
-reprennent les poids de loss SRL `500` et LPIPS `3` publiés, mais utilisent la boucle SRPG
-intégrée à Prooftag. Le papier ajoute en outre un QR transformé par QArt entre les deux stages ;
-ce composant exact n'est pas disponible dans le dépôt DiffQRCoder public. Ces résultats ne sont
-donc jamais présentés comme une reproduction bit-à-bit de l'article.
+Point de vocabulaire essentiel : `SR-MPGD papier` désigne uniquement le post-traitement des
+équations 12-14. Il part du tenseur latent propre exact produit par le Stage 2, minimise
+`LSR + 0,01 × LPIPS` avec `gamma=1000`, gèle tous les poids et ne réencode jamais le PNG.
+Le profil complet reste une adaptation Prooftag : son Stage 2 tardif n'est pas le Stage 2 complet
+de l'article et le transformateur QArt Reed-Solomon n'est pas publié. Le laboratoire ne présente
+donc toujours pas cette chaîne comme une reproduction bit-à-bit de tout l'article.
+
+L'ancien interrupteur `raffinement latent` reste disponible pour reproduire les expériences
+historiques, mais il est désormais nommé comme tel. Il réencode le PNG, emploie une loss
+multiscale et une trust region Prooftag : ce n'est pas SR-MPGD.
 
 `srpg_full_restart` conserve volontairement l'ancien redémarrage complet pour une ablation. À
 `srpg_steps=40` et `srpg_strength=1,0`, Diffusers exécute réellement 40 pas et le Stage 1 est
@@ -166,6 +173,8 @@ L'interface expose directement :
 - nombre de pas SRPG réellement exécutés, recalculé instantanément avec
   `floor(srpg_steps × srpg_strength)` ;
 - activation de SRPG, de la rediffusion guidée ou du raffinement latent ;
+- activation indépendante du post-traitement SR-MPGD, avec nombre maximal d'itérations,
+  `gamma` et poids LPIPS ;
 - modèle de base, ControlNet, sous-dossier et mode de pipeline ;
 - paramètres détaillés des losses, seuils, transformations robustes, limites de préservation,
   seeds de Stage 2 et fusion latente.
@@ -173,6 +182,12 @@ L'interface expose directement :
 Les deux zones JSON avancées sont validées côté API. Seules les clés explicitement autorisées
 dans `prooftag_qr/lab.py` sont acceptées. SRPG et rediffusion guidée sont mutuellement exclusifs
 dans une même méthode, car ce sont deux variantes concurrentes de Stage 2.
+
+SR-MPGD exige SRPG, car son entrée est le latent propre exact du Stage 2. Chaque état, y compris
+l'état zéro, est décodé et soumis à la matrice complète de décodeurs et perturbations. La sélection
+priorise validation stricte, SSR, pire décodeur, pire scénario, MER/SRL, puis LPIPS. Le premier
+état strict arrête la boucle ; sinon le meilleur état observé est conservé comme résultat de
+recherche, même rejeté.
 
 Le champ « Stage 1 — pas de diffusion » ne pilote jamais SRPG. Pour demander 40 pas SRPG
 réellement exécutés, il faut choisir `SRPG — pas planifiés = 40` et
@@ -193,6 +208,7 @@ La page d'une campagne affiche :
 - graphique SSR moyen / taux d'acceptation stricte par méthode ;
 - nuage de points erreur modules / SSR robuste ;
 - image finale et tous les artefacts sauvegardés ;
+- une image `srmpgd_iteration_XX` pour chaque état évalué par SR-MPGD ;
 - temps de génération, validation et total ;
 - SSR, correspondance exacte du payload, MER et toutes les métriques d'image persistées ;
 - CLIPScore, similarité CLIP et CLIP-aesthetic, calculés sur CPU dans le déploiement K3s ;

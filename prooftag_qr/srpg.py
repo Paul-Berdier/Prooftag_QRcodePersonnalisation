@@ -71,6 +71,7 @@ class SRPGPreview:
 @dataclass(frozen=True, slots=True)
 class SRPGResult:
     image: Image.Image
+    latent: Any
     steps: tuple[SRPGStep, ...]
     previews: tuple[SRPGPreview, ...]
     initial_module_error_rate: float
@@ -574,6 +575,10 @@ def run_srpg_controlnet_img2img(
         rejection_reason = "mean_absolute_change_limit"
     return SRPGResult(
         image=image,
+        # This is the clean z_0 produced by the last Stage-2 denoising step.
+        # Keep it detached but do not round-trip through PNG/VAE encoding: paper
+        # SR-MPGD equations 12-14 must start from this exact tensor.
+        latent=latents.detach().clone(),
         steps=tuple(traces),
         previews=tuple(previews),
         initial_module_error_rate=initial_error,
