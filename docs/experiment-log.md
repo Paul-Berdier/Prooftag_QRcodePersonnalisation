@@ -1108,3 +1108,15 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
 - **Limite maintenue :** le dépôt DiffQRCoder public ne fournit toujours pas le transformateur
   QArt Reed-Solomon de la Figure 3. Les nouveaux profils complets utilisent donc le QR binaire
   valide, comme le chemin exécutable public, et ne revendiquent pas encore les 99–100 % du papier.
+- **Incident Web Lab 07 — quiet zone absente de la livraison :** l'export
+  `prooftag-lab-996ce01f-3003-4e70-a3f1-a4b37486b7cf.csv` contient huit prompts. Pour le profil
+  SR-MPGD, le cœur optimisé est en moyenne à 2,7 % de MER, mais l'image réellement livrée reste
+  à 21,8 % de MER et aucune sortie n'est acceptée.
+- **Cause Web Lab 07 :** SRL et LPIPS ignorent volontairement le padding, tandis que la diffusion
+  peint cette zone. SR-MPGD voit donc un cœur presque correct, mais les décodeurs voient une
+  image dépourvue de quiet zone uniforme.
+- **Correction Web Lab 07 :** les quatre modules périphériques sont remis en blanc après chaque
+  décodage final, avant validation et livraison. Aucun pixel du cœur artistique n'est modifié.
+  Les métriques séparent désormais le MER du cœur, celui de la quiet zone et celui de l'image
+  réellement livrée. Une nouvelle campagne est obligatoire ; les résultats historiques ne sont
+  pas réinterprétés.

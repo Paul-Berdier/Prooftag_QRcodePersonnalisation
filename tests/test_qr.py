@@ -4,8 +4,10 @@ from PIL import Image
 from prooftag_qr.qr import (
     functional_pattern_mask,
     generate_qr,
+    module_error_breakdown,
     module_error_rate,
     repair_qr_modules,
+    restore_quiet_zone,
 )
 from prooftag_qr.validation import OpenCVDecoder, QRValidator
 
@@ -27,6 +29,27 @@ def test_reference_qr_passes_original_scenario():
 
     assert original
     assert all(record.exact_payload_match for record in original)
+
+
+def test_restore_quiet_zone_preserves_the_artistic_core_and_clears_only_the_margin():
+    blueprint = generate_qr("https://example.prooftag.test/t/quiet-zone", "M", size=128)
+    painted = Image.new("RGB", blueprint.image.size, (12, 34, 56))
+    restored = restore_quiet_zone(painted, blueprint)
+    source = np.asarray(painted)
+    result = np.asarray(restored)
+    count = blueprint.matrix.shape[0]
+    border = blueprint.border
+    left = round(border * painted.width / count)
+    right = round((count - border) * painted.width / count)
+    top = round(border * painted.height / count)
+    bottom = round((count - border) * painted.height / count)
+
+    assert np.array_equal(result[top:bottom, left:right], source[top:bottom, left:right])
+    assert np.all(result[:top] == 255)
+    assert np.all(result[bottom:] == 255)
+    assert np.all(result[:, :left] == 255)
+    assert np.all(result[:, right:] == 255)
+    assert module_error_breakdown(restored, blueprint)["quiet_zone"] == 0.0
 
 
 def test_repair_locks_patterns_and_recovers_a_noisy_artwork():

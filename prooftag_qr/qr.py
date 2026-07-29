@@ -35,6 +35,12 @@ def generate_qr(
 
 
 def module_error_rate(candidate: Image.Image, blueprint: QRBlueprint) -> float:
+    errors = module_error_map(candidate, blueprint)
+    return float(errors.mean())
+
+
+def module_error_map(candidate: Image.Image, blueprint: QRBlueprint) -> np.ndarray:
+    """Return the binary module error map on the delivered canvas."""
     gray = np.asarray(candidate.convert("L"), dtype=np.float32)
     count = blueprint.matrix.shape[0]
     predicted = np.zeros_like(blueprint.matrix)
@@ -45,7 +51,65 @@ def module_error_rate(candidate: Image.Image, blueprint: QRBlueprint) -> float:
             x0 = round(col * gray.shape[1] / count)
             x1 = max(x0 + 1, round((col + 1) * gray.shape[1] / count))
             predicted[row, col] = gray[y0:y1, x0:x1].mean() < 128
-    return float(np.not_equal(predicted, blueprint.matrix).mean())
+    return np.not_equal(predicted, blueprint.matrix)
+
+
+def module_error_breakdown(
+    candidate: Image.Image,
+    blueprint: QRBlueprint,
+) -> dict[str, float]:
+    """Separate QR-core failures from quiet-zone failures.
+
+    SRPG and SR-MPGD optimize the border-free QR core, but a scanner still needs a
+    clear quiet zone around the delivered image. Reporting both regions prevents a
+    good core score from hiding a painted or saturated margin.
+    """
+    errors = module_error_map(candidate, blueprint)
+    border = int(blueprint.border)
+    if border == 0:
+        return {
+            "overall": float(errors.mean()),
+            "core": float(errors.mean()),
+            "quiet_zone": 0.0,
+        }
+    core = errors[border:-border, border:-border]
+    quiet_zone = errors.copy()
+    quiet_zone[border:-border, border:-border] = False
+    quiet_zone_mask = np.ones_like(errors, dtype=bool)
+    quiet_zone_mask[border:-border, border:-border] = False
+    return {
+        "overall": float(errors.mean()),
+        "core": float(core.mean()),
+        "quiet_zone": float(quiet_zone[quiet_zone_mask].mean()),
+    }
+
+
+def restore_quiet_zone(
+    candidate: Image.Image,
+    blueprint: QRBlueprint,
+    *,
+    color: tuple[int, int, int] = (255, 255, 255),
+) -> Image.Image:
+    """Restore only the mandatory light margin around an artistic QR core.
+
+    The diffusion model may paint through the quiet zone because the paper losses
+    intentionally crop it. The production image must nevertheless present a uniform
+    light margin to real decoders. The QR core is copied byte-for-byte.
+    """
+    source = candidate.convert("RGB")
+    border = int(blueprint.border)
+    count = int(blueprint.matrix.shape[0])
+    if border <= 0:
+        return source.copy()
+    if 2 * border >= count:
+        raise ValueError("invalid QR border")
+    left = round(border * source.width / count)
+    right = round((count - border) * source.width / count)
+    top = round(border * source.height / count)
+    bottom = round((count - border) * source.height / count)
+    output = Image.new("RGB", source.size, color)
+    output.paste(source.crop((left, top, right, bottom)), (left, top))
+    return output
 
 
 def functional_pattern_mask(blueprint: QRBlueprint) -> np.ndarray:

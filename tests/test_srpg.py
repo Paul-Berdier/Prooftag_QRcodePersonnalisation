@@ -158,3 +158,4 @@ def test_srpg_loop_runs_guidance_inside_each_fake_ddim_step(monkeypatch):
     assert all(step.guidance_applied for step in result.steps)
     assert all(np.isfinite(step.gradient_rms) for step in result.steps)
     assert result.image.size == (128, 128)
+    assert np.all(np.asarray(result.image)[0, 0] == 255)

@@ -15,7 +15,12 @@ from . import metrics
 from .config import Settings
 from .controlnet_models import control_image_for_profile
 from .guidance import LatentRefinementConfig, refine_candidate_latent
-from .qr import QRBlueprint, module_error_rate, repair_qr_modules
+from .qr import (
+    QRBlueprint,
+    module_error_breakdown,
+    module_error_rate,
+    repair_qr_modules,
+)
 from .quality import composite_guided_regions, image_change_metrics
 from .schemas import GenerationRequest
 from .srmpgd import SRMPGDConfig, SRMPGDStep, run_srmpgd
@@ -489,6 +494,15 @@ class ControlNetBackend(GenerationBackend):
                         ],
                     },
                 )
+                srpg_error = module_error_breakdown(srpg.image, blueprint)
+                self._diagnostics.update(
+                    {
+                        "srpg_delivered_module_error_rate": srpg_error["overall"],
+                        "srpg_core_module_error_rate": srpg_error["core"],
+                        "srpg_quiet_zone_module_error_rate": srpg_error["quiet_zone"],
+                        "srpg_quiet_zone_restored": 1.0,
+                    }
+                )
                 # The service must independently validate every SRPG output with the
                 # complete decoder/degradation matrix.  The internal gate only decides
                 # whether deterministic repairs may use it as their new visual base.
@@ -614,6 +628,20 @@ class ControlNetBackend(GenerationBackend):
                             selected_step.strict_all
                         ),
                         "srmpgd_duration_s": float(srmpgd.duration_s),
+                    }
+                )
+                srmpgd_error = module_error_breakdown(srmpgd.image, blueprint)
+                self._diagnostics.update(
+                    {
+                        "srmpgd_initial_core_module_error_rate": float(
+                            srmpgd.initial_module_error_rate
+                        ),
+                        "srmpgd_final_core_module_error_rate": srmpgd_error["core"],
+                        "srmpgd_delivered_module_error_rate": srmpgd_error["overall"],
+                        "srmpgd_quiet_zone_module_error_rate": (
+                            srmpgd_error["quiet_zone"]
+                        ),
+                        "srmpgd_quiet_zone_restored": 1.0,
                     }
                 )
                 logger.info(

@@ -13,7 +13,7 @@ from .guidance import (
     qr_core_geometry,
     scanning_robust_loss,
 )
-from .qr import QRBlueprint, module_error_rate
+from .qr import QRBlueprint, module_error_rate, restore_quiet_zone
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,7 +160,12 @@ def _core_blueprint(
     )
 
 
-def _decode_latent(pipeline: Any, latent: Any) -> tuple[Any, Image.Image]:
+def _decode_latent(
+    pipeline: Any,
+    latent: Any,
+    *,
+    blueprint: QRBlueprint,
+) -> tuple[Any, Image.Image]:
     import torch
 
     vae = pipeline.vae
@@ -173,7 +178,7 @@ def _decode_latent(pipeline: Any, latent: Any) -> tuple[Any, Image.Image]:
     image = pipeline.image_processor.postprocess(
         decoded.detach(), output_type="pil", do_denormalize=[True]
     )[0].convert("RGB")
-    return decoded, image
+    return decoded, restore_quiet_zone(image, blueprint)
 
 
 def _module_error_for_canvas(
@@ -262,7 +267,11 @@ def run_srmpgd(
     started = time.perf_counter()
 
     with torch.no_grad():
-        reference_decoded, reference_image = _decode_latent(pipeline, working)
+        reference_decoded, reference_image = _decode_latent(
+            pipeline,
+            working,
+            blueprint=blueprint,
+        )
         if config.crop_padding_px == -1:
             geometry = qr_core_geometry(
                 blueprint,
@@ -320,7 +329,11 @@ def run_srmpgd(
         numerical_stop_reason = None
         with torch.enable_grad():
             working = working.detach().requires_grad_(True)
-            decoded, image = _decode_latent(pipeline, working)
+            decoded, image = _decode_latent(
+                pipeline,
+                working,
+                blueprint=blueprint,
+            )
             decoded_core = (
                 crop_tensor_to_qr_core(decoded.float(), geometry)
                 if config.crop_padding_px == -1

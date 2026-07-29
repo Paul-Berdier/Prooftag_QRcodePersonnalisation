@@ -143,6 +143,12 @@ SR-MPGD est une finition locale. Si le Stage 2 dépasse 10 % de modules incorrec
 `initial_module_error_rate_above_limit`. Cela empêche de transformer SR-MPGD en reconstructeur QR
 agressif, cas qui produisait les textures bleues et la forte chute du CLIP-aesthetic.
 
+La quiet zone est exclue de SRL et de LPIPS comme dans le chemin DiffQRCoder, mais elle ne peut
+pas rester peinte dans l'image livrée. Après chaque décodage final SRPG/SR-MPGD, le laboratoire
+remet donc uniquement les quatre modules périphériques en blanc avant les tests de décodeurs.
+Le cœur artistique n'est ni projeté ni recouvert. Les métriques distinguent désormais
+`*_core_module_error_rate`, `*_quiet_zone_module_error_rate` et le MER réellement livré.
+
 L'ancien interrupteur `raffinement latent` reste disponible pour reproduire les expériences
 historiques, mais il est désormais nommé comme tel. Il réencode le PNG, emploie une loss
 multiscale et une trust region Prooftag : ce n'est pas SR-MPGD.

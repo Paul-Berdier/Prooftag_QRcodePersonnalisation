@@ -112,19 +112,26 @@ def test_srmpgd_keeps_state_zero_when_the_gradient_is_not_finite(monkeypatch):
     blueprint = generate_qr("https://example.test/nan", "M", size=128)
     latent = torch.full((1, 3, 128, 128), 0.5)
 
+    validated_corners = []
+
+    def validate(image, iteration):
+        validated_corners.append(tuple(np.asarray(image)[0, 0]))
+        return {"passed": 0, "total": 2}
+
     result = srmpgd.run_srmpgd(
         SimpleNamespace(vae=FakeVAE(), image_processor=FakeImageProcessor()),
         latent,
         blueprint,
         SRMPGDConfig(max_iterations=3, step_size=100.0),
         scanning_loss=lambda image, target: (image * torch.tensor(float("nan"))).mean(),
-        validation_callback=lambda image, iteration: {"passed": 0, "total": 2},
+        validation_callback=validate,
     )
 
     assert len(result.steps) == 1
     assert result.selected_iteration == 0
     assert result.stop_reason == "non_finite_gradient_at_iteration_0"
     assert result.steps[0].gradient_rms is None
+    assert validated_corners == [(255, 255, 255)]
 
 
 def test_srmpgd_does_not_attempt_to_reconstruct_a_stage2_far_from_the_qr(monkeypatch):

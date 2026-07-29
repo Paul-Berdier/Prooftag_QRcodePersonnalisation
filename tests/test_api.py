@@ -48,7 +48,7 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     lab_page = client.get("/lab")
     assert lab_page.status_code == 200
     assert "srpg-effective-steps" in lab_page.text
-    assert "20260729-srmpgd-paper-2" in lab_page.text
+    assert "20260729-quiet-zone-1" in lab_page.text
     lab_javascript = client.get("/lab-assets/app.js")
     assert lab_javascript.status_code == 200
     assert "effectiveSrpgSteps" in lab_javascript.text

@@ -12,7 +12,7 @@ from .guidance import (
     qr_core_geometry,
     scanning_robust_loss,
 )
-from .qr import QRBlueprint, module_error_rate
+from .qr import QRBlueprint, module_error_rate, restore_quiet_zone
 from .quality import image_change_metrics
 
 
@@ -578,6 +578,9 @@ def run_srpg_controlnet_img2img(
         image = pipeline.image_processor.postprocess(
             decoded_final, output_type="pil", do_denormalize=[True]
         )[0].convert("RGB")
+        # Equations 7-11 optimize the QR core after cropping qrcode_padding.
+        # Recreate that mandatory light margin before decoder validation and delivery.
+        image = restore_quiet_zone(image, blueprint)
 
     initial_error = module_error_rate(candidate, blueprint)
     final_error = module_error_rate(image, blueprint)

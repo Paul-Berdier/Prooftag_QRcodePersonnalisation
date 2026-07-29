@@ -305,8 +305,9 @@ def laboratory_profiles() -> list[dict[str, Any]]:
             },
             "description": (
                 "Chemin exécutable public : rebruitage complet, 40 pas DDIM, SRL λ1=500, "
-                "LPIPS λ2=3, QR binaire et quiet zone exclue des pertes. Le transformateur "
-                "QArt Reed-Solomon décrit dans le papier reste absent du dépôt public."
+                "LPIPS λ2=3, QR binaire, quiet zone exclue des pertes puis restaurée en "
+                "clair avant validation. Le transformateur QArt Reed-Solomon décrit dans "
+                "le papier reste absent du dépôt public."
             ),
         },
         {
@@ -356,7 +357,7 @@ def laboratory_profiles() -> list[dict[str, Any]]:
             "description": (
                 "Même Stage 2 complet que le profil précédent, puis équations 12-14 sur "
                 "son latent propre. SR-MPGD n'est appliqué que si le MER initial est au "
-                "plus 10 %, car le papier l'utilise comme finition, pas comme reconstruction."
+                "plus 10 %. La quiet zone est restaurée avant chaque test de décodeur."
             ),
         },
         {
