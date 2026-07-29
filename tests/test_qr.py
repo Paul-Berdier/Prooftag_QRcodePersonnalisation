@@ -2,10 +2,12 @@ import numpy as np
 from PIL import Image
 
 from prooftag_qr.qr import (
+    adaptive_quiet_zone_color,
     functional_pattern_mask,
     generate_qr,
     module_error_breakdown,
     module_error_rate,
+    prepare_scan_ready_image,
     repair_qr_modules,
     restore_quiet_zone,
 )
@@ -50,6 +52,70 @@ def test_restore_quiet_zone_preserves_the_artistic_core_and_clears_only_the_marg
     assert np.all(result[:, :left] == 255)
     assert np.all(result[:, right:] == 255)
     assert module_error_breakdown(restored, blueprint)["quiet_zone"] == 0.0
+
+
+def test_adaptive_quiet_zone_keeps_a_light_version_of_the_artwork_palette():
+    blueprint = generate_qr("https://example.prooftag.test/t/adaptive-zone", "M", size=128)
+    painted = Image.new("RGB", blueprint.image.size, (32, 96, 176))
+
+    color = adaptive_quiet_zone_color(
+        painted,
+        blueprint,
+        minimum_luminance=0.82,
+    )
+    prepared = prepare_scan_ready_image(
+        painted,
+        blueprint,
+        quiet_zone_mode="adaptive_light",
+        quiet_zone_minimum_luminance=0.82,
+    )
+    luminance = np.dot(color, (0.299, 0.587, 0.114)) / 255
+    count = blueprint.matrix.shape[0]
+    border_px = round(blueprint.border * painted.width / count)
+
+    assert color != (255, 255, 255)
+    assert luminance >= 0.815
+    assert prepared.getpixel((0, 0)) == color
+    assert np.all(
+        np.asarray(prepared)[border_px:-border_px, border_px:-border_px]
+        == np.asarray(painted)[border_px:-border_px, border_px:-border_px]
+    )
+
+
+def test_functional_tonification_leaves_every_data_module_untouched():
+    blueprint = generate_qr("https://example.prooftag.test/t/functional-only", "H", size=256)
+    noise = np.random.default_rng(20260729).integers(
+        0, 256, (256, 256, 3), dtype=np.uint8
+    )
+    prepared = prepare_scan_ready_image(
+        Image.fromarray(noise),
+        blueprint,
+        quiet_zone_mode="none",
+        functional_pattern_tone_factor=0.12,
+    )
+    result = np.asarray(prepared)
+    protected = functional_pattern_mask(blueprint)
+    count = protected.shape[0]
+    changed_functional = 0
+
+    for row in range(count):
+        y0 = round(row * result.shape[0] / count)
+        y1 = max(y0 + 1, round((row + 1) * result.shape[0] / count))
+        for col in range(count):
+            x0 = round(col * result.shape[1] / count)
+            x1 = max(x0 + 1, round((col + 1) * result.shape[1] / count))
+            changed = not np.array_equal(
+                result[y0:y1, x0:x1],
+                noise[y0:y1, x0:x1],
+            )
+            if protected[row, col]:
+                changed_functional += int(changed)
+            else:
+                assert not changed
+
+    breakdown = module_error_breakdown(prepared, blueprint)
+    assert changed_functional == int(protected.sum())
+    assert breakdown["functional"] == 0.0
 
 
 def test_repair_locks_patterns_and_recovers_a_noisy_artwork():

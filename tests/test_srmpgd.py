@@ -131,7 +131,8 @@ def test_srmpgd_keeps_state_zero_when_the_gradient_is_not_finite(monkeypatch):
     assert result.selected_iteration == 0
     assert result.stop_reason == "non_finite_gradient_at_iteration_0"
     assert result.steps[0].gradient_rms is None
-    assert validated_corners == [(255, 255, 255)]
+    assert len(validated_corners) == 1
+    assert min(validated_corners[0]) >= 229
 
 
 def test_srmpgd_does_not_attempt_to_reconstruct_a_stage2_far_from_the_qr(monkeypatch):

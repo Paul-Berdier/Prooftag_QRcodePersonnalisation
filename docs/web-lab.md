@@ -99,11 +99,13 @@ démarrage de l'API.
 |---|---:|---|
 | `qr_reference` | activé | QR binaire témoin, aucune diffusion |
 | `controlnet_raw` | activé | première diffusion ControlNet, sans Stage 2 |
-| `srpg_late_2` | activé | SRPG Prooftag sur les 2 derniers pas DDIM, `strength=0,05`, limite de gradient `0,50` |
-| `srpg_late_4` | activé | SRPG Prooftag sur les 4 derniers pas DDIM, `strength=0,10`, limite de gradient `0,75` |
+| `srpg_late_2` | activé | témoin SRPG sur les 2 derniers pas, marge claire adaptée, aucun renforcement |
+| `srpg_late_2_functional` | activé | même Stage 2 et même latent, puis tonification des seuls motifs fonctionnels |
+| `srpg_late_2_functional_srmpgd` | activé | même présentation fonctionnelle, puis SR-MPGD si le MER initial est admissible |
+| `srpg_late_4` | désactivé | ancienne ablation sur les 4 derniers pas DDIM |
 | `srpg_late_4_srmpgd` | désactivé | ancienne ablation tardive conservée uniquement pour audit |
-| `srpg_full_restart` | activé | chemin public : redémarrage complet, 40 pas SRPG, cible binaire, pertes calculées hors quiet zone |
-| `srpg_full_restart_srmpgd` | activé | même Stage 2 complet, puis SR-MPGD si le MER initial est au plus 10 % |
+| `srpg_full_restart` | désactivé | ablation publique : redémarrage complet destructif, 40 pas SRPG |
+| `srpg_full_restart_srmpgd` | désactivé | même Stage 2 complet, puis SR-MPGD si le MER initial est au plus 10 % |
 | `srpg_freeqr` | désactivé | même boucle avec fusion latente FreeQR inspirée, canal et fenêtre configurables |
 
 Tous les profils génératifs fournis figent explicitement le socle DiffQRCoder :
@@ -144,10 +146,19 @@ SR-MPGD est une finition locale. Si le Stage 2 dépasse 10 % de modules incorrec
 agressif, cas qui produisait les textures bleues et la forte chute du CLIP-aesthetic.
 
 La quiet zone est exclue de SRL et de LPIPS comme dans le chemin DiffQRCoder, mais elle ne peut
-pas rester peinte dans l'image livrée. Après chaque décodage final SRPG/SR-MPGD, le laboratoire
-remet donc uniquement les quatre modules périphériques en blanc avant les tests de décodeurs.
-Le cœur artistique n'est ni projeté ni recouvert. Les métriques distinguent désormais
-`*_core_module_error_rate`, `*_quiet_zone_module_error_rate` et le MER réellement livré.
+pas rester texturée dans l'image livrée. Après chaque décodage final SRPG/SR-MPGD, le laboratoire
+remplace uniquement les quatre modules périphériques par une couleur uniforme claire dérivée de
+la palette de l'image. Le mode `white` conserve le blanc strict ; le mode `none` est réservé à
+l'exploration esthétique et ne doit pas être livré sans marge externe sur le support. Le cœur
+artistique n'est ni projeté ni recouvert. Les métriques distinguent désormais
+`*_core_module_error_rate`, `*_quiet_zone_module_error_rate`, le MER des motifs fonctionnels,
+le MER des données et le MER réellement livré.
+
+Le profil `srpg_late_2_functional` ajoute une opération distincte : finders, séparateurs,
+timings, format et alignements sont rapprochés de leur ton noir/blanc en conservant leur teinte
+et leur texture. Aucun module de données n'est modifié. Cette hypothèse reprend le constat de
+Face2QR selon lequel le renforcement explicite des motifs de détection doit précéder le
+raffinement latent ; ce n'est ni une projection du QR complet ni une preuve de généralisation.
 
 L'ancien interrupteur `raffinement latent` reste disponible pour reproduire les expériences
 historiques, mais il est désormais nommé comme tel. Il réencode le PNG, emploie une loss
@@ -190,6 +201,8 @@ L'interface expose directement :
 - activation de SRPG, de la rediffusion guidée ou du raffinement latent ;
 - activation indépendante du post-traitement SR-MPGD, avec nombre maximal d'itérations,
   `gamma` et poids LPIPS ;
+- mode et luminance minimale de la quiet zone, ainsi que la tonification ciblée des motifs
+  fonctionnels (`0` désactive ; `0,12` constitue le profil fort proposé) ;
 - modèle de base, ControlNet, sous-dossier et mode de pipeline ;
 - paramètres détaillés des losses, seuils, transformations robustes, limites de préservation,
   seeds de Stage 2 et fusion latente.
@@ -333,7 +346,8 @@ modèles et GPU déjà documentées dans `docs/metrics.md`.
 Pour éviter de recommencer une campagne inutilisable :
 
 1. lancer un smoke test avec `qr_reference`, un prompt et une seed ;
-2. comparer `controlnet_raw`, `srpg_late_2` et `srpg_late_4` en conservant
+2. comparer `controlnet_raw`, `srpg_late_2`, `srpg_late_2_functional` et
+   `srpg_late_2_functional_srmpgd` en conservant
    « Réutiliser le même Stage 1 » ;
 3. vérifier que la sortie évaluée vaut respectivement `raw` et `srpg` ;
 4. lancer ensuite trois méthodes, quatre prompts et deux seeds ;

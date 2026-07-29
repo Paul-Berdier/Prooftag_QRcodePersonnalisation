@@ -255,7 +255,18 @@ station | A grand retro-futurist railway station filled with travelers, clocks, 
           <label>SRPG — poids perceptuel<input class="srpg-perceptual-weight" type="number" min="0" max="100" step="0.1"></label>
           <label>SRPG — poids fonctionnel<input class="srpg-functional-weight" type="number" min="1" max="100" step="0.5"></label>
           <label>SRPG — limite gradient RMS<input class="srpg-noise-limit" type="number" min="0.01" max="100" step="0.05"></label>
+          <label>Quiet zone<select class="srpg-quiet-zone-mode">
+            <option value="adaptive_light">Claire, couleur adaptée</option>
+            <option value="white">Blanche stricte</option>
+            <option value="none">Aucune — esthétique uniquement</option>
+          </select></label>
+          <label>Luminance minimale de la marge<input class="srpg-quiet-zone-luminance" type="number" min="0.50" max="1" step="0.01"></label>
+          <label>Tonification des motifs fonctionnels<input class="srpg-functional-tone" type="number" min="0" max="1" step="0.01"></label>
         </div>
+        <p class="muted">La quiet zone doit rester uniforme et claire, mais peut reprendre la
+          palette de l'image. Tonification : 0 désactive le traitement ; une petite valeur
+          positive (0,12) renforce fortement uniquement les repères, timings et alignements.
+          Les modules de données ne sont pas recouverts.</p>
         <p class="srpg-warning muted"></p>
       </section>
       <section class="srmpgd-controls">
@@ -291,6 +302,6 @@ station | A grand retro-futurist railway station filled with travelers, clocks, 
     </article>
   </template>
 
-  <script src="/lab-assets/app.js?v=20260729-quiet-zone-1" defer></script>
+  <script src="/lab-assets/app.js?v=20260729-functional-patterns-1" defer></script>
 </body>
 </html>

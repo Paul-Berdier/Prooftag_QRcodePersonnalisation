@@ -83,6 +83,9 @@ TOOL_SETTING_KEYS = {
     "srpg_latent_fusion_alpha",
     "srpg_latent_fusion_start",
     "srpg_latent_fusion_end",
+    "srpg_quiet_zone_mode",
+    "srpg_quiet_zone_minimum_luminance",
+    "srpg_functional_pattern_tone_factor",
     "srmpgd_max_iterations",
     "srmpgd_step_size",
     "srmpgd_lpips_weight",
@@ -177,18 +180,113 @@ def laboratory_profiles() -> list[dict[str, Any]]:
                     "srpg_min_relative_module_improvement": 0.0,
                     "srpg_save_step_previews": True,
                     "srpg_preview_interval": 1,
+                    "srpg_quiet_zone_mode": "adaptive_light",
+                    "srpg_quiet_zone_minimum_luminance": 0.90,
+                    "srpg_functional_pattern_tone_factor": 0.0,
                 },
             },
             "description": (
                 "Raffinement équilibré : 40 pas DDIM configurés, strength 0,05, "
-                "donc 2 pas tardifs réellement exécutés."
+                "donc 2 pas tardifs réellement exécutés, avec marge claire adaptée "
+                "à la palette mais sans renforcement fonctionnel."
+            ),
+        },
+        {
+            "id": "srpg_late_2_functional",
+            "name": "SRPG tardif — repères fonctionnels intégrés",
+            "backend": "controlnet",
+            "enabled": True,
+            "output_variant": "srpg",
+            "reuse_stage1": True,
+            "generation": {
+                "steps": 40,
+                "guidance_scale": 7.5,
+                "controlnet_scale": 1.35,
+                "strength": 1.0,
+            },
+            "model": DIFFQRCODER_MODEL_SETTINGS.copy(),
+            "tools": {
+                "srpg_enabled": True,
+                "settings": {
+                    "srpg_steps": 40,
+                    "srpg_strength": 0.05,
+                    "srpg_controlnet_scale": 1.35,
+                    "srpg_qr_weight": 500.0,
+                    "srpg_perceptual_weight": 3.0,
+                    "srpg_functional_weight": 1.0,
+                    "srpg_dark_threshold": 0.45,
+                    "srpg_light_threshold": 0.65,
+                    "srpg_max_noise_delta_rms": 0.50,
+                    "srpg_max_mean_absolute_change": 0.20,
+                    "srpg_min_relative_module_improvement": 0.0,
+                    "srpg_save_step_previews": True,
+                    "srpg_preview_interval": 1,
+                    "srpg_quiet_zone_mode": "adaptive_light",
+                    "srpg_quiet_zone_minimum_luminance": 0.90,
+                    "srpg_functional_pattern_tone_factor": 0.12,
+                },
+            },
+            "description": (
+                "Même latent que le profil 2 pas. La marge prend une teinte claire de "
+                "l'image et seuls les finders, timings, formats et alignements sont "
+                "tonifiés. Aucun module de données n'est projeté."
+            ),
+        },
+        {
+            "id": "srpg_late_2_functional_srmpgd",
+            "name": "SRPG tardif fonctionnel + SR-MPGD",
+            "backend": "controlnet",
+            "enabled": True,
+            "output_variant": "srmpgd",
+            "reuse_stage1": True,
+            "generation": {
+                "steps": 40,
+                "guidance_scale": 7.5,
+                "controlnet_scale": 1.35,
+                "strength": 1.0,
+            },
+            "model": DIFFQRCODER_MODEL_SETTINGS.copy(),
+            "tools": {
+                "srpg_enabled": True,
+                "srmpgd_enabled": True,
+                "settings": {
+                    "srpg_steps": 40,
+                    "srpg_strength": 0.05,
+                    "srpg_controlnet_scale": 1.35,
+                    "srpg_qr_weight": 500.0,
+                    "srpg_perceptual_weight": 3.0,
+                    "srpg_functional_weight": 1.0,
+                    "srpg_dark_threshold": 0.45,
+                    "srpg_light_threshold": 0.65,
+                    "srpg_max_noise_delta_rms": 0.50,
+                    "srpg_max_mean_absolute_change": 0.20,
+                    "srpg_min_relative_module_improvement": 0.0,
+                    "srpg_save_step_previews": True,
+                    "srpg_preview_interval": 1,
+                    "srpg_quiet_zone_mode": "adaptive_light",
+                    "srpg_quiet_zone_minimum_luminance": 0.90,
+                    "srpg_functional_pattern_tone_factor": 0.12,
+                    "srmpgd_max_iterations": 20,
+                    "srmpgd_step_size": 1000.0,
+                    "srmpgd_lpips_weight": 0.01,
+                    "srmpgd_lpips_net": "vgg",
+                    "srmpgd_crop_padding_px": -1,
+                    "srmpgd_dark_threshold": 0.5,
+                    "srmpgd_light_threshold": 0.5,
+                    "srmpgd_max_initial_module_error_rate": 0.10,
+                },
+            },
+            "description": (
+                "Même présentation fonctionnelle, puis SR-MPGD sur le latent propre. "
+                "Ce profil mesure si la finition latente apporte encore quelque chose "
+                "une fois les motifs de détection rendus fiables."
             ),
         },
         {
             "id": "srpg_late_4",
             "name": "DiffQRCoder SRPG tardif — 4 pas",
             "backend": "controlnet",
-            "enabled": True,
+            "enabled": False,
             "output_variant": "srpg",
             "reuse_stage1": True,
             "generation": {
@@ -272,7 +370,7 @@ def laboratory_profiles() -> list[dict[str, Any]]:
             "id": "srpg_full_restart",
             "name": "DiffQRCoder public — Stage 2 SRPG complet",
             "backend": "controlnet",
-            "enabled": True,
+            "enabled": False,
             "output_variant": "srpg",
             "reuse_stage1": True,
             "generation": {
@@ -314,7 +412,7 @@ def laboratory_profiles() -> list[dict[str, Any]]:
             "id": "srpg_full_restart_srmpgd",
             "name": "DiffQRCoder public — SRPG complet + SR-MPGD",
             "backend": "controlnet",
-            "enabled": True,
+            "enabled": False,
             "output_variant": "srmpgd",
             "reuse_stage1": True,
             "generation": {
@@ -656,6 +754,12 @@ class LabService:
                     "srpg_perceptual_weight": float(settings.srpg_perceptual_weight),
                     "srpg_functional_weight": float(settings.srpg_functional_weight),
                     "srpg_max_noise_delta_rms": float(settings.srpg_max_noise_delta_rms),
+                    "srpg_quiet_zone_minimum_luminance": float(
+                        settings.srpg_quiet_zone_minimum_luminance
+                    ),
+                    "srpg_functional_pattern_tone_factor": float(
+                        settings.srpg_functional_pattern_tone_factor
+                    ),
                 }
             )
             if method.tools.srmpgd_enabled:

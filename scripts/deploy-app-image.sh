@@ -80,7 +80,7 @@ kubectl -n "$namespace" exec "$pod" -c "$container" -- \
   "from prooftag_qr.lab import laboratory_profiles; p = next(p for p in laboratory_profiles() if p['id'] == 'srpg_full_restart_srmpgd'); assert p['enabled'] is True and p['output_variant'] == 'srmpgd' and p['tools']['srmpgd_enabled'] is True; print(p['id'], p['output_variant'], p['tools']['srmpgd_enabled'])"
 kubectl -n "$namespace" exec "$pod" -c "$container" -- \
   python -c \
-  "from pathlib import Path; import prooftag_qr; path = Path(prooftag_qr.__file__).with_name('lab_static') / 'index.html'; assert '20260729-quiet-zone-1' in path.read_text(encoding='utf-8'); print('Assets Web quiet-zone confirmés')"
+  "from pathlib import Path; import prooftag_qr; path = Path(prooftag_qr.__file__).with_name('lab_static') / 'index.html'; assert '20260729-functional-patterns-1' in path.read_text(encoding='utf-8'); print('Assets Web functional-patterns confirmés')"
 
 echo "Image déployée et vérifiée : $image"
 echo "Pod : $pod"

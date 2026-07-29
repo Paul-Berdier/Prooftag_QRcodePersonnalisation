@@ -48,7 +48,7 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     lab_page = client.get("/lab")
     assert lab_page.status_code == 200
     assert "srpg-effective-steps" in lab_page.text
-    assert "20260729-quiet-zone-1" in lab_page.text
+    assert "20260729-functional-patterns-1" in lab_page.text
     lab_javascript = client.get("/lab-assets/app.js")
     assert lab_javascript.status_code == 200
     assert "effectiveSrpgSteps" in lab_javascript.text
@@ -62,6 +62,14 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     )
     assert any(
         item["id"] == "srpg_full_restart_srmpgd"
+        for item in schema.json()["profiles"]
+    )
+    assert any(
+        item["id"] == "srpg_late_2_functional"
+        for item in schema.json()["profiles"]
+    )
+    assert any(
+        item["id"] == "srpg_late_2_functional_srmpgd"
         for item in schema.json()["profiles"]
     )
     controlnet_profile = next(
@@ -78,7 +86,7 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     srmpgd_profile = next(
         item
         for item in schema.json()["profiles"]
-        if item["id"] == "srpg_full_restart_srmpgd"
+        if item["id"] == "srpg_late_2_functional_srmpgd"
     )
     assert controlnet_profile["model"]["base_model_id"]
     assert controlnet_profile["model"]["controlnet_model_id"]
@@ -100,11 +108,22 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     assert srmpgd_profile["tools"]["settings"]["srmpgd_lpips_weight"] == 0.01
     assert srmpgd_profile["tools"]["settings"]["srmpgd_crop_padding_px"] == -1
     assert (
+        srmpgd_profile["tools"]["settings"]["srpg_quiet_zone_mode"]
+        == "adaptive_light"
+    )
+    assert (
+        srmpgd_profile["tools"]["settings"]["srpg_functional_pattern_tone_factor"]
+        == 0.12
+    )
+    assert (
         srmpgd_profile["tools"]["settings"]["srmpgd_max_initial_module_error_rate"]
         == 0.10
     )
-    assert srmpgd_profile["model"]["controlnet_conditioning_profile"] == "binary"
-    assert full_restart_profile["enabled"] is True
+    assert (
+        srmpgd_profile["model"]["controlnet_conditioning_profile"]
+        == "gray_quiet_zone"
+    )
+    assert full_restart_profile["enabled"] is False
 
     campaign_response = client.post(
         "/v1/lab/campaigns",

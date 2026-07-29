@@ -66,11 +66,19 @@ def module_error_breakdown(
     """
     errors = module_error_map(candidate, blueprint)
     border = int(blueprint.border)
+    core_mask = np.ones_like(errors, dtype=bool)
+    if border:
+        core_mask[:] = False
+        core_mask[border:-border, border:-border] = True
+    functional = functional_pattern_mask(blueprint) & core_mask
+    data = core_mask & ~functional
     if border == 0:
         return {
             "overall": float(errors.mean()),
             "core": float(errors.mean()),
             "quiet_zone": 0.0,
+            "functional": float(errors[functional].mean()),
+            "data": float(errors[data].mean()),
         }
     core = errors[border:-border, border:-border]
     quiet_zone = errors.copy()
@@ -81,6 +89,8 @@ def module_error_breakdown(
         "overall": float(errors.mean()),
         "core": float(core.mean()),
         "quiet_zone": float(quiet_zone[quiet_zone_mask].mean()),
+        "functional": float(errors[functional].mean()),
+        "data": float(errors[data].mean()),
     }
 
 
@@ -112,6 +122,77 @@ def restore_quiet_zone(
     return output
 
 
+def adaptive_quiet_zone_color(
+    candidate: Image.Image,
+    blueprint: QRBlueprint,
+    *,
+    minimum_luminance: float = 0.90,
+) -> tuple[int, int, int]:
+    """Choose a uniform light frame derived from the artwork's peripheral palette."""
+    if not 0.0 < minimum_luminance <= 1.0:
+        raise ValueError("minimum_luminance must be between 0 (exclusive) and 1")
+    source = np.asarray(candidate.convert("RGB"), dtype=np.float32)
+    border = int(blueprint.border)
+    count = int(blueprint.matrix.shape[0])
+    if border <= 0:
+        return (255, 255, 255)
+    left = round(border * source.shape[1] / count)
+    right = round((count - border) * source.shape[1] / count)
+    top = round(border * source.shape[0] / count)
+    bottom = round((count - border) * source.shape[0] / count)
+    mask = np.ones(source.shape[:2], dtype=bool)
+    mask[top:bottom, left:right] = False
+    sampled = source[mask]
+    color = np.median(sampled, axis=0) if sampled.size else np.array((255, 255, 255))
+    luminance = float(np.dot(color, np.array((0.299, 0.587, 0.114)))) / 255.0
+    if luminance < minimum_luminance:
+        blend = (minimum_luminance - luminance) / max(1e-6, 1.0 - luminance)
+        color = color * (1.0 - blend) + 255.0 * blend
+    return tuple(int(value) for value in np.rint(color).clip(0, 255))
+
+
+def prepare_scan_ready_image(
+    candidate: Image.Image,
+    blueprint: QRBlueprint,
+    *,
+    quiet_zone_mode: str = "adaptive_light",
+    quiet_zone_minimum_luminance: float = 0.90,
+    functional_pattern_tone_factor: float = 0.0,
+) -> Image.Image:
+    """Prepare an artistic QR for decoding without projecting its data modules.
+
+    ``functional_pattern_tone_factor`` strengthens only QR function modules. A value
+    of zero leaves them untouched; smaller positive values move them more strongly
+    toward their target black/white tones while retaining the artwork's hue.
+    """
+    if quiet_zone_mode not in {"none", "white", "adaptive_light"}:
+        raise ValueError("quiet_zone_mode must be none, white or adaptive_light")
+    if not 0.0 <= functional_pattern_tone_factor <= 1.0:
+        raise ValueError("functional_pattern_tone_factor must be between 0 and 1")
+    output = candidate.convert("RGB")
+    if functional_pattern_tone_factor > 0:
+        output = repair_qr_modules(
+            output,
+            blueprint,
+            center_scale=0.0,
+            preserve_tone=True,
+            preserve_functional_tone=True,
+            tone_factor=functional_pattern_tone_factor,
+        )
+    if quiet_zone_mode == "none":
+        return output
+    color = (
+        (255, 255, 255)
+        if quiet_zone_mode == "white"
+        else adaptive_quiet_zone_color(
+            candidate,
+            blueprint,
+            minimum_luminance=quiet_zone_minimum_luminance,
+        )
+    )
+    return restore_quiet_zone(output, blueprint, color=color)
+
+
 def functional_pattern_mask(blueprint: QRBlueprint) -> np.ndarray:
     """Return modules that must remain structurally exact, including the quiet zone."""
     count = blueprint.matrix.shape[0]
@@ -136,11 +217,11 @@ def functional_pattern_mask(blueprint: QRBlueprint) -> np.ndarray:
     protect(0, 9, core - 8, core)
     protect(core - 8, core, 0, 9)
 
-    # Timing, format information and the fixed dark module.
+    # Timing patterns. Finder/separator rectangles above already cover the format
+    # information and fixed dark module without incorrectly classifying the full
+    # row/column 8 as functional.
     protect(6, 7, 0, core)
     protect(0, core, 6, 7)
-    protect(8, 9, 0, core)
-    protect(0, core, 8, 9)
 
     # Alignment patterns that do not overlap a finder pattern.
     for row in pattern_position(blueprint.version):

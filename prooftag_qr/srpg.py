@@ -12,7 +12,7 @@ from .guidance import (
     qr_core_geometry,
     scanning_robust_loss,
 )
-from .qr import QRBlueprint, module_error_rate, restore_quiet_zone
+from .qr import QRBlueprint, module_error_rate, prepare_scan_ready_image
 from .quality import image_change_metrics
 
 
@@ -48,6 +48,9 @@ class SRPGConfig:
     latent_fusion_alpha: float = 0.15
     latent_fusion_start: float = 0.0
     latent_fusion_end: float = 1.0
+    quiet_zone_mode: str = "adaptive_light"
+    quiet_zone_minimum_luminance: float = 0.90
+    functional_pattern_tone_factor: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -188,6 +191,12 @@ def _validate_config(config: SRPGConfig) -> None:
         raise ValueError("latent_fusion_alpha must be between 0 and 1")
     if not 0 <= config.latent_fusion_start <= config.latent_fusion_end <= 1:
         raise ValueError("invalid latent fusion window")
+    if config.quiet_zone_mode not in {"none", "white", "adaptive_light"}:
+        raise ValueError("quiet_zone_mode must be none, white or adaptive_light")
+    if not 0.0 < config.quiet_zone_minimum_luminance <= 1.0:
+        raise ValueError("quiet_zone_minimum_luminance must be between 0 and 1")
+    if not 0.0 <= config.functional_pattern_tone_factor <= 1.0:
+        raise ValueError("functional_pattern_tone_factor must be between 0 and 1")
 
 
 def run_srpg_controlnet_img2img(
@@ -580,7 +589,13 @@ def run_srpg_controlnet_img2img(
         )[0].convert("RGB")
         # Equations 7-11 optimize the QR core after cropping qrcode_padding.
         # Recreate that mandatory light margin before decoder validation and delivery.
-        image = restore_quiet_zone(image, blueprint)
+        image = prepare_scan_ready_image(
+            image,
+            blueprint,
+            quiet_zone_mode=config.quiet_zone_mode,
+            quiet_zone_minimum_luminance=config.quiet_zone_minimum_luminance,
+            functional_pattern_tone_factor=config.functional_pattern_tone_factor,
+        )
 
     initial_error = module_error_rate(candidate, blueprint)
     final_error = module_error_rate(image, blueprint)

@@ -1120,3 +1120,28 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   Les métriques séparent désormais le MER du cœur, celui de la quiet zone et celui de l'image
   réellement livrée. Une nouvelle campagne est obligatoire ; les résultats historiques ne sont
   pas réinterprétés.
+- **Diagnostic Web Lab 08 — marge corrigée, détection toujours absente :** l'export
+  `prooftag-lab-67489f0d-0391-4a68-87f9-46dc7954cc08.csv` contient douze essais appariés sur
+  `courtyard` et `station`. La restauration blanche ramène le MER de la quiet zone à zéro.
+  Cependant, `srpg_late_2` et `srpg_late_4` plafonnent à 17,95 % de SSR moyen et tous les autres
+  candidats artistiques restent à 0 %. Sur `station`, le MER tombe à environ 0,37 % sans aucune
+  lecture : le MER global ne suffit donc pas à mesurer la capacité du détecteur à localiser les
+  trois finders.
+- **Cause Web Lab 08 :** le contour, le contraste local et la géométrie interne des finders
+  restent trop décoratifs. Le cadre blanc obligatoire les isole mais produit en plus une rupture
+  esthétique visible. Augmenter encore SR-MPGD ne résout pas cette détection et risque de
+  dégrader l'image.
+- **Correction Web Lab 08 :** la marge devient une couleur uniforme claire tirée de la palette,
+  avec luminance minimale réglable. Deux métriques séparent maintenant motifs fonctionnels et
+  données. Un profil apparié tonifie uniquement finders, séparateurs, timing, format et
+  alignements ; aucun module de données n'est projeté. Un second profil applique ensuite le vrai
+  SR-MPGD au latent propre pour mesurer son apport marginal.
+- **Justification externe Web Lab 08 :** Face2QR renforce explicitement finder et alignment
+  patterns avant son raffinement latent. Text2QR sépare également amélioration de scannabilité
+  et raffinement esthétique. Ces travaux motivent le test ciblé, sans promettre leurs chiffres
+  sur les prompts génériques Prooftag.
+- **Décision Web Lab 08 :** désactiver par défaut les redémarrages complets et l'ancienne fenêtre
+  quatre pas. La campagne suivante doit comparer quatre sorties partageant le même Stage 1 :
+  brute, SRPG tardif, SRPG tardif avec motifs fonctionnels et la même sortie suivie de SR-MPGD.
+  Le critère primaire reste le payload exact/SSR ; CLIP-aesthetic et CLIPScore ne départagent que
+  les candidats ayant franchi la porte de lecture.

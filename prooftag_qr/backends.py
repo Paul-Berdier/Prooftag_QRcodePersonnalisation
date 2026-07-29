@@ -415,6 +415,13 @@ class ControlNetBackend(GenerationBackend):
                         latent_fusion_alpha=self.settings.srpg_latent_fusion_alpha,
                         latent_fusion_start=self.settings.srpg_latent_fusion_start,
                         latent_fusion_end=self.settings.srpg_latent_fusion_end,
+                        quiet_zone_mode=self.settings.srpg_quiet_zone_mode,
+                        quiet_zone_minimum_luminance=(
+                            self.settings.srpg_quiet_zone_minimum_luminance
+                        ),
+                        functional_pattern_tone_factor=(
+                            self.settings.srpg_functional_pattern_tone_factor
+                        ),
                     ),
                 )
                 if srpg.previews:
@@ -500,7 +507,17 @@ class ControlNetBackend(GenerationBackend):
                         "srpg_delivered_module_error_rate": srpg_error["overall"],
                         "srpg_core_module_error_rate": srpg_error["core"],
                         "srpg_quiet_zone_module_error_rate": srpg_error["quiet_zone"],
-                        "srpg_quiet_zone_restored": 1.0,
+                        "srpg_functional_module_error_rate": srpg_error["functional"],
+                        "srpg_data_module_error_rate": srpg_error["data"],
+                        "srpg_quiet_zone_restored": float(
+                            self.settings.srpg_quiet_zone_mode != "none"
+                        ),
+                        "srpg_quiet_zone_minimum_luminance": float(
+                            self.settings.srpg_quiet_zone_minimum_luminance
+                        ),
+                        "srpg_functional_pattern_tone_factor": float(
+                            self.settings.srpg_functional_pattern_tone_factor
+                        ),
                     }
                 )
                 # The service must independently validate every SRPG output with the
@@ -566,6 +583,13 @@ class ControlNetBackend(GenerationBackend):
                         center_fraction=self.settings.srmpgd_center_fraction,
                         max_initial_module_error_rate=(
                             self.settings.srmpgd_max_initial_module_error_rate
+                        ),
+                        quiet_zone_mode=self.settings.srpg_quiet_zone_mode,
+                        quiet_zone_minimum_luminance=(
+                            self.settings.srpg_quiet_zone_minimum_luminance
+                        ),
+                        functional_pattern_tone_factor=(
+                            self.settings.srpg_functional_pattern_tone_factor
                         ),
                     ),
                     validation_callback=validation_callback,
@@ -641,7 +665,13 @@ class ControlNetBackend(GenerationBackend):
                         "srmpgd_quiet_zone_module_error_rate": (
                             srmpgd_error["quiet_zone"]
                         ),
-                        "srmpgd_quiet_zone_restored": 1.0,
+                        "srmpgd_functional_module_error_rate": (
+                            srmpgd_error["functional"]
+                        ),
+                        "srmpgd_data_module_error_rate": srmpgd_error["data"],
+                        "srmpgd_quiet_zone_restored": float(
+                            self.settings.srpg_quiet_zone_mode != "none"
+                        ),
                     }
                 )
                 logger.info(

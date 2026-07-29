@@ -71,6 +71,15 @@ class Settings(BaseSettings):
     srpg_latent_fusion_alpha: float = Field(default=0.15, ge=0.0, le=1.0)
     srpg_latent_fusion_start: float = Field(default=0.0, ge=0.0, le=1.0)
     srpg_latent_fusion_end: float = Field(default=1.0, ge=0.0, le=1.0)
+    srpg_quiet_zone_mode: Literal["none", "white", "adaptive_light"] = (
+        "adaptive_light"
+    )
+    srpg_quiet_zone_minimum_luminance: float = Field(
+        default=0.90, gt=0.0, le=1.0
+    )
+    srpg_functional_pattern_tone_factor: float = Field(
+        default=0.0, ge=0.0, le=1.0
+    )
     srmpgd_enabled: bool = False
     srmpgd_max_iterations: int = Field(default=20, ge=1, le=100)
     srmpgd_step_size: float = Field(default=1000.0, gt=0.0, le=100_000.0)

@@ -81,6 +81,9 @@ def test_gpu_dependencies_are_pinned_to_the_torch_base_image():
     assert settings.srpg_robust_contrast_weight == 0
     assert settings.srpg_robust_contrast_factor == pytest.approx(0.70)
     assert settings.srpg_eta == 0
+    assert settings.srpg_quiet_zone_mode == "adaptive_light"
+    assert settings.srpg_quiet_zone_minimum_luminance == pytest.approx(0.90)
+    assert settings.srpg_functional_pattern_tone_factor == 0.0
     assert settings.srmpgd_enabled is False
     assert settings.srmpgd_max_iterations == 20
     assert settings.srmpgd_step_size == 1000.0
@@ -108,6 +111,11 @@ def test_gpu_dependencies_are_pinned_to_the_torch_base_image():
     assert 'PROOFTAG_QR_SRPG_STEPS: "40"' in manifest
     assert 'PROOFTAG_QR_SRPG_SAVE_STEP_PREVIEWS: "false"' in manifest
     assert 'PROOFTAG_QR_SRPG_PREVIEW_INTERVAL: "5"' in manifest
+    assert "PROOFTAG_QR_SRPG_QUIET_ZONE_MODE: adaptive_light" in manifest
+    assert (
+        'PROOFTAG_QR_SRPG_FUNCTIONAL_PATTERN_TONE_FACTOR: "0.0"'
+        in manifest
+    )
     assert 'PROOFTAG_QR_SRMPGD_ENABLED: "false"' in manifest
     assert 'PROOFTAG_QR_SRMPGD_STEP_SIZE: "1000.0"' in manifest
     assert 'PROOFTAG_QR_SRMPGD_LPIPS_WEIGHT: "0.01"' in manifest

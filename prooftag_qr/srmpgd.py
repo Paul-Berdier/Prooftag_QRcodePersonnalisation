@@ -13,7 +13,7 @@ from .guidance import (
     qr_core_geometry,
     scanning_robust_loss,
 )
-from .qr import QRBlueprint, module_error_rate, restore_quiet_zone
+from .qr import QRBlueprint, module_error_rate, prepare_scan_ready_image
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +34,9 @@ class SRMPGDConfig:
     light_threshold: float = 0.5
     center_fraction: float = 1 / 3
     max_initial_module_error_rate: float = 0.10
+    quiet_zone_mode: str = "adaptive_light"
+    quiet_zone_minimum_luminance: float = 0.90
+    functional_pattern_tone_factor: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,6 +92,12 @@ def _validate_config(config: SRMPGDConfig) -> None:
         raise ValueError("center_fraction must be between 0 (exclusive) and 1")
     if not 0 <= config.max_initial_module_error_rate <= 1:
         raise ValueError("max_initial_module_error_rate must be between 0 and 1")
+    if config.quiet_zone_mode not in {"none", "white", "adaptive_light"}:
+        raise ValueError("quiet_zone_mode must be none, white or adaptive_light")
+    if not 0.0 < config.quiet_zone_minimum_luminance <= 1.0:
+        raise ValueError("quiet_zone_minimum_luminance must be between 0 and 1")
+    if not 0.0 <= config.functional_pattern_tone_factor <= 1.0:
+        raise ValueError("functional_pattern_tone_factor must be between 0 and 1")
 
 
 def _load_lpips(pipeline: Any, *, device: Any, net: str) -> Any:
@@ -165,6 +174,7 @@ def _decode_latent(
     latent: Any,
     *,
     blueprint: QRBlueprint,
+    config: SRMPGDConfig,
 ) -> tuple[Any, Image.Image]:
     import torch
 
@@ -178,7 +188,13 @@ def _decode_latent(
     image = pipeline.image_processor.postprocess(
         decoded.detach(), output_type="pil", do_denormalize=[True]
     )[0].convert("RGB")
-    return decoded, restore_quiet_zone(image, blueprint)
+    return decoded, prepare_scan_ready_image(
+        image,
+        blueprint,
+        quiet_zone_mode=config.quiet_zone_mode,
+        quiet_zone_minimum_luminance=config.quiet_zone_minimum_luminance,
+        functional_pattern_tone_factor=config.functional_pattern_tone_factor,
+    )
 
 
 def _module_error_for_canvas(
@@ -271,6 +287,7 @@ def run_srmpgd(
             pipeline,
             working,
             blueprint=blueprint,
+            config=config,
         )
         if config.crop_padding_px == -1:
             geometry = qr_core_geometry(
@@ -333,6 +350,7 @@ def run_srmpgd(
                 pipeline,
                 working,
                 blueprint=blueprint,
+                config=config,
             )
             decoded_core = (
                 crop_tensor_to_qr_core(decoded.float(), geometry)

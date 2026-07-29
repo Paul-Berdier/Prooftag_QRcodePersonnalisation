@@ -80,6 +80,13 @@ def runtime_info(settings: Settings | None = None) -> dict:
             "srpg_seed_offset": settings.srpg_seed_offset,
             "srpg_save_step_previews": settings.srpg_save_step_previews,
             "srpg_preview_interval": settings.srpg_preview_interval,
+            "srpg_quiet_zone_mode": settings.srpg_quiet_zone_mode,
+            "srpg_quiet_zone_minimum_luminance": (
+                settings.srpg_quiet_zone_minimum_luminance
+            ),
+            "srpg_functional_pattern_tone_factor": (
+                settings.srpg_functional_pattern_tone_factor
+            ),
             "srmpgd_enabled": settings.srmpgd_enabled,
             "srmpgd_max_iterations": settings.srmpgd_max_iterations,
             "srmpgd_step_size": settings.srmpgd_step_size,

@@ -103,6 +103,12 @@ function renderMethods() {
     $(".srpg-perceptual-weight", node).value = toolSettings.srpg_perceptual_weight ?? 3;
     $(".srpg-functional-weight", node).value = toolSettings.srpg_functional_weight ?? 4;
     $(".srpg-noise-limit", node).value = toolSettings.srpg_max_noise_delta_rms ?? 2;
+    $(".srpg-quiet-zone-mode", node).value =
+      toolSettings.srpg_quiet_zone_mode ?? "adaptive_light";
+    $(".srpg-quiet-zone-luminance", node).value =
+      toolSettings.srpg_quiet_zone_minimum_luminance ?? 0.90;
+    $(".srpg-functional-tone", node).value =
+      toolSettings.srpg_functional_pattern_tone_factor ?? 0;
     $(".srmpgd-iterations", node).value = toolSettings.srmpgd_max_iterations ?? 20;
     $(".srmpgd-step-size", node).value = toolSettings.srmpgd_step_size ?? 1000;
     $(".srmpgd-lpips-weight", node).value = toolSettings.srmpgd_lpips_weight ?? 0.01;
@@ -140,6 +146,13 @@ function renderMethods() {
           srpg_perceptual_weight: Number($(".srpg-perceptual-weight", node).value),
           srpg_functional_weight: Number($(".srpg-functional-weight", node).value),
           srpg_max_noise_delta_rms: Number($(".srpg-noise-limit", node).value),
+          srpg_quiet_zone_mode: $(".srpg-quiet-zone-mode", node).value,
+          srpg_quiet_zone_minimum_luminance: Number(
+            $(".srpg-quiet-zone-luminance", node).value
+          ),
+          srpg_functional_pattern_tone_factor: Number(
+            $(".srpg-functional-tone", node).value
+          ),
         });
         $(".tools-json", node).value = JSON.stringify(item.tools.settings, null, 2);
       }
@@ -583,14 +596,20 @@ const QUALITY_METRIC_LABELS = {
   srpg_controlnet_scale: "SRPG — ControlNet appliqué",
   srpg_qr_weight: "SRPG — poids QR appliqué",
   srpg_core_module_error_rate: "SRPG — MER du cœur QR livré",
+  srpg_functional_module_error_rate: "SRPG — MER des motifs fonctionnels",
+  srpg_data_module_error_rate: "SRPG — MER des modules de données",
   srpg_quiet_zone_module_error_rate: "SRPG — MER de la quiet zone",
   srpg_quiet_zone_restored: "SRPG — quiet zone restaurée",
+  srpg_quiet_zone_minimum_luminance: "SRPG — luminance minimale de la marge",
+  srpg_functional_pattern_tone_factor: "SRPG — tonification fonctionnelle",
   srpg_perceptual_weight: "SRPG — poids perceptuel appliqué",
   srpg_functional_weight: "SRPG — poids fonctionnel appliqué",
   srpg_max_noise_delta_rms: "SRPG — limite gradient RMS appliquée",
   srmpgd_initial_core_module_error_rate: "SR-MPGD — MER initial du cœur",
   srmpgd_final_core_module_error_rate: "SR-MPGD — MER final du cœur",
   srmpgd_delivered_module_error_rate: "SR-MPGD — MER image livrée",
+  srmpgd_functional_module_error_rate: "SR-MPGD — MER des motifs fonctionnels",
+  srmpgd_data_module_error_rate: "SR-MPGD — MER des modules de données",
   srmpgd_quiet_zone_module_error_rate: "SR-MPGD — MER de la quiet zone",
   srmpgd_quiet_zone_restored: "SR-MPGD — quiet zone restaurée",
   stage1_changed_pixel_ratio: "Stage 1 — pixels modifiés",
