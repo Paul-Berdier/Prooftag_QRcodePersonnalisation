@@ -91,6 +91,7 @@ TOOL_SETTING_KEYS = {
     "srmpgd_dark_threshold",
     "srmpgd_light_threshold",
     "srmpgd_center_fraction",
+    "srmpgd_max_initial_module_error_rate",
     "guided_rediffusion_steps",
     "guided_rediffusion_strength",
     "guided_rediffusion_controlnet_scale",
@@ -222,9 +223,9 @@ def laboratory_profiles() -> list[dict[str, Any]]:
         },
         {
             "id": "srpg_late_4_srmpgd",
-            "name": "DiffQRCoder — 4 pas SRPG + SR-MPGD papier",
+            "name": "Ablation tardive — 4 pas SRPG + SR-MPGD",
             "backend": "controlnet",
-            "enabled": True,
+            "enabled": False,
             "output_variant": "srmpgd",
             "reuse_stage1": True,
             "generation": {
@@ -255,20 +256,23 @@ def laboratory_profiles() -> list[dict[str, Any]]:
                     "srmpgd_step_size": 1000.0,
                     "srmpgd_lpips_weight": 0.01,
                     "srmpgd_lpips_net": "vgg",
+                    "srmpgd_crop_padding_px": -1,
+                    "srmpgd_dark_threshold": 0.5,
+                    "srmpgd_light_threshold": 0.5,
+                    "srmpgd_max_initial_module_error_rate": 0.10,
                 },
             },
             "description": (
-                "Même Stage 1 et même Stage 2 tardif que srpg_late_4, puis équations "
-                "12-14 sur le latent propre exact : SRL + 0,01 LPIPS, gamma 1000. "
-                "Le Stage 2 reste une adaptation tardive car le QArt Reed-Solomon du "
-                "papier n'est pas publié."
+                "Ancienne ablation conservée pour audit. Elle est désactivée : quatre pas "
+                "tardifs ne reproduisent pas le Stage 2 à 40 pas du papier et ne doivent "
+                "pas servir de point de départ à SR-MPGD."
             ),
         },
         {
             "id": "srpg_full_restart",
-            "name": "SRPG redémarrage complet — ablation",
+            "name": "DiffQRCoder public — Stage 2 SRPG complet",
             "backend": "controlnet",
-            "enabled": False,
+            "enabled": True,
             "output_variant": "srpg",
             "reuse_stage1": True,
             "generation": {
@@ -277,7 +281,10 @@ def laboratory_profiles() -> list[dict[str, Any]]:
                 "controlnet_scale": 1.35,
                 "strength": 1.0,
             },
-            "model": DIFFQRCODER_MODEL_SETTINGS.copy(),
+            "model": {
+                **DIFFQRCODER_MODEL_SETTINGS,
+                "controlnet_conditioning_profile": "binary",
+            },
             "tools": {
                 "srpg_enabled": True,
                 "settings": {
@@ -287,17 +294,69 @@ def laboratory_profiles() -> list[dict[str, Any]]:
                     "srpg_qr_weight": 500.0,
                     "srpg_perceptual_weight": 3.0,
                     "srpg_functional_weight": 1.0,
-                    "srpg_dark_threshold": 0.45,
-                    "srpg_light_threshold": 0.65,
-                    "srpg_max_mean_absolute_change": 0.40,
+                    "srpg_dark_threshold": 0.5,
+                    "srpg_light_threshold": 0.5,
+                    "srpg_max_noise_delta_rms": 100.0,
+                    "srpg_max_mean_absolute_change": 1.0,
                     "srpg_min_relative_module_improvement": 0.0,
                     "srpg_save_step_previews": True,
                     "srpg_preview_interval": 5,
                 },
             },
             "description": (
-                "Ablation destructive observée : rebruitage complet et 40 pas. "
-                "Ce n’est pas une reproduction bit-à-bit du papier sans son QArt."
+                "Chemin exécutable public : rebruitage complet, 40 pas DDIM, SRL λ1=500, "
+                "LPIPS λ2=3, QR binaire et quiet zone exclue des pertes. Le transformateur "
+                "QArt Reed-Solomon décrit dans le papier reste absent du dépôt public."
+            ),
+        },
+        {
+            "id": "srpg_full_restart_srmpgd",
+            "name": "DiffQRCoder public — SRPG complet + SR-MPGD",
+            "backend": "controlnet",
+            "enabled": True,
+            "output_variant": "srmpgd",
+            "reuse_stage1": True,
+            "generation": {
+                "steps": 40,
+                "guidance_scale": 7.5,
+                "controlnet_scale": 1.35,
+                "strength": 1.0,
+            },
+            "model": {
+                **DIFFQRCODER_MODEL_SETTINGS,
+                "controlnet_conditioning_profile": "binary",
+            },
+            "tools": {
+                "srpg_enabled": True,
+                "srmpgd_enabled": True,
+                "settings": {
+                    "srpg_steps": 40,
+                    "srpg_strength": 1.0,
+                    "srpg_controlnet_scale": 1.35,
+                    "srpg_qr_weight": 500.0,
+                    "srpg_perceptual_weight": 3.0,
+                    "srpg_functional_weight": 1.0,
+                    "srpg_dark_threshold": 0.5,
+                    "srpg_light_threshold": 0.5,
+                    "srpg_max_noise_delta_rms": 100.0,
+                    "srpg_max_mean_absolute_change": 1.0,
+                    "srpg_min_relative_module_improvement": 0.0,
+                    "srpg_save_step_previews": True,
+                    "srpg_preview_interval": 5,
+                    "srmpgd_max_iterations": 20,
+                    "srmpgd_step_size": 1000.0,
+                    "srmpgd_lpips_weight": 0.01,
+                    "srmpgd_lpips_net": "vgg",
+                    "srmpgd_crop_padding_px": -1,
+                    "srmpgd_dark_threshold": 0.5,
+                    "srmpgd_light_threshold": 0.5,
+                    "srmpgd_max_initial_module_error_rate": 0.10,
+                },
+            },
+            "description": (
+                "Même Stage 2 complet que le profil précédent, puis équations 12-14 sur "
+                "son latent propre. SR-MPGD n'est appliqué que si le MER initial est au "
+                "plus 10 %, car le papier l'utilise comme finition, pas comme reconstruction."
             ),
         },
         {

@@ -6,7 +6,12 @@ from typing import Any
 
 from PIL import Image
 
-from .guidance import prepare_torch_layout, scanning_robust_loss
+from .guidance import (
+    crop_tensor_to_qr_core,
+    prepare_torch_layout,
+    qr_core_geometry,
+    scanning_robust_loss,
+)
 from .qr import QRBlueprint, module_error_rate
 from .quality import image_change_metrics
 
@@ -238,7 +243,15 @@ def run_srpg_controlnet_img2img(
     source_image = pipeline.image_processor.preprocess(
         candidate.convert("RGB"), height=blueprint.image.height, width=blueprint.image.width
     ).to(device=device, dtype=torch.float32)
-    reference_lpips = source_image.to(device=device, dtype=torch.float32)
+    core_geometry = qr_core_geometry(
+        blueprint,
+        source_image.shape[-2],
+        source_image.shape[-1],
+    )
+    reference_lpips = crop_tensor_to_qr_core(
+        source_image.to(device=device, dtype=torch.float32),
+        core_geometry,
+    )
     prepared_control_image = pipeline.prepare_control_image(
         image=control_image if control_image is not None else blueprint.image,
         width=blueprint.image.width,
@@ -285,9 +298,9 @@ def run_srpg_controlnet_img2img(
             )
     extra_step_kwargs = pipeline.prepare_extra_step_kwargs(generator, config.eta)
     layout = prepare_torch_layout(
-        blueprint,
-        blueprint.image.height,
-        blueprint.image.width,
+        core_geometry.blueprint,
+        core_geometry.bottom - core_geometry.top,
+        core_geometry.right - core_geometry.left,
         device=device,
         dtype=dtype,
         center_fraction=config.center_fraction,
@@ -340,10 +353,11 @@ def run_srpg_controlnet_img2img(
             decoded = pipeline.vae.decode(
                 predicted_clean_latent / scaling_factor, return_dict=False
             )[0]
-            decoded_unit = (decoded / 2 + 0.5).clamp(0, 1)
+            decoded_core = crop_tensor_to_qr_core(decoded, core_geometry)
+            decoded_unit = (decoded_core / 2 + 0.5).clamp(0, 1)
             scanning_loss, diagnostics = scanning_robust_loss(
                 decoded_unit,
-                blueprint,
+                core_geometry.blueprint,
                 functional_weight=config.functional_weight,
                 center_fraction=config.center_fraction,
                 dark_threshold=config.dark_threshold,
@@ -362,7 +376,7 @@ def run_srpg_controlnet_img2img(
                 )
                 loss, _ = scanning_robust_loss(
                     blurred,
-                    blueprint,
+                    core_geometry.blueprint,
                     functional_weight=config.functional_weight,
                     dark_threshold=config.dark_threshold,
                     light_threshold=config.light_threshold,
@@ -388,7 +402,7 @@ def run_srpg_controlnet_img2img(
                 )
                 loss, _ = scanning_robust_loss(
                     restored,
-                    blueprint,
+                    core_geometry.blueprint,
                     functional_weight=config.functional_weight,
                     dark_threshold=config.dark_threshold,
                     light_threshold=config.light_threshold,
@@ -405,7 +419,7 @@ def run_srpg_controlnet_img2img(
                     transformed = (decoded_unit * factor).clamp(0, 1)
                     loss, _ = scanning_robust_loss(
                         transformed,
-                        blueprint,
+                        core_geometry.blueprint,
                         functional_weight=config.functional_weight,
                         dark_threshold=config.dark_threshold,
                         light_threshold=config.light_threshold,
@@ -420,7 +434,7 @@ def run_srpg_controlnet_img2img(
                 ).clamp(0, 1)
                 loss, _ = scanning_robust_loss(
                     contrasted,
-                    blueprint,
+                    core_geometry.blueprint,
                     functional_weight=config.functional_weight,
                     dark_threshold=config.dark_threshold,
                     light_threshold=config.light_threshold,
@@ -429,7 +443,9 @@ def run_srpg_controlnet_img2img(
                 scanning_loss = scanning_loss + config.robust_contrast_weight * loss
                 robust_weight += config.robust_contrast_weight
             scanning_loss = scanning_loss / robust_weight
-            perceptual_loss = perceptual_model(decoded.float(), reference_lpips).mean()
+            perceptual_loss = perceptual_model(
+                decoded_core.float(), reference_lpips
+            ).mean()
             module_error = float(diagnostics["module_error_rate"].detach().float().item())
             preview = None
             if index in preview_indices:
@@ -441,15 +457,23 @@ def run_srpg_controlnet_img2img(
                 active_modules = (
                     diagnostics["active_mask"][0]
                     .detach()
-                    .reshape(blueprint.matrix.shape)
+                    .reshape(core_geometry.blueprint.matrix.shape)
                     .to(torch.uint8)
                     .mul(255)
                     .cpu()
                     .numpy()
                 )
-                active_map = Image.fromarray(active_modules).resize(
-                    blueprint.image.size,
+                active_core = Image.fromarray(active_modules).resize(
+                    (
+                        core_geometry.right - core_geometry.left,
+                        core_geometry.bottom - core_geometry.top,
+                    ),
                     Image.Resampling.NEAREST,
+                )
+                active_map = Image.new("L", blueprint.image.size, 0)
+                active_map.paste(
+                    active_core,
+                    (core_geometry.left, core_geometry.top),
                 )
                 preview = SRPGPreview(
                     index=index,

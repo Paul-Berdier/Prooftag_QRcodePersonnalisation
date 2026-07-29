@@ -550,6 +550,9 @@ class ControlNetBackend(GenerationBackend):
                         dark_threshold=self.settings.srmpgd_dark_threshold,
                         light_threshold=self.settings.srmpgd_light_threshold,
                         center_fraction=self.settings.srmpgd_center_fraction,
+                        max_initial_module_error_rate=(
+                            self.settings.srmpgd_max_initial_module_error_rate
+                        ),
                     ),
                     validation_callback=validation_callback,
                     preview_callback=save_srmpgd_preview,
@@ -594,6 +597,10 @@ class ControlNetBackend(GenerationBackend):
                         "srmpgd_lpips_weight": float(
                             self.settings.srmpgd_lpips_weight
                         ),
+                        "srmpgd_max_initial_module_error_rate": float(
+                            self.settings.srmpgd_max_initial_module_error_rate
+                        ),
+                        "srmpgd_applied": float(len(srmpgd.steps) > 1),
                         "srmpgd_initial_module_error_rate": float(
                             srmpgd.initial_module_error_rate
                         ),

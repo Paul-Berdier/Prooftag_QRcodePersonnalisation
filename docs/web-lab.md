@@ -101,15 +101,17 @@ démarrage de l'API.
 | `controlnet_raw` | activé | première diffusion ControlNet, sans Stage 2 |
 | `srpg_late_2` | activé | SRPG Prooftag sur les 2 derniers pas DDIM, `strength=0,05`, limite de gradient `0,50` |
 | `srpg_late_4` | activé | SRPG Prooftag sur les 4 derniers pas DDIM, `strength=0,10`, limite de gradient `0,75` |
-| `srpg_late_4_srmpgd` | activé | même Stage 2 tardif, puis SR-MPGD équations 12-14 sur son latent propre exact, états 0 à 20 |
-| `srpg_full_restart` | désactivé | ablation avec redémarrage bruité complet et 40 pas ; profil destructif observé |
+| `srpg_late_4_srmpgd` | désactivé | ancienne ablation tardive conservée uniquement pour audit |
+| `srpg_full_restart` | activé | chemin public : redémarrage complet, 40 pas SRPG, cible binaire, pertes calculées hors quiet zone |
+| `srpg_full_restart_srmpgd` | activé | même Stage 2 complet, puis SR-MPGD si le MER initial est au plus 10 % |
 | `srpg_freeqr` | désactivé | même boucle avec fusion latente FreeQR inspirée, canal et fenêtre configurables |
 
 Tous les profils génératifs fournis figent explicitement le socle DiffQRCoder :
 
 - Cetus-Mix Whalefall fp16 comme modèle Stable Diffusion 1.5 ;
 - QR Code Monster v2 comme ControlNet, sous-dossier `v2` ;
-- conditionnement `gray_quiet_zone` et pipeline `img2img`.
+- pipeline `img2img` ; les profils tardifs historiques utilisent `gray_quiet_zone`, tandis que
+  les deux profils publics complets utilisent la condition binaire transmise par le dépôt officiel.
 
 Le chargeur accepte désormais le checkpoint Cetus au format Safetensors « single file » ; il ne
 retombe donc pas silencieusement sur le modèle SD 1.5 + Dion de la ConfigMap. Ces identifiants
@@ -119,7 +121,7 @@ Les profils fournis sélectionnent explicitement leur sortie :
 
 - `qr_reference` et `controlnet_raw` évaluent `raw` ;
 - tous les profils SRPG évaluent le candidat `srpg` lui-même ;
-- `srpg_late_4_srmpgd` évalue le meilleur état `srmpgd`, jamais l'ancien raffinement latent ;
+- `srpg_full_restart_srmpgd` évalue le meilleur état `srmpgd`, jamais l'ancien raffinement latent ;
 - `auto` est réservé à une simulation de la chaîne de livraison avec réparation éventuelle.
 
 Quand deux méthodes ont exactement le même modèle, prompt, seed, géométrie et paramètres de
@@ -130,9 +132,16 @@ suivantes reçoivent cette même image comme entrée. La fiche d'un essai affich
 Point de vocabulaire essentiel : `SR-MPGD papier` désigne uniquement le post-traitement des
 équations 12-14. Il part du tenseur latent propre exact produit par le Stage 2, minimise
 `LSR + 0,01 × LPIPS` avec `gamma=1000`, gèle tous les poids et ne réencode jamais le PNG.
-Le profil complet reste une adaptation Prooftag : son Stage 2 tardif n'est pas le Stage 2 complet
-de l'article et le transformateur QArt Reed-Solomon n'est pas publié. Le laboratoire ne présente
-donc toujours pas cette chaîne comme une reproduction bit-à-bit de tout l'article.
+La SRL suit maintenant exactement la normalisation `1/N` de l'équation 6 et les pertes excluent
+automatiquement la quiet zone, comme les appels `crop_padding` du code officiel. Le profil public
+effectue les 40 pas du Stage 2. Le transformateur QArt Reed-Solomon de la Figure 3 n'est toutefois
+pas publié ; la condition reste donc le QR binaire valide et la chaîne n'est pas présentée comme
+une reproduction bit-à-bit de tout l'article.
+
+SR-MPGD est une finition locale. Si le Stage 2 dépasse 10 % de modules incorrects, aucune descente
+à `gamma=1000` n'est lancée : l'état 0 est conservé avec le motif
+`initial_module_error_rate_above_limit`. Cela empêche de transformer SR-MPGD en reconstructeur QR
+agressif, cas qui produisait les textures bleues et la forte chute du CLIP-aesthetic.
 
 L'ancien interrupteur `raffinement latent` reste disponible pour reproduire les expériences
 historiques, mais il est désormais nommé comme tel. Il réencode le PNG, emploie une loss

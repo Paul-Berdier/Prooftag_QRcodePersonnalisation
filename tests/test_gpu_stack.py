@@ -86,6 +86,10 @@ def test_gpu_dependencies_are_pinned_to_the_torch_base_image():
     assert settings.srmpgd_step_size == 1000.0
     assert settings.srmpgd_lpips_weight == 0.01
     assert settings.srmpgd_lpips_net == "vgg"
+    assert settings.srmpgd_crop_padding_px == -1
+    assert settings.srmpgd_dark_threshold == 0.5
+    assert settings.srmpgd_light_threshold == 0.5
+    assert settings.srmpgd_max_initial_module_error_rate == 0.10
     assert settings.latent_refinement_enabled is False
     assert settings.latent_refinement_iterations == 8
     assert settings.latent_refinement_learning_rate == 0.02

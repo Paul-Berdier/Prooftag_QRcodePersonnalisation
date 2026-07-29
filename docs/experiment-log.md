@@ -1088,3 +1088,23 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
 - **Limite Web Lab 05 :** seul le post-traitement SR-MPGD suit les équations du papier. Le profil
   actif conserve un Stage 2 tardif Prooftag ; le QArt Reed-Solomon exact de la Figure 3 reste
   indisponible dans le dépôt public.
+- **Incident Web Lab 06 — SR-MPGD détruit l'esthétique :** l'export
+  `prooftag-lab-4decd849-9aa5-436e-bb27-2fd52ff0138f.csv` contient huit sorties SR-MPGD, toutes
+  rejetées. Le MER moyen passe bien d'environ 31,6 % à 3,2 %, mais le CLIP-aesthetic moyen tombe
+  d'environ 5,65 pour le Stage 2 à 4,05. Les images présentent des contours bleus et une texture
+  QR haute fréquence absents des résultats du papier.
+- **Causes Web Lab 06 :** (1) la SRL divisait par le nombre de modules encore actifs au lieu des
+  `N` modules de l'équation 6, maintenant ainsi un gradient fort jusque sur les derniers modules ;
+  (2) SRL et LPIPS incluaient la quiet zone alors que le code officiel applique `crop_padding` ;
+  (3) `gamma=1000` était appliqué pendant 20 itérations à un Stage 2 à 0 % de SSR et 20–38 % de
+  MER, alors que le tableau 7 présente SR-MPGD comme finition d'un Stage 2 déjà à 88–94 % de SSR ;
+  (4) le profil actif ne lançait que quatre pas tardifs et n'était donc pas le Stage 2 de 40 pas.
+- **Correction Web Lab 06 :** SRL est désormais normalisée par tous les modules, la quiet zone est
+  retirée automatiquement des pertes SRPG/SR-MPGD, et les seuils papier redeviennent symétriques
+  à 0,5. L'ablation tardive SR-MPGD est désactivée. Deux profils appariés exécutent maintenant le
+  chemin public complet de 40 pas, avec puis sans SR-MPGD. Une précondition à 10 % de MER empêche
+  SR-MPGD d'essayer de reconstruire une image trop éloignée ; l'état initial est alors conservé
+  et la raison est tracée.
+- **Limite maintenue :** le dépôt DiffQRCoder public ne fournit toujours pas le transformateur
+  QArt Reed-Solomon de la Figure 3. Les nouveaux profils complets utilisent donc le QR binaire
+  valide, comme le chemin exécutable public, et ne revendiquent pas encore les 99–100 % du papier.

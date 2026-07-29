@@ -76,10 +76,13 @@ class Settings(BaseSettings):
     srmpgd_step_size: float = Field(default=1000.0, gt=0.0, le=100_000.0)
     srmpgd_lpips_weight: float = Field(default=0.01, ge=0.0, le=100.0)
     srmpgd_lpips_net: Literal["alex", "vgg", "squeeze"] = "vgg"
-    srmpgd_crop_padding_px: int = Field(default=0, ge=0, le=256)
-    srmpgd_dark_threshold: float = Field(default=0.45, gt=0.0, lt=1.0)
-    srmpgd_light_threshold: float = Field(default=0.65, gt=0.0, lt=1.0)
+    srmpgd_crop_padding_px: int = Field(default=-1, ge=-1, le=256)
+    srmpgd_dark_threshold: float = Field(default=0.5, gt=0.0, lt=1.0)
+    srmpgd_light_threshold: float = Field(default=0.5, gt=0.0, lt=1.0)
     srmpgd_center_fraction: float = Field(default=1 / 3, gt=0.0, le=1.0)
+    srmpgd_max_initial_module_error_rate: float = Field(
+        default=0.10, ge=0.0, le=1.0
+    )
     latent_refinement_enabled: bool = False
     latent_refinement_iterations: int = Field(default=8, ge=1, le=100)
     latent_refinement_learning_rate: float = Field(default=0.02, gt=0.0, le=10.0)

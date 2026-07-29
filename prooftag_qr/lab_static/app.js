@@ -106,6 +106,8 @@ function renderMethods() {
     $(".srmpgd-iterations", node).value = toolSettings.srmpgd_max_iterations ?? 20;
     $(".srmpgd-step-size", node).value = toolSettings.srmpgd_step_size ?? 1000;
     $(".srmpgd-lpips-weight", node).value = toolSettings.srmpgd_lpips_weight ?? 0.01;
+    $(".srmpgd-max-initial-mer", node).value =
+      toolSettings.srmpgd_max_initial_module_error_rate ?? 0.10;
     $(".model-json", node).value = JSON.stringify(method.model || {}, null, 2);
     $(".tools-json", node).value = JSON.stringify(toolSettings, null, 2);
 
@@ -147,6 +149,12 @@ function renderMethods() {
           srmpgd_step_size: Number($(".srmpgd-step-size", node).value),
           srmpgd_lpips_weight: Number($(".srmpgd-lpips-weight", node).value),
           srmpgd_lpips_net: item.tools.settings.srmpgd_lpips_net || "vgg",
+          srmpgd_crop_padding_px: item.tools.settings.srmpgd_crop_padding_px ?? -1,
+          srmpgd_dark_threshold: item.tools.settings.srmpgd_dark_threshold ?? 0.5,
+          srmpgd_light_threshold: item.tools.settings.srmpgd_light_threshold ?? 0.5,
+          srmpgd_max_initial_module_error_rate: Number(
+            $(".srmpgd-max-initial-mer", node).value
+          ),
         });
         $(".tools-json", node).value = JSON.stringify(item.tools.settings, null, 2);
       }

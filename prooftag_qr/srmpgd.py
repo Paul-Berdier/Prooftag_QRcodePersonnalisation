@@ -7,7 +7,12 @@ from typing import Any
 
 from PIL import Image
 
-from .guidance import prepare_torch_layout, scanning_robust_loss
+from .guidance import (
+    crop_tensor_to_qr_core,
+    prepare_torch_layout,
+    qr_core_geometry,
+    scanning_robust_loss,
+)
 from .qr import QRBlueprint, module_error_rate
 
 
@@ -24,10 +29,11 @@ class SRMPGDConfig:
     step_size: float = 1000.0
     lpips_weight: float = 0.01
     lpips_net: str = "vgg"
-    crop_padding_px: int = 0
-    dark_threshold: float = 0.45
-    light_threshold: float = 0.65
+    crop_padding_px: int = -1
+    dark_threshold: float = 0.5
+    light_threshold: float = 0.5
     center_fraction: float = 1 / 3
+    max_initial_module_error_rate: float = 0.10
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,12 +81,14 @@ def _validate_config(config: SRMPGDConfig) -> None:
         raise ValueError("lpips_weight cannot be negative")
     if config.lpips_net not in {"alex", "vgg", "squeeze"}:
         raise ValueError("lpips_net must be alex, vgg or squeeze")
-    if config.crop_padding_px < 0:
-        raise ValueError("crop_padding_px cannot be negative")
+    if config.crop_padding_px < -1:
+        raise ValueError("crop_padding_px must be -1 (automatic) or non-negative")
     if not 0 < config.dark_threshold <= config.light_threshold < 1:
         raise ValueError("thresholds must satisfy 0 < dark <= light < 1")
     if not 0 < config.center_fraction <= 1:
         raise ValueError("center_fraction must be between 0 (exclusive) and 1")
+    if not 0 <= config.max_initial_module_error_rate <= 1:
+        raise ValueError("max_initial_module_error_rate must be between 0 and 1")
 
 
 def _load_lpips(pipeline: Any, *, device: Any, net: str) -> Any:
@@ -255,23 +263,40 @@ def run_srmpgd(
 
     with torch.no_grad():
         reference_decoded, reference_image = _decode_latent(pipeline, working)
-        reference_core = _crop_tensor(reference_decoded.float(), config.crop_padding_px).detach()
+        if config.crop_padding_px == -1:
+            geometry = qr_core_geometry(
+                blueprint,
+                reference_decoded.shape[-2],
+                reference_decoded.shape[-1],
+            )
+            reference_core = crop_tensor_to_qr_core(
+                reference_decoded.float(),
+                geometry,
+            ).detach()
+            core_blueprint = geometry.blueprint
+            resolved_crop_padding_px = geometry.left
+        else:
+            reference_core = _crop_tensor(
+                reference_decoded.float(),
+                config.crop_padding_px,
+            ).detach()
+            core_blueprint = _core_blueprint(
+                blueprint,
+                height=reference_core.shape[-2],
+                width=reference_core.shape[-1],
+                strip_border=config.crop_padding_px > 0,
+            )
+            resolved_crop_padding_px = config.crop_padding_px
     core_height, core_width = reference_core.shape[-2:]
     target_core = _blueprint_tensor(
-        blueprint,
+        core_blueprint,
         height=core_height,
         width=core_width,
         device=device,
-        strip_border=config.crop_padding_px > 0,
+        strip_border=False,
     )
     if target_core.shape[-2:] != (core_height, core_width):
         raise ValueError("QR target and decoded latent core dimensions do not match")
-    core_blueprint = _core_blueprint(
-        blueprint,
-        height=core_height,
-        width=core_width,
-        strip_border=config.crop_padding_px > 0,
-    )
     layout = prepare_torch_layout(
         core_blueprint,
         core_height,
@@ -283,12 +308,24 @@ def run_srmpgd(
 
     states: list[tuple[SRMPGDStep, Any, Image.Image]] = []
     stop_reason = "max_iterations"
+    initial_module_error_rate = _module_error_for_canvas(
+        reference_image,
+        blueprint,
+        crop_padding_px=resolved_crop_padding_px,
+    )
+    refinement_applicable = (
+        initial_module_error_rate <= config.max_initial_module_error_rate
+    )
     for iteration in range(config.max_iterations + 1):
         numerical_stop_reason = None
         with torch.enable_grad():
             working = working.detach().requires_grad_(True)
             decoded, image = _decode_latent(pipeline, working)
-            decoded_core = _crop_tensor(decoded.float(), config.crop_padding_px)
+            decoded_core = (
+                crop_tensor_to_qr_core(decoded.float(), geometry)
+                if config.crop_padding_px == -1
+                else _crop_tensor(decoded.float(), config.crop_padding_px)
+            )
             decoded_unit = (decoded_core / 2 + 0.5).clamp(0, 1)
             diagnostic_srl, diagnostics = scanning_robust_loss(
                 decoded_unit,
@@ -322,7 +359,9 @@ def run_srmpgd(
             gradient = None
             gradient_rms = None
             next_step_rms = None
-            if not validation["strict_all"] and iteration < config.max_iterations:
+            if not refinement_applicable:
+                numerical_stop_reason = "initial_module_error_rate_above_limit"
+            elif not validation["strict_all"] and iteration < config.max_iterations:
                 gradient = torch.autograd.grad(objective, working, only_inputs=True)[0]
                 if not torch.isfinite(gradient).all():
                     numerical_stop_reason = (
@@ -345,7 +384,7 @@ def run_srmpgd(
                 actual_module_error_rate=_module_error_for_canvas(
                     image,
                     blueprint,
-                    crop_padding_px=config.crop_padding_px,
+                    crop_padding_px=resolved_crop_padding_px,
                 ),
                 gradient_rms=gradient_rms,
                 next_step_rms=next_step_rms,
@@ -377,9 +416,7 @@ def run_srmpgd(
         stop_reason=stop_reason,
         duration_s=time.perf_counter() - started,
         initial_module_error_rate=_module_error_for_canvas(
-            reference_image,
-            blueprint,
-            crop_padding_px=config.crop_padding_px,
+            reference_image, blueprint, crop_padding_px=resolved_crop_padding_px
         ),
         final_module_error_rate=selected_step.actual_module_error_rate,
     )

@@ -89,6 +89,9 @@ def runtime_info(settings: Settings | None = None) -> dict:
             "srmpgd_dark_threshold": settings.srmpgd_dark_threshold,
             "srmpgd_light_threshold": settings.srmpgd_light_threshold,
             "srmpgd_center_fraction": settings.srmpgd_center_fraction,
+            "srmpgd_max_initial_module_error_rate": (
+                settings.srmpgd_max_initial_module_error_rate
+            ),
             "latent_refinement_enabled": settings.latent_refinement_enabled,
             "latent_refinement_iterations": settings.latent_refinement_iterations,
             "latent_refinement_learning_rate": settings.latent_refinement_learning_rate,

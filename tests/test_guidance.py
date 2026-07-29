@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from prooftag_qr.guidance import build_module_layout
+from prooftag_qr.guidance import build_module_layout, qr_core_geometry
 from prooftag_qr.qr import generate_qr
 
 
@@ -95,3 +95,46 @@ def test_srl_rejects_inverted_thresholds():
             dark_threshold=0.70,
             light_threshold=0.60,
         )
+
+
+def test_srl_equation_6_normalizes_by_all_modules_not_only_active_modules():
+    torch = pytest.importorskip("torch")
+    from prooftag_qr.guidance import scanning_robust_loss
+
+    blueprint = generate_qr("https://example.test/srl-normalization", "M", size=128)
+    count = blueprint.matrix.shape[0]
+    image = np.asarray(blueprint.image, dtype=np.float32) / 255.0
+    module_row = blueprint.border + 10
+    module_col = blueprint.border + 10
+    y0 = round(module_row * image.shape[0] / count)
+    y1 = round((module_row + 1) * image.shape[0] / count)
+    x0 = round(module_col * image.shape[1] / count)
+    x1 = round((module_col + 1) * image.shape[1] / count)
+    image[y0:y1, x0:x1] = 1.0 - image[y0:y1, x0:x1]
+    tensor = torch.from_numpy(image).permute(2, 0, 1).unsqueeze(0)
+
+    loss, diagnostics = scanning_robust_loss(
+        tensor,
+        blueprint,
+        functional_weight=1.0,
+    )
+
+    assert diagnostics["active_modules"].item() == 1
+    assert 0 < loss.item() <= 1 / blueprint.matrix.size
+
+
+def test_qr_core_geometry_removes_the_quiet_zone_without_resampling_modules():
+    blueprint = generate_qr("https://example.test/core-crop", "M", size=512)
+
+    geometry = qr_core_geometry(blueprint, 512, 512)
+
+    assert geometry.blueprint.border == 0
+    assert geometry.blueprint.matrix.shape[0] == (
+        blueprint.matrix.shape[0] - 2 * blueprint.border
+    )
+    assert geometry.left == geometry.top
+    assert geometry.right == geometry.bottom
+    assert geometry.blueprint.image.size == (
+        geometry.right - geometry.left,
+        geometry.bottom - geometry.top,
+    )

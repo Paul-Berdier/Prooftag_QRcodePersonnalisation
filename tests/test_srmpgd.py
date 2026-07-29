@@ -65,7 +65,12 @@ def test_srmpgd_uses_exact_latent_original_qr_and_stops_on_strict_validation(mon
         FakePipeline(),
         latent,
         blueprint,
-        SRMPGDConfig(max_iterations=3, step_size=0.01, lpips_weight=0.01),
+        SRMPGDConfig(
+            max_iterations=3,
+            step_size=0.01,
+            lpips_weight=0.01,
+            crop_padding_px=0,
+        ),
         scanning_loss=official_scanning_loss,
         validation_callback=validate,
     )
@@ -122,6 +127,48 @@ def test_srmpgd_keeps_state_zero_when_the_gradient_is_not_finite(monkeypatch):
     assert result.steps[0].gradient_rms is None
 
 
+def test_srmpgd_does_not_attempt_to_reconstruct_a_stage2_far_from_the_qr(monkeypatch):
+    torch = pytest.importorskip("torch")
+    from prooftag_qr import srmpgd
+
+    class FakeVAE(torch.nn.Module):
+        config = SimpleNamespace(scaling_factor=1.0)
+
+        def __init__(self):
+            super().__init__()
+            self.anchor = torch.nn.Parameter(torch.tensor(1.0), requires_grad=False)
+
+        def decode(self, latent, **kwargs):
+            return (latent * self.anchor,)
+
+    class FakeImageProcessor:
+        def postprocess(self, image, **kwargs):
+            array = (image[0].detach().clamp(-1, 1) / 2 + 0.5).permute(1, 2, 0)
+            return [Image.fromarray(np.uint8(array.cpu().numpy() * 255), mode="RGB")]
+
+    class ZeroLPIPS(torch.nn.Module):
+        def forward(self, image, reference):
+            return image.mean().reshape(1, 1, 1, 1) * 0
+
+    monkeypatch.setattr(srmpgd, "_load_lpips", lambda pipeline, device, net: ZeroLPIPS())
+    blueprint = generate_qr("https://example.test/srmpgd-precondition", "M", size=128)
+    # A flat gray image is far outside the local post-processing regime.
+    latent = torch.zeros((1, 3, 128, 128))
+
+    result = srmpgd.run_srmpgd(
+        SimpleNamespace(vae=FakeVAE(), image_processor=FakeImageProcessor()),
+        latent,
+        blueprint,
+        SRMPGDConfig(max_iterations=20, max_initial_module_error_rate=0.10),
+        validation_callback=lambda image, iteration: {"passed": 0, "total": 2},
+    )
+
+    assert len(result.steps) == 1
+    assert result.selected_iteration == 0
+    assert result.stop_reason == "initial_module_error_rate_above_limit"
+    assert result.steps[0].gradient_rms is None
+
+
 @pytest.mark.parametrize(
     ("config", "message"),
     [
@@ -129,7 +176,11 @@ def test_srmpgd_keeps_state_zero_when_the_gradient_is_not_finite(monkeypatch):
         (SRMPGDConfig(step_size=0), "step_size"),
         (SRMPGDConfig(lpips_weight=-1), "lpips_weight"),
         (SRMPGDConfig(lpips_net="unknown"), "lpips_net"),
-        (SRMPGDConfig(crop_padding_px=-1), "crop_padding"),
+        (SRMPGDConfig(crop_padding_px=-2), "crop_padding"),
+        (
+            SRMPGDConfig(max_initial_module_error_rate=1.1),
+            "max_initial_module_error_rate",
+        ),
     ],
 )
 def test_srmpgd_rejects_invalid_configuration(config, message):

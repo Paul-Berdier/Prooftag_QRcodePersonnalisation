@@ -33,6 +33,17 @@ class TorchModuleLayout:
 
 
 @dataclass(frozen=True, slots=True)
+class QRCoreGeometry:
+    """Exact pixel bounds and border-free blueprint used by the paper losses."""
+
+    left: int
+    top: int
+    right: int
+    bottom: int
+    blueprint: QRBlueprint
+
+
+@dataclass(frozen=True, slots=True)
 class LatentRefinementConfig:
     iterations: int = 8
     learning_rate: float = 0.02
@@ -160,6 +171,53 @@ def prepare_torch_layout(
     )
 
 
+def qr_core_geometry(
+    blueprint: QRBlueprint,
+    height: int,
+    width: int,
+) -> QRCoreGeometry:
+    """Map the QR core to pixels without optimizing the quiet zone.
+
+    DiffQRCoder explicitly crops ``qrcode_padding`` before SRL and LPIPS.  Our QR
+    generator stores the quiet zone in ``blueprint.matrix``; these rounded bounds use
+    the same module-to-pixel convention as ``module_error_rate``.
+    """
+    if height <= 0 or width <= 0:
+        raise ValueError("height and width must be positive")
+    count = int(blueprint.matrix.shape[0])
+    border = int(blueprint.border)
+    if border < 0 or 2 * border >= count:
+        raise ValueError("invalid QR border")
+    if border == 0:
+        matrix = blueprint.matrix.copy()
+        left, top, right, bottom = 0, 0, width, height
+    else:
+        matrix = blueprint.matrix[border:-border, border:-border].copy()
+        left = round(border * width / count)
+        right = round((count - border) * width / count)
+        top = round(border * height / count)
+        bottom = round((count - border) * height / count)
+    core_image = blueprint.image.resize((width, height), Image.Resampling.NEAREST).crop(
+        (left, top, right, bottom)
+    )
+    return QRCoreGeometry(
+        left=left,
+        top=top,
+        right=right,
+        bottom=bottom,
+        blueprint=QRBlueprint(
+            image=core_image,
+            matrix=matrix,
+            version=blueprint.version,
+            border=0,
+        ),
+    )
+
+
+def crop_tensor_to_qr_core(tensor: Any, geometry: QRCoreGeometry) -> Any:
+    return tensor[..., geometry.top : geometry.bottom, geometry.left : geometry.right]
+
+
 def scanning_robust_loss(
     images: Any,
     blueprint: QRBlueprint,
@@ -235,7 +293,11 @@ def scanning_robust_loss(
         images.new_tensor(1.0),
     ).unsqueeze(0)
     active_weights = active.to(images.dtype) * module_weights
-    loss = (module_errors * active_weights).sum() / active_weights.sum().clamp_min(1)
+    # Equation 6 divides by every module N, not only by modules that are still
+    # incorrect.  Dividing by active modules kept the last few gradients artificially
+    # large and made gamma=1000 burn high-frequency QR texture into the image.
+    normalization = module_weights.sum() * batch
+    loss = (module_errors * active_weights).sum() / normalization.clamp_min(1)
 
     functional_active = active[:, prepared.functional]
     data_active = active[:, ~prepared.functional]
