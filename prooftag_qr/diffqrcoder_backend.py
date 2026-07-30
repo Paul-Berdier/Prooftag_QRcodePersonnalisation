@@ -12,7 +12,7 @@ from PIL import Image
 
 from . import metrics
 from .config import Settings
-from .qr import QRBlueprint, functional_pattern_mask
+from .qr import QRBlueprint
 from .quality import image_change_metrics, image_quality_metrics
 from .schemas import GenerationRequest
 from .srmpgd import SRMPGDConfig, run_srmpgd
@@ -45,86 +45,7 @@ def _pil_to_tensor(image: Image.Image, *, device: str, dtype):
     )
 
 
-def _tone_to_luminance(region: np.ndarray, target: float) -> np.ndarray:
-    """Move a coloured patch toward a target luminance while preserving its hue."""
-    source = region.astype(np.float32) / 255.0
-    luminance = (
-        0.299 * source[..., 0] + 0.587 * source[..., 1] + 0.114 * source[..., 2]
-    )
-    current = float(luminance.mean())
-    if current > target:
-        source *= target / max(current, 1e-6)
-    elif current < target:
-        blend = (target - current) / max(1.0 - current, 1e-6)
-        source = source * (1.0 - blend) + blend
-    return np.rint(source.clip(0, 1) * 255).astype(np.uint8)
-
-
-def build_paper_qart_target(
-    reference: Image.Image,
-    blueprint: QRBlueprint,
-    *,
-    padding_px: int,
-    module_size: int,
-    center_fraction: float,
-    dark_target: float,
-    light_target: float,
-) -> Image.Image:
-    """Build the missing paper target ``Qart(x_hat, y)`` deterministically.
-
-    The public repository consumes a QArt target but does not publish the QArt
-    constructor used in the paper. This implementation preserves the Stage-1
-    artwork, moves only data-module centres across the paper's robust thresholds,
-    and copies functional modules exactly as the upstream personalized-code tool
-    does. It is explicitly reported as a reconstructed target, not upstream code.
-    """
-    if reference.width != reference.height:
-        raise ValueError("DiffQRCoder QArt target requires a square Stage-1 image")
-    border = int(blueprint.border)
-    core_matrix = (
-        blueprint.matrix[border:-border, border:-border]
-        if border
-        else blueprint.matrix
-    )
-    core_functional = (
-        functional_pattern_mask(blueprint)[border:-border, border:-border]
-        if border
-        else functional_pattern_mask(blueprint)
-    )
-    expected_core = core_matrix.shape[0] * module_size
-    if padding_px * 2 + expected_core != reference.width:
-        raise ValueError(
-            "QArt geometry mismatch: "
-            f"{padding_px}*2 + {core_matrix.shape[0]}*{module_size} "
-            f"!= {reference.width}"
-        )
-    output = np.asarray(reference.convert("RGB"), dtype=np.uint8).copy()
-    center_side = max(1, round(module_size * center_fraction))
-    for row in range(core_matrix.shape[0]):
-        y0 = padding_px + row * module_size
-        y1 = y0 + module_size
-        for col in range(core_matrix.shape[1]):
-            x0 = padding_px + col * module_size
-            x1 = x0 + module_size
-            target_dark = bool(core_matrix[row, col])
-            target_value = 0 if target_dark else 255
-            if core_functional[row, col]:
-                output[y0:y1, x0:x1] = target_value
-                continue
-            cx = (x0 + x1) // 2
-            cy = (y0 + y1) // 2
-            rx0 = max(x0, cx - center_side // 2)
-            ry0 = max(y0, cy - center_side // 2)
-            rx1 = min(x1, rx0 + center_side)
-            ry1 = min(y1, ry0 + center_side)
-            output[ry0:ry1, rx0:rx1] = _tone_to_luminance(
-                output[ry0:ry1, rx0:rx1],
-                dark_target if target_dark else light_target,
-            )
-    return Image.fromarray(output, mode="RGB")
-
-
-def _qart_center_error_rate(
+def _control_target_center_error_rate(
     target: Image.Image,
     blueprint: QRBlueprint,
     *,
@@ -380,17 +301,18 @@ class UpstreamDiffQRCoderBackend:
         candidate: Image.Image,
         blueprint: QRBlueprint,
     ) -> Image.Image:
-        if not self.settings.diffqrcoder_qart_enabled:
-            return self.control_image(blueprint)
-        return build_paper_qart_target(
-            candidate,
-            blueprint,
-            padding_px=self.settings.diffqrcoder_qr_padding_px,
-            module_size=self.settings.diffqrcoder_qr_module_size,
-            center_fraction=self.settings.diffqrcoder_qart_center_fraction,
-            dark_target=self.settings.diffqrcoder_qart_dark_target,
-            light_target=self.settings.diffqrcoder_qart_light_target,
-        )
+        """Return a payload-valid Stage-2 condition.
+
+        The paper uses a Reed-Solomon-aware QArt transformation here, but its
+        constructor is absent from the public DiffQRCoder repository.  A former
+        implementation overlaid module centres on the Stage-1 artwork.  That
+        image was neither QArt nor a guaranteed-valid QR code and upstream then
+        binarized it as the SRL target.  Until an exact-payload QArt constructor
+        is available, the original binary QR is the only scientifically valid
+        and payload-safe control target.
+        """
+        del candidate
+        return self.control_image(blueprint)
 
     def _record_divergence_guard(
         self,
@@ -531,17 +453,14 @@ class UpstreamDiffQRCoderBackend:
                 "diffqrcoder_stage2_steps": float(effective_steps),
                 "diffqrcoder_srg": float(self.settings.srpg_qr_weight),
                 "diffqrcoder_pg": float(self.settings.srpg_perceptual_weight),
-                "diffqrcoder_qart_enabled": float(
-                    self.settings.diffqrcoder_qart_enabled
-                ),
-                "diffqrcoder_qart_center_fraction": float(
-                    self.settings.diffqrcoder_qart_center_fraction
-                ),
-                "diffqrcoder_qart_center_error_rate": _qart_center_error_rate(
+                "diffqrcoder_stage2_control_target_exact": 1.0,
+                "diffqrcoder_stage2_control_target_center_error_rate": (
+                    _control_target_center_error_rate(
                     stage2_target,
                     blueprint,
                     padding_px=self.settings.diffqrcoder_qr_padding_px,
                     module_size=self.settings.diffqrcoder_qr_module_size,
+                    )
                 ),
                 "diffqrcoder_srmpgd_iterations": 0.0,
                 "diffqrcoder_srmpgd_gamma": 0.0,

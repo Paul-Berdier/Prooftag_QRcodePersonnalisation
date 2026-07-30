@@ -36,10 +36,6 @@ class Settings(BaseSettings):
         "paper_stage1_noise", "public_random"
     ] = "paper_stage1_noise"
     diffqrcoder_stage2_strength: float = Field(default=1.0, gt=0.0, le=1.0)
-    diffqrcoder_qart_enabled: bool = True
-    diffqrcoder_qart_center_fraction: float = Field(default=0.40, gt=0.0, le=1.0)
-    diffqrcoder_qart_dark_target: float = Field(default=0.25, ge=0.0, lt=0.45)
-    diffqrcoder_qart_light_target: float = Field(default=0.75, gt=0.65, le=1.0)
     diffqrcoder_guard_max_changed_pixel_ratio: float = Field(
         default=0.995, gt=0.0, le=1.0
     )
@@ -172,8 +168,6 @@ class Settings(BaseSettings):
             raise ValueError("SRPG latent fusion start cannot exceed end")
         if self.diffqrcoder_control_guidance_start > self.diffqrcoder_control_guidance_end:
             raise ValueError("DiffQRCoder control guidance start cannot exceed end")
-        if self.diffqrcoder_qart_dark_target >= self.diffqrcoder_qart_light_target:
-            raise ValueError("DiffQRCoder QArt dark target must be below light target")
         return self
 
     @property

@@ -19,10 +19,9 @@ Le socle est figé au commit DiffQRCoder
 flowchart LR
     Q["QR v3 / M / masque 4"] --> S1["Stage 1\nCetus-Mix + QR Monster v2"]
     S1 --> N["VAE + bruit\nEq. 9"]
-    S1 --> QART["Cible QArt reconstruite"]
-    Q --> QART
+    Q --> TARGET["Cible Stage 2\nQR binaire exact"]
     N --> S2["Stage 2\nDDIM + SRPG"]
-    QART --> S2
+    TARGET --> S2
     S2 --> M["SR-MPGD Eq. 13–14\noptionnel"]
     Q --> V["Validation automatique"]
     S1 --> V
@@ -57,10 +56,9 @@ Le dépôt public ne reproduit pas seul tout l’algorithme décrit dans le papi
 - `_run_stage2` génère normalement un nouveau bruit aléatoire. Le wrapper encode
   réellement l’image du Stage 1 avec le VAE puis lui ajoute le bruit DDIM au
   timestep de départ, conformément à l’équation 9 ;
-- le constructeur de la cible `Qart(x̂, y)` n’est pas publié. Le wrapper
-  reconstruit une cible déterministe : l’image du Stage 1 reste intacte, les
-  centres des modules de données passent les seuils sombres/clairs de SRL, et
-  les motifs fonctionnels sont copiés exactement ;
+- le constructeur Reed–Solomon de la cible `Qart(x̂, y)` n’est pas publié. Le
+  wrapper utilise donc le QR binaire exact comme cible de repli : il est moins
+  proche du Stage 1, mais son payload et sa matrice sont garantis ;
 - le SR-MPGD public réutilise la loss pondérée du Stage 2. Le wrapper applique
   séparément l’équation 13, `LSR + 0,01 × LPIPS`, puis l’équation 14 avec
   `gamma=1000`.
@@ -72,10 +70,16 @@ commit amont n’est pas modifié sur disque.
 
 ## Limite honnête de la cible QArt
 
-La cible reconstruite respecte la géométrie, les seuils et le payload du QR
-initial, mais ce n’est pas l’implémentation Reed–Solomon QArt privée employée
-par les auteurs. L’interface la nomme donc explicitement « QArt reconstruite ».
-Elle peut être désactivée pour comparer le QR binaire.
+Le papier transforme le QR avec QArt afin de rapprocher son motif de l’image
+Stage 1. Le dépôt officiel consomme cette image, mais ne contient pas le
+constructeur. Une ancienne version Prooftag avait fabriqué un hybride coloré
+en remplaçant des centres de modules : ce n’était pas QArt et ce raster était
+ensuite binarisé par la loss SRL comme s’il s’agissait d’un QR valide.
+
+Cette imitation est supprimée. Le laboratoire passe désormais le QR binaire
+exact à ControlNet et à SRL. Un vrai QArt ne pourra revenir que dans un mode
+expérimental séparé, avec preuve de décodage du payload Prooftag avant toute
+diffusion.
 
 Pour comparer des paramètres, le Stage 2 reçoit une seed dérivée explicite
 (`seed + srpg_seed_offset`). Les recettes d’un même prompt et d’une même seed
@@ -111,7 +115,7 @@ charger plusieurs pipelines en VRAM.
 - Stage 1 : pas, CFG, poids ControlNet ;
 - Stage 2 : initialisation papier ou bruit public, quantité de bruit, pas,
   poids ControlNet, SRG `λ1`, PG `λ2`, ETA et seed offset ;
-- QArt reconstruite : activation, fraction centrale et cibles de luminance ;
+- cible Stage 2 : QR binaire exact, non modifiable dans le profil de production ;
 - artefacts : fréquence des aperçus intermédiaires ;
 - SR-MPGD : itérations, `gamma`, poids LPIPS et MER initial maximal ;
 - avancé : modèles, commit et géométrie QR.
@@ -167,8 +171,8 @@ Le script refuse un dépôt sale, construit une image taguée avec le commit Git
 vérifie le commit DiffQRCoder, importe l’image dans containerd K3s, applique la
 migration `0004_human_verdicts`, attend le rollout puis contrôle dans le pod les
 quatre profils, l’import DiffQRCoder et la version
-`20260729-diffqrcoder-paper-4` des assets Web, l’initialisation Stage 1 bruitée,
-la cible QArt et les constantes SR-MPGD.
+`20260730-binary-target-1` des assets Web, l’initialisation Stage 1 bruitée,
+la cible binaire exacte et les constantes SR-MPGD.
 
 Le taux publiable sera calculé sur les sorties artistiques réellement générées,
 jamais sur le QR témoin ni sur une réparation cachée.

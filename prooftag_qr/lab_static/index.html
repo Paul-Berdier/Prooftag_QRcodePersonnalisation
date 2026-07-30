@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Prooftag — DiffQRCoder Lab</title>
-  <link rel="stylesheet" href="/lab-assets/styles.css?v=20260729-diffqrcoder-paper-4">
+  <link rel="stylesheet" href="/lab-assets/styles.css?v=20260730-binary-target-1">
 </head>
 <body>
   <header class="topbar">
@@ -192,10 +192,7 @@ botanical | Delicate botanical engraving with white flowers, cyan leaves and dar
         <label>ControlNet Stage 2<input class="srpg-control" type="number" min="0" max="3" step="0.05"></label>
         <label>SRG λ1<input class="srg" type="number" min="0.1" max="5000" step="10"></label>
         <label>PG λ2<input class="pg" type="number" min="0" max="100" step="0.1"></label>
-        <label class="check-field"><input class="qart-enabled" type="checkbox"> Cible QArt reconstruite</label>
-        <label>Centre QArt<input class="qart-center" type="number" min="0.1" max="1" step="0.05"></label>
-        <label>Cible sombre<input class="qart-dark" type="number" min="0" max="0.44" step="0.05"></label>
-        <label>Cible claire<input class="qart-light" type="number" min="0.66" max="1" step="0.05"></label>
+        <p class="muted">Cible Stage 2 : QR binaire exact. Le pseudo-QArt visuel a été retiré car il ne garantissait pas le payload.</p>
         <label>ETA<input class="eta" type="number" min="0" max="1" step="0.05"></label>
         <label>Seed Stage 2 +<input class="seed-offset" type="number" min="0"></label>
         <label>Aperçu tous les N pas<input class="preview" type="number" min="1" max="100"></label>
@@ -213,6 +210,6 @@ botanical | Delicate botanical engraving with white flowers, cyan leaves and dar
     </article>
   </template>
 
-  <script src="/lab-assets/app.js?v=20260729-diffqrcoder-paper-4" defer></script>
+  <script src="/lab-assets/app.js?v=20260730-binary-target-1" defer></script>
 </body>
 </html>

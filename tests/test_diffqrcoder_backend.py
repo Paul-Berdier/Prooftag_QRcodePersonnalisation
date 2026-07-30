@@ -1,16 +1,12 @@
 import numpy as np
-import pytest
 from PIL import Image
 
 from prooftag_qr.diffqrcoder_backend import (
+    UpstreamDiffQRCoderBackend,
+    _control_target_center_error_rate,
     _install_partial_schedule,
-    _qart_center_error_rate,
-    build_paper_qart_target,
 )
-from prooftag_qr.qr import (
-    functional_pattern_mask,
-    generate_diffqrcoder_qr,
-)
+from prooftag_qr.qr import generate_diffqrcoder_qr
 
 
 def _reference_artwork(size: int = 736) -> Image.Image:
@@ -22,7 +18,7 @@ def _reference_artwork(size: int = 736) -> Image.Image:
     return Image.fromarray(np.stack((red, green, blue), axis=2), mode="RGB")
 
 
-def test_reconstructed_qart_preserves_canvas_and_corrects_every_module_center():
+def test_stage2_target_is_the_exact_binary_qr_not_a_visual_proxy():
     blueprint = generate_diffqrcoder_qr(
         "https://pt.ag/t/1",
         "M",
@@ -31,81 +27,19 @@ def test_reconstructed_qart_preserves_canvas_and_corrects_every_module_center():
         module_size=20,
     )
     reference = _reference_artwork()
+    backend = object.__new__(UpstreamDiffQRCoderBackend)
 
-    target = build_paper_qart_target(
-        reference,
-        blueprint,
-        padding_px=78,
-        module_size=20,
-        center_fraction=0.40,
-        dark_target=0.25,
-        light_target=0.75,
-    )
+    target = backend._stage2_target(reference, blueprint)
 
-    assert target.size == reference.size == (736, 736)
-    assert _qart_center_error_rate(
+    assert target.size == blueprint.image.size
+    assert np.array_equal(np.asarray(target), np.asarray(blueprint.image.convert("RGB")))
+    assert not np.array_equal(np.asarray(target), np.asarray(reference))
+    assert _control_target_center_error_rate(
         target,
         blueprint,
         padding_px=78,
         module_size=20,
     ) == 0.0
-
-    # The reconstructed target must not create a white frame around the QR core.
-    assert np.array_equal(
-        np.asarray(target)[:78],
-        np.asarray(reference)[:78],
-    )
-
-
-def test_reconstructed_qart_copies_functional_modules_exactly():
-    blueprint = generate_diffqrcoder_qr(
-        "https://pt.ag/t/2",
-        "M",
-        version=3,
-        mask_pattern=4,
-        module_size=20,
-    )
-    target = build_paper_qart_target(
-        _reference_artwork(),
-        blueprint,
-        padding_px=78,
-        module_size=20,
-        center_fraction=0.40,
-        dark_target=0.25,
-        light_target=0.75,
-    )
-    pixels = np.asarray(target)
-    border = blueprint.border
-    matrix = blueprint.matrix[border:-border, border:-border]
-    functional = functional_pattern_mask(blueprint)[border:-border, border:-border]
-
-    for row, col in np.argwhere(functional):
-        y0 = 78 + int(row) * 20
-        x0 = 78 + int(col) * 20
-        expected = 0 if matrix[row, col] else 255
-        assert np.all(pixels[y0 : y0 + 20, x0 : x0 + 20] == expected)
-
-
-def test_reconstructed_qart_rejects_an_unaligned_stage1_canvas():
-    blueprint = generate_diffqrcoder_qr(
-        "https://pt.ag/t/3",
-        "M",
-        version=3,
-        mask_pattern=4,
-        module_size=20,
-    )
-
-    with pytest.raises(ValueError, match="QArt geometry mismatch"):
-        build_paper_qart_target(
-            Image.new("RGB", (512, 512), "white"),
-            blueprint,
-            padding_px=78,
-            module_size=20,
-            center_fraction=0.40,
-            dark_target=0.25,
-            light_target=0.75,
-        )
-
 
 def test_partial_stage2_schedule_avoids_custom_timesteps_and_keeps_stride():
     class Scheduler:

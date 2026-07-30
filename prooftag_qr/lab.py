@@ -535,10 +535,6 @@ TOOL_SETTING_KEYS = {
     "diffqrcoder_control_guidance_end",
     "diffqrcoder_stage2_initialization",
     "diffqrcoder_stage2_strength",
-    "diffqrcoder_qart_enabled",
-    "diffqrcoder_qart_center_fraction",
-    "diffqrcoder_qart_dark_target",
-    "diffqrcoder_qart_light_target",
     "diffqrcoder_guard_max_changed_pixel_ratio",
     "diffqrcoder_guard_max_mean_absolute_change",
     "diffqrcoder_guard_max_clipped_pixel_ratio",
@@ -567,10 +563,6 @@ def laboratory_profiles() -> list[dict[str, Any]]:
         "diffqrcoder_control_guidance_end": 1.0,
         "diffqrcoder_stage2_initialization": "paper_stage1_noise",
         "diffqrcoder_stage2_strength": 1.0,
-        "diffqrcoder_qart_enabled": True,
-        "diffqrcoder_qart_center_fraction": 0.40,
-        "diffqrcoder_qart_dark_target": 0.25,
-        "diffqrcoder_qart_light_target": 0.75,
         "diffqrcoder_guard_max_changed_pixel_ratio": 0.995,
         "diffqrcoder_guard_max_mean_absolute_change": 0.35,
         "diffqrcoder_guard_max_clipped_pixel_ratio": 0.15,
@@ -619,8 +611,9 @@ def laboratory_profiles() -> list[dict[str, Any]]:
                 "settings": stage2.copy(),
             },
             "description": (
-                "Stage 2 du papier : Stage 1 encodé puis bruité, cible QArt "
-                "reconstruite et Scanning Robust Perceptual Guidance."
+                "Stage 2 SRPG : Stage 1 encodé puis bruité et QR binaire exact "
+                "comme cible sûre. Le transformateur QArt du papier n'est pas "
+                "publié dans le dépôt officiel."
             ),
         },
         {
@@ -920,12 +913,7 @@ class LabService:
                             settings.diffqrcoder_stage2_initialization
                             == "paper_stage1_noise"
                         ),
-                        "diffqrcoder_qart_requested": float(
-                            settings.diffqrcoder_qart_enabled
-                        ),
-                        "diffqrcoder_qart_center_fraction_requested": float(
-                            settings.diffqrcoder_qart_center_fraction
-                        ),
+                        "diffqrcoder_stage2_control_target_exact_requested": 1.0,
                         "diffqrcoder_qr_version": float(
                             settings.diffqrcoder_qr_version
                         ),

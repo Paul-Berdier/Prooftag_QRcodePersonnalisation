@@ -14,7 +14,9 @@ DiffQRCoder et sur l’algorithme décrit dans son papier :
 - DiffQRCoder épinglé au commit `e24ea73ee2e13c7e6e87cb422e8b11784e70ae00` ;
 - Cetus-Mix Whalefall + QR Monster v2 pour le Stage 1 ;
 - le Stage 2 DDIM/SRPG initialisé depuis le latent VAE bruité du Stage 1 ;
-- une cible QArt reconstruite et explicitement distinguée du code QArt non publié ;
+- un QR binaire exact comme cible Stage 2, seule solution locale garantissant le payload ;
+- aucune imitation visuelle de QArt : le transformateur Reed–Solomon du papier
+  n’est pas publié dans le dépôt DiffQRCoder ;
 - un SR-MPGD séparé conforme aux équations 13–14, avec validation de chaque état ;
 - une géométrie entière QR v3/M/masque 4 conforme aux exemples publics ;
 - aucune réparation déterministe ou superposition du QR témoin dans les profils du Web Lab ;

@@ -95,10 +95,6 @@ function renderMethods() {
     $(".srpg-control", node).value = settings.srpg_controlnet_scale ?? 1.35;
     $(".srg", node).value = settings.srpg_qr_weight ?? 500;
     $(".pg", node).value = settings.srpg_perceptual_weight ?? 2;
-    $(".qart-enabled", node).checked = settings.diffqrcoder_qart_enabled ?? true;
-    $(".qart-center", node).value = settings.diffqrcoder_qart_center_fraction ?? 0.4;
-    $(".qart-dark", node).value = settings.diffqrcoder_qart_dark_target ?? 0.25;
-    $(".qart-light", node).value = settings.diffqrcoder_qart_light_target ?? 0.75;
     $(".eta", node).value = settings.srpg_eta ?? 0;
     $(".seed-offset", node).value = settings.srpg_seed_offset ?? 2000003;
     $(".preview", node).value = settings.srpg_preview_interval ?? 5;
@@ -135,10 +131,6 @@ function renderMethods() {
         srpg_controlnet_scale: Number($(".srpg-control", node).value),
         srpg_qr_weight: Number($(".srg", node).value),
         srpg_perceptual_weight: Number($(".pg", node).value),
-        diffqrcoder_qart_enabled: $(".qart-enabled", node).checked,
-        diffqrcoder_qart_center_fraction: Number($(".qart-center", node).value),
-        diffqrcoder_qart_dark_target: Number($(".qart-dark", node).value),
-        diffqrcoder_qart_light_target: Number($(".qart-light", node).value),
         diffqrcoder_guard_max_changed_pixel_ratio: 0.995,
         diffqrcoder_guard_max_mean_absolute_change: 0.35,
         diffqrcoder_guard_max_clipped_pixel_ratio: 0.15,
@@ -356,7 +348,8 @@ async function openTrial(index) {
     metric("CLIPScore", fmt(run.quality_metrics?.clip_score, 3)),
     metric("Init. papier", Number(quality.diffqrcoder_stage2_paper_initialization || 0) === 1 ? "Oui" : "Non"),
     metric("Pas Stage 2 effectifs", fmt(quality.diffqrcoder_stage2_effective_steps, 0)),
-    metric("QArt erreur centres", pct(quality.diffqrcoder_qart_center_error_rate)),
+    metric("Cible binaire exacte", Number(quality.diffqrcoder_stage2_control_target_exact || 0) === 1 ? "Oui" : "Non"),
+    metric("Erreur centres cible", pct(quality.diffqrcoder_stage2_control_target_center_error_rate)),
     metric("Changement Stage 1", pct(quality.diffqrcoder_stage2_changed_pixel_ratio)),
     metric("Divergence", Number(quality.diffqrcoder_guard_diverged || 0) === 1 ? "OUI — résultat à écarter" : "Non"),
     metric("SR-MPGD gamma", fmt(quality.diffqrcoder_srmpgd_gamma, 3)),

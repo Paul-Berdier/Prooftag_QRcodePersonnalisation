@@ -1227,3 +1227,18 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   comme dénominateur du calcul manuel amont. Un test de non-régression vérifie
   à la fois le suffixe et l’intervalle. Le Web Lab affiche désormais le message
   d’erreur des générations sans image au lieu d’une vignette cassée.
+- **Incident scientifique 10 — fausse cible QArt :** l’artefact
+  `stage2_control_target` a montré une image Stage 1 colorée sur laquelle étaient
+  posés les motifs fonctionnels et des petits centres de modules. Cette
+  construction n’est pas la transformation Reed–Solomon QArt décrite en
+  annexe C.1. Le dépôt public transmet son argument `qrcode` à ControlNet et le
+  rebinarise dans `ScanningRobustLoss`; notre hybride devenait donc une cible
+  SRL dont la matrice et le payload n’étaient pas garantis.
+- **Correction scientifique 10 :** le pseudo-QArt est supprimé du backend, de
+  la configuration Kubernetes et de l’interface. Stage 2 reçoit désormais le
+  QR binaire exact pour ControlNet et SRL. Ce repli ne reproduit pas la
+  proximité visuelle apportée par le vrai QArt du papier, mais il garantit que
+  la guidance optimise bien le payload Prooftag demandé. Un véritable QArt ne
+  pourra être réintroduit qu’après validation exacte du payload avant diffusion.
+  Les campagnes produites avec la cible hybride restent historiques et ne
+  doivent pas être comparées aux nouvelles campagnes.

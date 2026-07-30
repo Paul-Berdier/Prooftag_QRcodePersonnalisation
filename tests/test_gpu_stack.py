@@ -156,11 +156,12 @@ def test_gpu_dependencies_are_pinned_to_public_diffqrcoder():
         "PROOFTAG_QR_DIFFQRCODER_STAGE2_INITIALIZATION: paper_stage1_noise"
         in manifest
     )
-    assert 'PROOFTAG_QR_DIFFQRCODER_QART_ENABLED: "true"' in manifest
+    assert "PROOFTAG_QR_DIFFQRCODER_QART_ENABLED" not in manifest
 
     backend = Path("prooftag_qr/diffqrcoder_backend.py").read_text()
     assert "pipe.scheduler.add_noise(clean_latent, noise, first_timestep)" in backend
-    assert "build_paper_qart_target(" in backend
+    assert "return self.control_image(blueprint)" in backend
+    assert "build_paper_qart_target(" not in backend
     assert "run_srmpgd(" in backend
     assert "srmpgd_num_iteration=None" in backend
     assert "timesteps=paper_timesteps" not in backend
