@@ -48,7 +48,7 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     lab_page = client.get("/lab")
     assert lab_page.status_code == 200
     assert "PROOFTAG × DIFFQRCODER" in lab_page.text
-    assert "20260730-binary-target-1" in lab_page.text
+    assert "20260730-real-qart-1" in lab_page.text
     lab_javascript = client.get("/lab-assets/app.js")
     assert lab_javascript.status_code == 200
     assert "human_scan_result" in lab_javascript.text
@@ -59,6 +59,7 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
         "diffqrcoder_stage1",
         "diffqrcoder_srpg",
         "diffqrcoder_srmpgd",
+        "diffqrcoder_binary_srpg",
     }
     controlnet_profile = next(
         item for item in schema.json()["profiles"] if item["id"] == "diffqrcoder_stage1"
@@ -90,7 +91,10 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
         srpg_profile["tools"]["settings"]["diffqrcoder_stage2_initialization"]
         == "paper_stage1_noise"
     )
-    assert "diffqrcoder_qart_enabled" not in srpg_profile["tools"]["settings"]
+    assert (
+        srpg_profile["tools"]["settings"]["diffqrcoder_stage2_target_mode"]
+        == "qart_url_fragment"
+    )
     assert srmpgd_profile["output_variant"] == "srmpgd"
     assert srmpgd_profile["tools"]["srpg_enabled"] is True
     assert srmpgd_profile["tools"]["srmpgd_enabled"] is True

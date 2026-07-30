@@ -14,6 +14,25 @@ def test_image_change_metrics_compare_a_variant_with_its_raw_image():
 
     assert metrics["changed_pixel_ratio"] == 0.5
     assert metrics["mean_absolute_change"] == 10 / 255
+    assert metrics["clipped_pixel_ratio_increase"] == 0
+    assert metrics["rgb_clipped_channel_ratio_increase"] == 0
+    assert metrics["saturation_mean_increase"] == 0
+    assert metrics["high_saturation_ratio_increase"] == 0
+
+
+def test_image_change_metrics_measure_new_clipping_not_baseline_contrast():
+    raw_array = np.full((10, 10, 3), 100, dtype=np.uint8)
+    raw_array[:2] = 0
+    variant_array = raw_array.copy()
+    variant_array[2:5] = 255
+
+    metrics = image_change_metrics(
+        Image.fromarray(variant_array),
+        Image.fromarray(raw_array),
+    )
+
+    assert metrics["clipped_pixel_ratio_increase"] == 0.3
+    assert metrics["rgb_clipped_channel_ratio_increase"] == 0.3
 
 
 def test_guided_composite_changes_only_the_control_neighborhood():

@@ -35,6 +35,7 @@ def test_web_lab_exposes_only_the_pinned_diffqrcoder_chain():
         "diffqrcoder_stage1",
         "diffqrcoder_srpg",
         "diffqrcoder_srmpgd",
+        "diffqrcoder_binary_srpg",
     ]
     generated = [profile for profile in profiles if profile["backend"] == "controlnet"]
     assert all(
@@ -44,6 +45,58 @@ def test_web_lab_exposes_only_the_pinned_diffqrcoder_chain():
     assert {profile["model"]["controlnet_model_id"] for profile in generated} == {
         "monster-labs/control_v1p_sd15_qrcode_monster"
     }
+    srpg = next(profile for profile in profiles if profile["id"] == "diffqrcoder_srpg")
+    binary = next(
+        profile for profile in profiles if profile["id"] == "diffqrcoder_binary_srpg"
+    )
+    assert (
+        srpg["tools"]["settings"]["diffqrcoder_stage2_target_mode"]
+        == "qart_url_fragment"
+    )
+    assert (
+        binary["tools"]["settings"]["diffqrcoder_stage2_target_mode"]
+        == "binary_exact"
+    )
+
+
+def test_srmpgd_reuses_the_matching_srpg_stage2_cache_key(tmp_path):
+    settings = Settings(data_dir=tmp_path, device="cpu")
+    run_repository = RunRepository(tmp_path / "runs.sqlite3")
+    service = LabService(
+        base_settings=settings,
+        run_repository=run_repository,
+        lab_repository=LabRepository(run_repository.engine),
+        artifact_store=LocalArtifactStore(tmp_path / "artifacts"),
+        validator=object(),
+    )
+    profiles = laboratory_profiles()
+    srpg = LabMethod.model_validate(
+        next(item for item in profiles if item["id"] == "diffqrcoder_srpg")
+    )
+    srmpgd = LabMethod.model_validate(
+        next(item for item in profiles if item["id"] == "diffqrcoder_srmpgd")
+    )
+    try:
+        srpg_key = service._stage2_cache_key(
+            srpg,
+            "blue courtyard",
+            "easynegative",
+            51001,
+            "M",
+            "https://ptag.io/t/cache",
+        )
+        srmpgd_key = service._stage2_cache_key(
+            srmpgd,
+            "blue courtyard",
+            "easynegative",
+            51001,
+            "M",
+            "https://ptag.io/t/cache",
+        )
+    finally:
+        service.shutdown()
+
+    assert srpg_key == srmpgd_key
 
 
 def test_lab_limits_cartesian_campaign_size():

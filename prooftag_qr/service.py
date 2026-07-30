@@ -144,9 +144,15 @@ class GenerationService:
                         iteration: int,
                     ) -> dict[str, object]:
                         del iteration
+                        validation_kwargs = (
+                            backend.validation_kwargs("srmpgd")
+                            if hasattr(backend, "validation_kwargs")
+                            else {}
+                        )
                         refinement_records = self.validator.validate(
                             image,
                             request.payload,
+                            **validation_kwargs,
                         )
                         passed = sum(
                             item.exact_payload_match for item in refinement_records
@@ -194,7 +200,16 @@ class GenerationService:
                         if variant_name in GLOBAL_REPAIR_VARIANTS and not allow_global_repair:
                             continue
                         validation_started = time.perf_counter()
-                        records = self.validator.validate(candidate, request.payload)
+                        validation_kwargs = (
+                            backend.validation_kwargs(variant_name)
+                            if hasattr(backend, "validation_kwargs")
+                            else {}
+                        )
+                        records = self.validator.validate(
+                            candidate,
+                            request.payload,
+                            **validation_kwargs,
+                        )
                         variant_validation_ms = (time.perf_counter() - validation_started) * 1000
                         attempt_validation_ms += variant_validation_ms
                         validation_ms += variant_validation_ms
@@ -203,7 +218,15 @@ class GenerationService:
                         )
                         exact_count = sum(item.exact_payload_match for item in records)
                         pass_rate = exact_count / len(records) if records else 0.0
-                        variant_module_error_rate = module_error_rate(candidate, blueprint)
+                        metric_blueprint = (
+                            backend.module_blueprint(variant_name, blueprint)
+                            if hasattr(backend, "module_blueprint")
+                            else blueprint
+                        )
+                        variant_module_error_rate = module_error_rate(
+                            candidate,
+                            metric_blueprint,
+                        )
                         variant_quality = {
                             **image_quality_metrics(candidate),
                             **image_change_metrics(candidate, raw_candidate),
@@ -224,7 +247,13 @@ class GenerationService:
                             if item.scenario == "original"
                         )
                         accepted = (
-                            original_ok and pass_rate >= self.settings.validation_min_pass_rate
+                            original_ok
+                            and pass_rate >= self.settings.validation_min_pass_rate
+                            and (
+                                backend.candidate_guard_ok(variant_name)
+                                if hasattr(backend, "candidate_guard_ok")
+                                else True
+                            )
                         )
                         validation_failures = [
                             {

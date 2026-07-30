@@ -1,6 +1,7 @@
 import numpy as np
 from PIL import Image
 
+from prooftag_qr.config import Settings
 from prooftag_qr.diffqrcoder_backend import (
     UpstreamDiffQRCoderBackend,
     _control_target_center_error_rate,
@@ -27,15 +28,25 @@ def test_stage2_target_is_the_exact_binary_qr_not_a_visual_proxy():
         module_size=20,
     )
     reference = _reference_artwork()
-    backend = object.__new__(UpstreamDiffQRCoderBackend)
+    backend = UpstreamDiffQRCoderBackend(
+        Settings(diffqrcoder_stage2_target_mode="binary_exact")
+    )
 
-    target = backend._stage2_target(reference, blueprint)
+    target = backend._stage2_target(
+        reference,
+        blueprint,
+        "https://pt.ag/t/1",
+    )
 
-    assert target.size == blueprint.image.size
-    assert np.array_equal(np.asarray(target), np.asarray(blueprint.image.convert("RGB")))
-    assert not np.array_equal(np.asarray(target), np.asarray(reference))
+    assert target.image.size == blueprint.image.size
+    assert target.match_mode == "exact"
+    assert np.array_equal(
+        np.asarray(target.image),
+        np.asarray(blueprint.image.convert("RGB")),
+    )
+    assert not np.array_equal(np.asarray(target.image), np.asarray(reference))
     assert _control_target_center_error_rate(
-        target,
+        target.image,
         blueprint,
         padding_px=78,
         module_size=20,

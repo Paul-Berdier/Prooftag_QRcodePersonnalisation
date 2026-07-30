@@ -5,19 +5,29 @@ import threading
 import time
 from collections.abc import Iterable
 from contextlib import contextmanager
+from dataclasses import dataclass
 from types import MethodType
 
 import numpy as np
 from PIL import Image
 
 from . import metrics
+from .blueprints import canonical_url_match
 from .config import Settings
+from .qart import build_qart_target
 from .qr import QRBlueprint
 from .quality import image_change_metrics, image_quality_metrics
 from .schemas import GenerationRequest
 from .srmpgd import SRMPGDConfig, run_srmpgd
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class _Stage2Control:
+    image: Image.Image
+    blueprint: QRBlueprint
+    match_mode: str
 
 
 def _tensor_to_pil(tensor) -> Image.Image:
@@ -139,6 +149,30 @@ class UpstreamDiffQRCoderBackend:
         self._pipeline = None
         self._debug_artifacts: dict[str, Image.Image] = {}
         self._diagnostics: dict[str, float] = {}
+        self._stage2_control: _Stage2Control | None = None
+        self._stage2_override: dict | None = None
+        self._last_stage2_state: dict | None = None
+
+    def import_stage2_state(self, state: dict) -> None:
+        self._stage2_override = {
+            "latent": state["latent"].clone(),
+            "image": state["image"].copy(),
+            "reference": state["reference"].copy(),
+            "control": state["control"],
+            "diagnostics": dict(state["diagnostics"]),
+        }
+
+    def export_stage2_state(self) -> dict | None:
+        if self._last_stage2_state is None:
+            return None
+        state = self._last_stage2_state
+        return {
+            "latent": state["latent"].clone(),
+            "image": state["image"].copy(),
+            "reference": state["reference"].copy(),
+            "control": state["control"],
+            "diagnostics": dict(state["diagnostics"]),
+        }
 
     def _load(self):
         if self._pipeline is not None:
@@ -175,6 +209,11 @@ class UpstreamDiffQRCoderBackend:
                     use_safetensors=True,
                 )
                 pipe.scheduler = DDIMScheduler.from_config(pipe.scheduler.config)
+                pipe._callback_tensor_inputs = list(
+                    dict.fromkeys(
+                        [*pipe._callback_tensor_inputs, "original_image"]
+                    )
+                )
                 pipe.set_progress_bar_config(disable=True)
                 pipe.to(self.settings.device)
                 pipe.unet.requires_grad_(False).eval()
@@ -300,19 +339,67 @@ class UpstreamDiffQRCoderBackend:
         self,
         candidate: Image.Image,
         blueprint: QRBlueprint,
-    ) -> Image.Image:
-        """Return a payload-valid Stage-2 condition.
+        payload: str,
+    ) -> _Stage2Control:
+        """Build either the exact control or the real Reed-Solomon QArt control."""
+        if self.settings.diffqrcoder_stage2_target_mode == "binary_exact":
+            return _Stage2Control(
+                image=self.control_image(blueprint),
+                blueprint=blueprint,
+                match_mode="exact",
+            )
+        target = build_qart_target(
+            candidate,
+            payload,
+            version=self.settings.diffqrcoder_qr_version,
+            module_size=self.settings.diffqrcoder_qr_module_size,
+            padding_px=self.settings.diffqrcoder_qr_padding_px,
+            thresholds=self.settings.diffqrcoder_qart_thresholds,
+            executable=self.settings.diffqrcoder_qart_executable,
+        )
+        self._diagnostics.update(
+            {
+                "diffqrcoder_qart_threshold": float(target.threshold),
+                "diffqrcoder_qart_target_scan_pass_rate": float(
+                    target.scan_pass_rate
+                ),
+                "diffqrcoder_qart_target_original_pass_rate": float(
+                    target.original_passed / target.original_total
+                    if target.original_total
+                    else 0.0
+                ),
+                "diffqrcoder_qart_reference_cost": float(target.reference_cost),
+            }
+        )
+        return _Stage2Control(
+            image=target.image,
+            blueprint=target.blueprint,
+            match_mode="canonical_url_without_fragment",
+        )
 
-        The paper uses a Reed-Solomon-aware QArt transformation here, but its
-        constructor is absent from the public DiffQRCoder repository.  A former
-        implementation overlaid module centres on the Stage-1 artwork.  That
-        image was neither QArt nor a guaranteed-valid QR code and upstream then
-        binarized it as the SRL target.  Until an exact-payload QArt constructor
-        is available, the original binary QR is the only scientifically valid
-        and payload-safe control target.
-        """
-        del candidate
-        return self.control_image(blueprint)
+    def validation_kwargs(self, variant_name: str) -> dict:
+        if (
+            variant_name in {"srpg", "srmpgd"}
+            and self._stage2_control is not None
+            and self._stage2_control.match_mode == "canonical_url_without_fragment"
+        ):
+            return {
+                "matcher": canonical_url_match,
+                "match_mode": "canonical_url_without_fragment",
+            }
+        return {}
+
+    def module_blueprint(
+        self,
+        variant_name: str,
+        fallback: QRBlueprint,
+    ) -> QRBlueprint:
+        if (
+            variant_name in {"srpg", "srmpgd"}
+            and self._stage2_control is not None
+        ):
+            return self._stage2_control.blueprint
+        return fallback
 
     def _record_divergence_guard(
         self,
@@ -331,8 +418,20 @@ class UpstreamDiffQRCoderBackend:
                 > self.settings.diffqrcoder_guard_max_mean_absolute_change
             ),
             "clipped_pixels": (
-                quality["clipped_pixel_ratio"]
-                > self.settings.diffqrcoder_guard_max_clipped_pixel_ratio
+                change["clipped_pixel_ratio_increase"]
+                > self.settings.diffqrcoder_guard_max_clipped_pixel_ratio_increase
+            ),
+            "rgb_clipped_channels": (
+                change["rgb_clipped_channel_ratio_increase"]
+                > self.settings.diffqrcoder_guard_max_rgb_clipped_channel_ratio_increase
+            ),
+            "saturation_mean_increase": (
+                change["saturation_mean_increase"]
+                > self.settings.diffqrcoder_guard_max_saturation_mean_increase
+            ),
+            "high_saturation_increase": (
+                change["high_saturation_ratio_increase"]
+                > self.settings.diffqrcoder_guard_max_high_saturation_ratio_increase
             ),
         }
         self._diagnostics.update(
@@ -347,6 +446,27 @@ class UpstreamDiffQRCoderBackend:
                 "diffqrcoder_stage2_clipped_pixel_ratio": float(
                     quality["clipped_pixel_ratio"]
                 ),
+                "diffqrcoder_stage2_rgb_clipped_channel_ratio": float(
+                    quality["rgb_clipped_channel_ratio"]
+                ),
+                "diffqrcoder_stage2_clipped_pixel_ratio_increase": float(
+                    change["clipped_pixel_ratio_increase"]
+                ),
+                "diffqrcoder_stage2_rgb_clipped_channel_ratio_increase": float(
+                    change["rgb_clipped_channel_ratio_increase"]
+                ),
+                "diffqrcoder_stage2_saturation_mean": float(
+                    quality["saturation_mean"]
+                ),
+                "diffqrcoder_stage2_saturation_p95": float(
+                    quality["saturation_p95"]
+                ),
+                "diffqrcoder_stage2_saturation_mean_increase": float(
+                    change["saturation_mean_increase"]
+                ),
+                "diffqrcoder_stage2_high_saturation_ratio_increase": float(
+                    change["high_saturation_ratio_increase"]
+                ),
                 "diffqrcoder_guard_changed_pixels": float(
                     reasons["changed_pixels"]
                 ),
@@ -356,8 +476,109 @@ class UpstreamDiffQRCoderBackend:
                 "diffqrcoder_guard_clipped_pixels": float(
                     reasons["clipped_pixels"]
                 ),
+                "diffqrcoder_guard_rgb_clipped_channels": float(
+                    reasons["rgb_clipped_channels"]
+                ),
+                "diffqrcoder_guard_saturation": float(
+                    reasons["saturation_mean_increase"]
+                    or reasons["high_saturation_increase"]
+                ),
             }
         )
+
+    def candidate_guard_ok(self, variant_name: str) -> bool:
+        if variant_name not in {"srpg", "srmpgd"}:
+            return True
+        return not bool(self._diagnostics.get("diffqrcoder_guard_diverged", 0.0))
+
+    def _apply_srmpgd(
+        self,
+        pipe,
+        latent,
+        image: Image.Image,
+        blueprint: QRBlueprint,
+        *,
+        validation_callback=None,
+    ) -> Image.Image:
+        import torch
+
+        if not self.settings.srmpgd_enabled:
+            return image
+        if not hasattr(pipe, "srpg"):
+            from diffqrcoder.srpg import ScanningRobustPerceptualGuidance
+
+            pipe.srpg = ScanningRobustPerceptualGuidance(
+                module_size=self.settings.diffqrcoder_qr_module_size,
+                scanning_robust_guidance_scale=self.settings.srpg_qr_weight,
+                perceptual_guidance_scale=self.settings.srpg_perceptual_weight,
+            ).to(self.settings.device).to(pipe.unet.dtype)
+
+        def preview_srmpgd(preview_image, step):
+            if self.settings.srpg_save_step_previews:
+                self._debug_artifacts[
+                    f"srmpgd_iteration_{step.iteration:03d}"
+                ] = preview_image.copy()
+
+        def paper_scanning_loss(decoded, target):
+            with torch.autocast("cuda", dtype=pipe.unet.dtype):
+                return pipe.srpg.scanning_robust_loss_fn(decoded, target)
+
+        srmpgd = run_srmpgd(
+            pipe,
+            latent,
+            blueprint,
+            SRMPGDConfig(
+                max_iterations=self.settings.srmpgd_max_iterations,
+                step_size=self.settings.srmpgd_step_size,
+                lpips_weight=self.settings.srmpgd_lpips_weight,
+                lpips_net=self.settings.srmpgd_lpips_net,
+                crop_padding_px=self.settings.srmpgd_crop_padding_px,
+                dark_threshold=self.settings.srmpgd_dark_threshold,
+                light_threshold=self.settings.srmpgd_light_threshold,
+                center_fraction=self.settings.srmpgd_center_fraction,
+                max_initial_module_error_rate=(
+                    self.settings.srmpgd_max_initial_module_error_rate
+                ),
+                quiet_zone_mode="none",
+                functional_pattern_tone_factor=0.0,
+            ),
+            scanning_loss=paper_scanning_loss,
+            validation_callback=validation_callback,
+            preview_callback=preview_srmpgd,
+        )
+        image = srmpgd.image
+        self._diagnostics.update(
+            {
+                "diffqrcoder_srmpgd_iterations": float(len(srmpgd.steps) - 1),
+                "diffqrcoder_srmpgd_gamma": float(
+                    self.settings.srmpgd_step_size
+                ),
+                "diffqrcoder_srmpgd_lpips_weight": float(
+                    self.settings.srmpgd_lpips_weight
+                ),
+                "diffqrcoder_srmpgd_selected_iteration": float(
+                    srmpgd.selected_iteration
+                ),
+                "diffqrcoder_srmpgd_initial_mer": float(
+                    srmpgd.initial_module_error_rate
+                ),
+                "diffqrcoder_srmpgd_final_mer": float(
+                    srmpgd.final_module_error_rate
+                ),
+                "diffqrcoder_srmpgd_strict_selected": float(
+                    srmpgd.steps[srmpgd.selected_iteration].strict_all
+                ),
+                "diffqrcoder_srmpgd_stopped_initial_mer": float(
+                    srmpgd.stop_reason
+                    == "initial_module_error_rate_above_limit"
+                ),
+                "diffqrcoder_srmpgd_stopped_non_finite": float(
+                    srmpgd.stop_reason.startswith("non_finite_")
+                ),
+            }
+        )
+        self._debug_artifacts["srmpgd_selected"] = image.copy()
+        return image
 
     def _run_stage2(
         self,
@@ -372,6 +593,36 @@ class UpstreamDiffQRCoderBackend:
 
         pipe = self._load()
         self._debug_artifacts.clear()
+        if self._stage2_override is not None:
+            cached = self._stage2_override
+            self._stage2_override = None
+            stage2_control = cached["control"]
+            self._stage2_control = stage2_control
+            latent = cached["latent"].to(
+                device=self.settings.device,
+                dtype=pipe.unet.dtype,
+            )
+            image = cached["image"].copy()
+            self._diagnostics = dict(cached["diagnostics"])
+            self._diagnostics["diffqrcoder_stage2_reused"] = 1.0
+            self._debug_artifacts["stage2_reference"] = cached[
+                "reference"
+            ].copy()
+            self._debug_artifacts["stage2_control_target"] = (
+                stage2_control.image.copy()
+            )
+            self._debug_artifacts["stage2_before_srmpgd"] = image.copy()
+            image = self._apply_srmpgd(
+                pipe,
+                latent,
+                image,
+                stage2_control.blueprint,
+                validation_callback=validation_callback,
+            )
+            self._record_divergence_guard(image, candidate)
+            del latent
+            torch.cuda.empty_cache()
+            return image
         stage2_seed = (seed + self.settings.srpg_seed_offset) % (2**32)
         generator = torch.Generator(device=self.settings.device).manual_seed(stage2_seed)
         reference = _pil_to_tensor(
@@ -379,7 +630,10 @@ class UpstreamDiffQRCoderBackend:
             device=self.settings.device,
             dtype=pipe.unet.dtype,
         )
-        stage2_target = self._stage2_target(candidate, blueprint)
+        stage2_control = self._stage2_target(candidate, blueprint, request.payload)
+        self._stage2_control = stage2_control
+        stage2_target = stage2_control.image
+        stage2_blueprint = stage2_control.blueprint
         self._debug_artifacts["stage2_reference"] = candidate.copy()
         self._debug_artifacts["stage2_control_target"] = stage2_target.copy()
         initial_latent = None
@@ -411,8 +665,14 @@ class UpstreamDiffQRCoderBackend:
             if self.settings.srpg_save_step_previews and (
                 index % preview_interval == 0 or index + 1 == effective_steps
             ):
-                self._debug_artifacts[f"stage2_step_{index + 1:03d}"] = (
-                    self._decode_latent(current_pipe, values["latents"])
+                self._debug_artifacts[
+                    f"stage2_x0_estimate_step_{index + 1:03d}"
+                ] = (
+                    _tensor_to_pil(
+                        current_pipe.image_processor.denormalize(
+                            values["original_image"].detach()
+                        )
+                    )
                 )
             return values
 
@@ -440,7 +700,10 @@ class UpstreamDiffQRCoderBackend:
                 perceptual_guidance_scale=self.settings.srpg_perceptual_weight,
                 srmpgd_num_iteration=None,
                 callback_on_step_end=callback,
-                callback_on_step_end_tensor_inputs=["latents"],
+                callback_on_step_end_tensor_inputs=[
+                    "latents",
+                    "original_image",
+                ],
                 output_type="latent",
             )
         latent = output.images.detach()
@@ -453,11 +716,17 @@ class UpstreamDiffQRCoderBackend:
                 "diffqrcoder_stage2_steps": float(effective_steps),
                 "diffqrcoder_srg": float(self.settings.srpg_qr_weight),
                 "diffqrcoder_pg": float(self.settings.srpg_perceptual_weight),
-                "diffqrcoder_stage2_control_target_exact": 1.0,
+                "diffqrcoder_stage2_control_target_exact": float(
+                    stage2_control.match_mode == "exact"
+                ),
+                "diffqrcoder_stage2_control_target_qart": float(
+                    stage2_control.match_mode
+                    == "canonical_url_without_fragment"
+                ),
                 "diffqrcoder_stage2_control_target_center_error_rate": (
                     _control_target_center_error_rate(
                     stage2_target,
-                    blueprint,
+                    stage2_blueprint,
                     padding_px=self.settings.diffqrcoder_qr_padding_px,
                     module_size=self.settings.diffqrcoder_qr_module_size,
                     )
@@ -468,75 +737,21 @@ class UpstreamDiffQRCoderBackend:
                 **initialization_diagnostics,
             }
         )
-        if self.settings.srmpgd_enabled:
-            def preview_srmpgd(preview_image, step):
-                if self.settings.srpg_save_step_previews:
-                    self._debug_artifacts[
-                        f"srmpgd_iteration_{step.iteration:03d}"
-                    ] = preview_image.copy()
-
-            def paper_scanning_loss(decoded, target):
-                with torch.autocast("cuda", dtype=pipe.unet.dtype):
-                    return pipe.srpg.scanning_robust_loss_fn(decoded, target)
-
-            srmpgd = run_srmpgd(
-                pipe,
-                latent,
-                blueprint,
-                SRMPGDConfig(
-                    max_iterations=self.settings.srmpgd_max_iterations,
-                    step_size=self.settings.srmpgd_step_size,
-                    lpips_weight=self.settings.srmpgd_lpips_weight,
-                    lpips_net=self.settings.srmpgd_lpips_net,
-                    crop_padding_px=self.settings.srmpgd_crop_padding_px,
-                    dark_threshold=self.settings.srmpgd_dark_threshold,
-                    light_threshold=self.settings.srmpgd_light_threshold,
-                    center_fraction=self.settings.srmpgd_center_fraction,
-                    max_initial_module_error_rate=(
-                        self.settings.srmpgd_max_initial_module_error_rate
-                    ),
-                    quiet_zone_mode="none",
-                    functional_pattern_tone_factor=0.0,
-                ),
-                scanning_loss=paper_scanning_loss,
-                validation_callback=validation_callback,
-                preview_callback=preview_srmpgd,
-            )
-            image = srmpgd.image
-            self._diagnostics.update(
-                {
-                    "diffqrcoder_srmpgd_iterations": float(
-                        len(srmpgd.steps) - 1
-                    ),
-                    "diffqrcoder_srmpgd_gamma": float(
-                        self.settings.srmpgd_step_size
-                    ),
-                    "diffqrcoder_srmpgd_lpips_weight": float(
-                        self.settings.srmpgd_lpips_weight
-                    ),
-                    "diffqrcoder_srmpgd_selected_iteration": float(
-                        srmpgd.selected_iteration
-                    ),
-                    "diffqrcoder_srmpgd_initial_mer": float(
-                        srmpgd.initial_module_error_rate
-                    ),
-                    "diffqrcoder_srmpgd_final_mer": float(
-                        srmpgd.final_module_error_rate
-                    ),
-                    "diffqrcoder_srmpgd_strict_selected": float(
-                        srmpgd.steps[srmpgd.selected_iteration].strict_all
-                    ),
-                    "diffqrcoder_srmpgd_stopped_initial_mer": float(
-                        srmpgd.stop_reason
-                        == "initial_module_error_rate_above_limit"
-                    ),
-                    "diffqrcoder_srmpgd_stopped_non_finite": float(
-                        srmpgd.stop_reason.startswith("non_finite_")
-                    ),
-                }
-            )
-            self._debug_artifacts["srmpgd_selected"] = image.copy()
-            del srmpgd
+        self._diagnostics["diffqrcoder_stage2_reused"] = 0.0
+        self._last_stage2_state = {
+            "latent": latent.detach().cpu().clone(),
+            "image": image.copy(),
+            "reference": candidate.copy(),
+            "control": stage2_control,
+            "diagnostics": dict(self._diagnostics),
+        }
+        image = self._apply_srmpgd(
+            pipe,
+            latent,
+            image,
+            stage2_blueprint,
+            validation_callback=validation_callback,
+        )
         self._record_divergence_guard(image, candidate)
         del output, latent, reference, initial_latent
         torch.cuda.empty_cache()

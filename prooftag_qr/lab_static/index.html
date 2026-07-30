@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Prooftag — DiffQRCoder Lab</title>
-  <link rel="stylesheet" href="/lab-assets/styles.css?v=20260730-binary-target-1">
+  <link rel="stylesheet" href="/lab-assets/styles.css?v=20260730-real-qart-1">
 </head>
 <body>
   <header class="topbar">
@@ -64,7 +64,7 @@ botanical | Delicate botanical engraving with white flowers, cyan leaves and dar
           <div><p class="eyebrow">2 — MÉTHODES</p><h2>Sorties à comparer</h2></div>
           <button id="add-method" class="button secondary" type="button">Dupliquer une recette</button>
         </div>
-        <p class="notice">Chaque carte produit exactement la sortie indiquée. Un rejet reste visible et noté : le laboratoire ne remplace jamais l’image par le QR témoin.</p>
+        <p class="notice">Chaque carte produit exactement la sortie indiquée. Un rejet reste visible. La recette QArt conserve l’URL Prooftag avant <code>#</code>, mais le fragment ajouté signifie que le payload binaire n’est pas strictement identique.</p>
         <div id="methods" class="method-list"></div>
       </section>
 
@@ -187,12 +187,13 @@ botanical | Delicate botanical engraving with white flowers, cyan leaves and dar
       </div>
       <div class="stage2-params">
         <label>Initialisation<select class="stage2-init"><option value="paper_stage1_noise">Papier — Stage 1 bruité</option><option value="public_random">Dépôt public — bruit aléatoire</option></select></label>
+        <label>Cible Stage 2<select class="stage2-target"><option value="qart_url_fragment">QArt réel — URL canonique</option><option value="binary_exact">QR binaire — payload exact</option></select></label>
         <label>Force de bruit Stage 2<input class="stage2-strength" type="number" min="0.05" max="1" step="0.05"></label>
         <label>Stage 2 — pas<input class="srpg-steps" type="number" min="1" max="100"></label>
         <label>ControlNet Stage 2<input class="srpg-control" type="number" min="0" max="3" step="0.05"></label>
         <label>SRG λ1<input class="srg" type="number" min="0.1" max="5000" step="10"></label>
         <label>PG λ2<input class="pg" type="number" min="0" max="100" step="0.1"></label>
-        <p class="muted">Cible Stage 2 : QR binaire exact. Le pseudo-QArt visuel a été retiré car il ne garantissait pas le payload.</p>
+        <p class="muted">QArt rapproche la cible du Stage 1 et réduit les reconstructions qui partent en saturation. Le mode binaire reste disponible comme témoin exact.</p>
         <label>ETA<input class="eta" type="number" min="0" max="1" step="0.05"></label>
         <label>Seed Stage 2 +<input class="seed-offset" type="number" min="0"></label>
         <label>Aperçu tous les N pas<input class="preview" type="number" min="1" max="100"></label>
@@ -210,6 +211,6 @@ botanical | Delicate botanical engraving with white flowers, cyan leaves and dar
     </article>
   </template>
 
-  <script src="/lab-assets/app.js?v=20260730-binary-target-1" defer></script>
+  <script src="/lab-assets/app.js?v=20260730-real-qart-1" defer></script>
 </body>
 </html>

@@ -160,8 +160,10 @@ def test_gpu_dependencies_are_pinned_to_public_diffqrcoder():
 
     backend = Path("prooftag_qr/diffqrcoder_backend.py").read_text()
     assert "pipe.scheduler.add_noise(clean_latent, noise, first_timestep)" in backend
-    assert "return self.control_image(blueprint)" in backend
-    assert "build_paper_qart_target(" not in backend
+    assert "build_qart_target(" in backend
+    assert "canonical_url_without_fragment" in backend
+    assert "ARG QART_COMMIT=6e0e00804a1994db7098432c19fadfc552071e30" in dockerfile
+    assert "COPY --from=qart-builder" in dockerfile
     assert "run_srmpgd(" in backend
     assert "srmpgd_num_iteration=None" in backend
     assert "timesteps=paper_timesteps" not in backend

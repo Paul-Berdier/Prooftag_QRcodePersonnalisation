@@ -90,6 +90,7 @@ function renderMethods() {
     $(".cfg", node).value = method.generation.guidance_scale ?? 7.5;
     $(".control", node).value = method.generation.controlnet_scale ?? 1.35;
     $(".stage2-init", node).value = settings.diffqrcoder_stage2_initialization ?? "paper_stage1_noise";
+    $(".stage2-target", node).value = settings.diffqrcoder_stage2_target_mode ?? "binary_exact";
     $(".stage2-strength", node).value = settings.diffqrcoder_stage2_strength ?? 1;
     $(".srpg-steps", node).value = settings.srpg_steps ?? 40;
     $(".srpg-control", node).value = settings.srpg_controlnet_scale ?? 1.35;
@@ -126,6 +127,8 @@ function renderMethods() {
       item.tools.latent_refinement_enabled = false;
       item.tools.settings = item.output_variant === "raw" ? {} : {
         diffqrcoder_stage2_initialization: $(".stage2-init", node).value,
+        diffqrcoder_stage2_target_mode: $(".stage2-target", node).value,
+        diffqrcoder_qart_thresholds: [96, 112, 128, 144, 160],
         diffqrcoder_stage2_strength: Number($(".stage2-strength", node).value),
         srpg_steps: Number($(".srpg-steps", node).value),
         srpg_controlnet_scale: Number($(".srpg-control", node).value),
@@ -133,7 +136,10 @@ function renderMethods() {
         srpg_perceptual_weight: Number($(".pg", node).value),
         diffqrcoder_guard_max_changed_pixel_ratio: 0.995,
         diffqrcoder_guard_max_mean_absolute_change: 0.35,
-        diffqrcoder_guard_max_clipped_pixel_ratio: 0.15,
+        diffqrcoder_guard_max_clipped_pixel_ratio_increase: 0.05,
+        diffqrcoder_guard_max_rgb_clipped_channel_ratio_increase: 0.02,
+        diffqrcoder_guard_max_saturation_mean_increase: 0.08,
+        diffqrcoder_guard_max_high_saturation_ratio_increase: 0.05,
         srpg_eta: Number($(".eta", node).value),
         srpg_seed_offset: Number($(".seed-offset", node).value),
         srpg_save_step_previews: true,
@@ -283,6 +289,7 @@ function renderTrials() {
     const rating = trial.rating;
     const original = autoOriginal(trial);
     const originalPass = original.filter(v => v.exact_payload_match).length;
+    const qartContract = Number(run.quality_metrics?.diffqrcoder_stage2_control_target_qart || 0) === 1;
     const diverged = Number(run.quality_metrics?.diffqrcoder_guard_diverged || 0) === 1;
     return `<button class="trial" data-index="${index}">
       <div class="image">${run.image_url
@@ -293,7 +300,7 @@ function renderTrials() {
         <p class="${run.error ? "run-error" : ""}">${run.error || `seed ${trial.seed} · ${run.selected_variant}`}</p>
         <div class="trial-stats">
           <span>SSR<b>${pct(run.scan_pass_rate)}</b></span>
-          <span>Original<b>${originalPass}/${original.length}</b></span>
+          <span>${qartContract ? "URL canon." : "Original"}<b>${originalPass}/${original.length}</b></span>
           <span>MER<b>${pct(run.module_error_rate)}</b></span>
           <span>CLIP-AES<b>${fmt(run.quality_metrics?.clip_aesthetic, 2)}</b></span>
         </div>
@@ -336,21 +343,30 @@ async function openTrial(index) {
   const trial = state.visibleTrials[index];
   const run = trial.generation;
   const quality = run.quality_metrics || {};
+  const qartContract = Number(quality.diffqrcoder_stage2_control_target_qart || 0) === 1;
   $("#dialog-kicker").textContent = `${trial.status} · seed ${trial.seed}`;
   $("#dialog-title").textContent = `${trial.prompt_id} / ${trial.method_id}`;
   const original = autoOriginal(trial);
   $("#dialog-metrics").innerHTML = [
     metric("Sortie", run.selected_variant),
     metric("SSR robuste", pct(run.scan_pass_rate)),
-    metric("Payload original", `${original.filter(v => v.exact_payload_match).length}/${original.length}`),
+    metric(qartContract ? "URL canonique" : "Payload original", `${original.filter(v => v.exact_payload_match).length}/${original.length}`),
     metric("MER", pct(run.module_error_rate)),
     metric("CLIP-aesthetic", fmt(run.quality_metrics?.clip_aesthetic, 3)),
     metric("CLIPScore", fmt(run.quality_metrics?.clip_score, 3)),
     metric("Init. papier", Number(quality.diffqrcoder_stage2_paper_initialization || 0) === 1 ? "Oui" : "Non"),
     metric("Pas Stage 2 effectifs", fmt(quality.diffqrcoder_stage2_effective_steps, 0)),
-    metric("Cible binaire exacte", Number(quality.diffqrcoder_stage2_control_target_exact || 0) === 1 ? "Oui" : "Non"),
+    metric("Stage 2 réutilisé", Number(quality.diffqrcoder_stage2_reused || 0) === 1 ? "Oui — aucun recalcul" : "Non"),
+    metric("Cible Stage 2", Number(quality.diffqrcoder_stage2_control_target_qart || 0) === 1 ? "QArt réel — URL canonique" : "QR binaire exact"),
+    metric("Contrat payload", Number(quality.diffqrcoder_stage2_control_target_qart || 0) === 1 ? "URL identique avant #" : "Byte-à-byte exact"),
     metric("Erreur centres cible", pct(quality.diffqrcoder_stage2_control_target_center_error_rate)),
+    metric("QArt cible SSR", pct(quality.diffqrcoder_qart_target_scan_pass_rate)),
+    metric("QArt seuil", fmt(quality.diffqrcoder_qart_threshold, 0)),
     metric("Changement Stage 1", pct(quality.diffqrcoder_stage2_changed_pixel_ratio)),
+    metric("Saturation moyenne Δ", pct(quality.diffqrcoder_stage2_saturation_mean_increase)),
+    metric("Pixels très saturés Δ", pct(quality.diffqrcoder_stage2_high_saturation_ratio_increase)),
+    metric("Canaux RGB écrêtés", pct(quality.diffqrcoder_stage2_rgb_clipped_channel_ratio)),
+    metric("Canaux RGB écrêtés Δ", pct(quality.diffqrcoder_stage2_rgb_clipped_channel_ratio_increase)),
     metric("Divergence", Number(quality.diffqrcoder_guard_diverged || 0) === 1 ? "OUI — résultat à écarter" : "Non"),
     metric("SR-MPGD gamma", fmt(quality.diffqrcoder_srmpgd_gamma, 3)),
     metric("SR-MPGD LPIPS lambda", fmt(quality.diffqrcoder_srmpgd_lpips_weight, 3)),
@@ -362,7 +378,7 @@ async function openTrial(index) {
   $("#artifacts").innerHTML = artifacts.map(item => `
     <figure><img src="${item.url}" loading="lazy"><figcaption>${item.name}</figcaption></figure>`).join("");
   $("#validations").innerHTML = `<table>
-    <thead><tr><th>Décodeur</th><th>Scénario</th><th>Payload exact</th><th>Latence</th></tr></thead>
+    <thead><tr><th>Décodeur</th><th>Scénario</th><th>${qartContract ? "URL canonique" : "Payload exact"}</th><th>Latence</th></tr></thead>
     <tbody>${(run.validations || []).map(item => `<tr>
       <td>${item.decoder}</td><td>${item.scenario}</td>
       <td class="${item.exact_payload_match ? "pass" : "fail"}">${item.exact_payload_match ? "Oui" : "Non"}</td>

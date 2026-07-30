@@ -535,9 +535,15 @@ TOOL_SETTING_KEYS = {
     "diffqrcoder_control_guidance_end",
     "diffqrcoder_stage2_initialization",
     "diffqrcoder_stage2_strength",
+    "diffqrcoder_stage2_target_mode",
+    "diffqrcoder_qart_executable",
+    "diffqrcoder_qart_thresholds",
     "diffqrcoder_guard_max_changed_pixel_ratio",
     "diffqrcoder_guard_max_mean_absolute_change",
-    "diffqrcoder_guard_max_clipped_pixel_ratio",
+    "diffqrcoder_guard_max_clipped_pixel_ratio_increase",
+    "diffqrcoder_guard_max_rgb_clipped_channel_ratio_increase",
+    "diffqrcoder_guard_max_saturation_mean_increase",
+    "diffqrcoder_guard_max_high_saturation_ratio_increase",
 }
 
 
@@ -563,9 +569,14 @@ def laboratory_profiles() -> list[dict[str, Any]]:
         "diffqrcoder_control_guidance_end": 1.0,
         "diffqrcoder_stage2_initialization": "paper_stage1_noise",
         "diffqrcoder_stage2_strength": 1.0,
+        "diffqrcoder_stage2_target_mode": "qart_url_fragment",
+        "diffqrcoder_qart_thresholds": [96, 112, 128, 144, 160],
         "diffqrcoder_guard_max_changed_pixel_ratio": 0.995,
         "diffqrcoder_guard_max_mean_absolute_change": 0.35,
-        "diffqrcoder_guard_max_clipped_pixel_ratio": 0.15,
+        "diffqrcoder_guard_max_clipped_pixel_ratio_increase": 0.05,
+        "diffqrcoder_guard_max_rgb_clipped_channel_ratio_increase": 0.02,
+        "diffqrcoder_guard_max_saturation_mean_increase": 0.08,
+        "diffqrcoder_guard_max_high_saturation_ratio_increase": 0.05,
     }
     return [
         {
@@ -611,9 +622,9 @@ def laboratory_profiles() -> list[dict[str, Any]]:
                 "settings": stage2.copy(),
             },
             "description": (
-                "Stage 2 SRPG : Stage 1 encodé puis bruité et QR binaire exact "
-                "comme cible sûre. Le transformateur QArt du papier n'est pas "
-                "publié dans le dépôt officiel."
+                "Chaîne du papier : Stage 1 bruité, vraie cible QArt "
+                "Reed-Solomon puis SRPG. QArt conserve l'URL avant le fragment, "
+                "mais le payload n'est pas identique byte à byte."
             ),
         },
         {
@@ -642,8 +653,29 @@ def laboratory_profiles() -> list[dict[str, Any]]:
                 },
             },
             "description": (
-                "Stage 2 puis Eq. 13-14 : SRL + 0,01 LPIPS, gamma 1000, "
+                "Stage 2 QArt puis Eq. 13-14 : SRL + 0,01 LPIPS, gamma 1000, "
                 "validation à chaque itération et conservation du meilleur état."
+            ),
+        },
+        {
+            "id": "diffqrcoder_binary_srpg",
+            "name": "DiffQRCoder — SRPG cible binaire (témoin)",
+            "backend": "controlnet",
+            "enabled": False,
+            "output_variant": "srpg",
+            "reuse_stage1": True,
+            "generation": generation.copy(),
+            "model": DIFFQRCODER_MODEL_SETTINGS.copy(),
+            "tools": {
+                "srpg_enabled": True,
+                "settings": {
+                    **stage2,
+                    "diffqrcoder_stage2_target_mode": "binary_exact",
+                },
+            },
+            "description": (
+                "Ablation payload exact : cible QR binaire sans QArt. Le "
+                "redémarrage complet peut reconstruire et dégrader tout le Stage 1."
             ),
         },
     ]
@@ -757,6 +789,7 @@ class LabService:
         current_method_id = None
         generation_service = None
         shared_stage1: dict[str, tuple[Any, str]] = {}
+        shared_stage2: dict[str, dict] = {}
         try:
             for trial_id, prompt, seed, method in trial_plan:
                 if self._is_cancelled(campaign_id):
@@ -794,6 +827,26 @@ class LabService:
                         cached = shared_stage1.get(stage1_key)
                         if cached is not None:
                             stage1_override, stage1_source_run_id = cached
+                    stage2_key = None
+                    if (
+                        method.backend == "controlnet"
+                        and method.tools.srpg_enabled
+                    ):
+                        stage2_key = self._stage2_cache_key(
+                            method,
+                            prompt.text,
+                            prompt.negative_prompt,
+                            seed,
+                            request.error_correction,
+                            request.payload,
+                        )
+                        cached_stage2 = shared_stage2.get(stage2_key)
+                        backend = generation_service.backends.get("controlnet")
+                        if (
+                            cached_stage2 is not None
+                            and hasattr(backend, "import_stage2_state")
+                        ):
+                            backend.import_stage2_state(cached_stage2)
                     run = generation_service.generate(
                         generation_request,
                         raw_candidate_override=stage1_override,
@@ -804,6 +857,12 @@ class LabService:
                         raw_candidate = generation_service.last_raw_candidate
                         if raw_candidate is not None:
                             shared_stage1[stage1_key] = (raw_candidate, run.id)
+                    if stage2_key is not None and stage2_key not in shared_stage2:
+                        backend = generation_service.backends.get("controlnet")
+                        if hasattr(backend, "export_stage2_state"):
+                            stage2_state = backend.export_stage2_state()
+                            if stage2_state is not None:
+                                shared_stage2[stage2_key] = stage2_state
                     self._record_method_diagnostics(run, method)
                     self._score_quality(run, prompt.text)
                     status = (
@@ -863,6 +922,7 @@ class LabService:
         finally:
             self._release_generation_service(generation_service)
             shared_stage1.clear()
+            shared_stage2.clear()
             metrics.LAB_ACTIVE_CAMPAIGNS.dec()
             with self._lock:
                 self._cancelled.discard(campaign_id)
@@ -913,7 +973,14 @@ class LabService:
                             settings.diffqrcoder_stage2_initialization
                             == "paper_stage1_noise"
                         ),
-                        "diffqrcoder_stage2_control_target_exact_requested": 1.0,
+                        "diffqrcoder_stage2_control_target_exact_requested": float(
+                            settings.diffqrcoder_stage2_target_mode
+                            == "binary_exact"
+                        ),
+                        "diffqrcoder_stage2_control_target_qart_requested": float(
+                            settings.diffqrcoder_stage2_target_mode
+                            == "qart_url_fragment"
+                        ),
                         "diffqrcoder_qr_version": float(
                             settings.diffqrcoder_qr_version
                         ),
@@ -1044,6 +1111,42 @@ class LabService:
         ).encode()
         return hashlib.sha256(encoded).hexdigest()
 
+    def _stage2_cache_key(
+        self,
+        method: LabMethod,
+        prompt: str,
+        negative_prompt: str,
+        seed: int,
+        error_correction: str,
+        payload: str,
+    ) -> str:
+        settings = self._settings_for_method(method)
+        stage2_settings = {
+            key: value
+            for key, value in method.tools.settings.items()
+            if not key.startswith("srmpgd_")
+        }
+        specification = {
+            "stage1": self._stage1_cache_key(
+                method,
+                prompt,
+                negative_prompt,
+                seed,
+                error_correction,
+            ),
+            "payload_hash": hashlib.sha256(payload.encode()).hexdigest(),
+            "guidance_scale": method.generation.get("guidance_scale"),
+            "stage2_settings": stage2_settings,
+            "target_mode": settings.diffqrcoder_stage2_target_mode,
+        }
+        return hashlib.sha256(
+            json.dumps(
+                specification,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+
     @staticmethod
     def _generation_request(
         campaign: LabCampaignCreate,
@@ -1112,7 +1215,7 @@ def method_schema(settings: Settings | None = None) -> dict[str, Any]:
         "notes": {
             "scope": (
                 "Pinned DiffQRCoder + Cetus-Mix Whalefall + QR Monster v2 only. "
-                "Stage 2 follows Algorithm 1 with a reconstructed QArt target; "
+                "Stage 2 follows Algorithm 1 with a real Reed-Solomon QArt target; "
                 "no deterministic final repair or alternative ControlNet."
             ),
             "upstream_revision": DIFFQRCODER_MODEL_SETTINGS["diffqrcoder_revision"],
@@ -1123,6 +1226,10 @@ def method_schema(settings: Settings | None = None) -> dict[str, Any]:
             ),
             "payload_storage": (
                 "The clear payload is held only in worker memory and is never persisted."
+            ),
+            "qart_contract": (
+                "Public QArt appends a URL fragment. Results are validated against "
+                "the same canonical URL and are never labelled exact byte payload."
             ),
         },
     }

@@ -1,6 +1,17 @@
+FROM rust:1.85-slim-bookworm AS qart-builder
+
+ARG QART_COMMIT=6e0e00804a1994db7098432c19fadfc552071e30
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git pkg-config \
+    && git clone https://github.com/andrewyur/qart.git /src/qart \
+    && git -C /src/qart checkout "$QART_COMMIT" \
+    && test "$(git -C /src/qart rev-parse HEAD)" = "$QART_COMMIT" \
+    && cargo build --manifest-path /src/qart/Cargo.toml --release --locked
+
 FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
 
 ARG DIFFQRCODER_COMMIT=e24ea73ee2e13c7e6e87cb422e8b11784e70ae00
+ARG QART_COMMIT=6e0e00804a1994db7098432c19fadfc552071e30
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -12,6 +23,9 @@ ENV PYTHONUNBUFFERED=1 \
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl git libgl1 libglib2.0-0 libzbar0 \
     && rm -rf /var/lib/apt/lists/*
+
+COPY --from=qart-builder /src/qart/target/release/qart /usr/local/bin/qart
+COPY --from=qart-builder /src/qart/LICENSE /opt/licenses/qart-LICENSE
 
 WORKDIR /app
 COPY pyproject.toml README.md alembic.ini ./
@@ -26,6 +40,9 @@ RUN git clone https://github.com/jwliao1209/DiffQRCoder.git /opt/DiffQRCoder \
     && test "$(git -C /opt/DiffQRCoder rev-parse HEAD)" = "$DIFFQRCODER_COMMIT" \
     && rm -rf /opt/DiffQRCoder/.git \
     && python -c "from diffqrcoder import DiffQRCoderPipeline; print('DiffQRCoder revision OK:', '$DIFFQRCODER_COMMIT')"
+
+RUN qart help >/dev/null \
+    && echo "QArt revision OK: $QART_COMMIT"
 
 RUN useradd --create-home --uid 10001 app \
     && mkdir -p /data /cache /opt/torch-cache \

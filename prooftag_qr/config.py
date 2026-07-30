@@ -36,14 +36,28 @@ class Settings(BaseSettings):
         "paper_stage1_noise", "public_random"
     ] = "paper_stage1_noise"
     diffqrcoder_stage2_strength: float = Field(default=1.0, gt=0.0, le=1.0)
+    diffqrcoder_stage2_target_mode: Literal[
+        "binary_exact", "qart_url_fragment"
+    ] = "binary_exact"
+    diffqrcoder_qart_executable: str = "/usr/local/bin/qart"
+    diffqrcoder_qart_thresholds: tuple[int, ...] = (96, 112, 128, 144, 160)
     diffqrcoder_guard_max_changed_pixel_ratio: float = Field(
         default=0.995, gt=0.0, le=1.0
     )
     diffqrcoder_guard_max_mean_absolute_change: float = Field(
         default=0.35, gt=0.0, le=1.0
     )
-    diffqrcoder_guard_max_clipped_pixel_ratio: float = Field(
-        default=0.15, ge=0.0, le=1.0
+    diffqrcoder_guard_max_clipped_pixel_ratio_increase: float = Field(
+        default=0.05, ge=0.0, le=1.0
+    )
+    diffqrcoder_guard_max_rgb_clipped_channel_ratio_increase: float = Field(
+        default=0.02, ge=0.0, le=1.0
+    )
+    diffqrcoder_guard_max_saturation_mean_increase: float = Field(
+        default=0.08, ge=0.0, le=1.0
+    )
+    diffqrcoder_guard_max_high_saturation_ratio_increase: float = Field(
+        default=0.05, ge=0.0, le=1.0
     )
     device: str = "cuda"
     validation_min_pass_rate: float = Field(default=1.0, ge=0.0, le=1.0)

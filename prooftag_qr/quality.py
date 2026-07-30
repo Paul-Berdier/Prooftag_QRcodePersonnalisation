@@ -4,7 +4,10 @@ from PIL import Image
 
 
 def image_quality_metrics(image: Image.Image) -> dict[str, float]:
+    rgb = np.asarray(image.convert("RGB"), dtype=np.uint8)
     gray = np.asarray(image.convert("L"), dtype=np.uint8)
+    hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)
+    saturation = hsv[..., 1].astype(np.float32) / 255.0
     histogram = np.bincount(gray.ravel(), minlength=256).astype(np.float64)
     probabilities = histogram[histogram > 0] / gray.size
     entropy = -float(np.sum(probabilities * np.log2(probabilities)))
@@ -16,16 +19,51 @@ def image_quality_metrics(image: Image.Image) -> dict[str, float]:
         "entropy_bits": entropy,
         "sharpness_laplacian": laplacian_variance,
         "clipped_pixel_ratio": clipped,
+        "rgb_clipped_channel_ratio": float(
+            ((rgb <= 3) | (rgb >= 252)).mean()
+        ),
+        "saturation_mean": float(saturation.mean()),
+        "saturation_p95": float(np.quantile(saturation, 0.95)),
+        "high_saturation_pixel_ratio": float((saturation >= 0.90).mean()),
     }
 
 
 def image_change_metrics(image: Image.Image, reference: Image.Image) -> dict[str, float]:
-    candidate = np.asarray(image.convert("RGB"), dtype=np.int16)
-    baseline = np.asarray(reference.convert("RGB").resize(image.size), dtype=np.int16)
+    candidate_rgb = np.asarray(image.convert("RGB"), dtype=np.uint8)
+    baseline_rgb = np.asarray(
+        reference.convert("RGB").resize(image.size), dtype=np.uint8
+    )
+    candidate = candidate_rgb.astype(np.int16)
+    baseline = baseline_rgb.astype(np.int16)
     absolute_change = np.abs(candidate - baseline)
+    candidate_saturation = (
+        cv2.cvtColor(candidate_rgb, cv2.COLOR_RGB2HSV)[..., 1].astype(np.float32)
+        / 255.0
+    )
+    baseline_saturation = (
+        cv2.cvtColor(baseline_rgb, cv2.COLOR_RGB2HSV)[..., 1].astype(np.float32)
+        / 255.0
+    )
+    candidate_gray = cv2.cvtColor(candidate_rgb, cv2.COLOR_RGB2GRAY)
+    baseline_gray = cv2.cvtColor(baseline_rgb, cv2.COLOR_RGB2GRAY)
     return {
         "changed_pixel_ratio": float((absolute_change.max(axis=2) > 10).mean()),
         "mean_absolute_change": float(absolute_change.mean() / 255.0),
+        "clipped_pixel_ratio_increase": float(
+            ((candidate_gray <= 3) | (candidate_gray >= 252)).mean()
+            - ((baseline_gray <= 3) | (baseline_gray >= 252)).mean()
+        ),
+        "rgb_clipped_channel_ratio_increase": float(
+            ((candidate_rgb <= 3) | (candidate_rgb >= 252)).mean()
+            - ((baseline_rgb <= 3) | (baseline_rgb >= 252)).mean()
+        ),
+        "saturation_mean_increase": float(
+            candidate_saturation.mean() - baseline_saturation.mean()
+        ),
+        "high_saturation_ratio_increase": float(
+            (candidate_saturation >= 0.90).mean()
+            - (baseline_saturation >= 0.90).mean()
+        ),
     }
 
 
