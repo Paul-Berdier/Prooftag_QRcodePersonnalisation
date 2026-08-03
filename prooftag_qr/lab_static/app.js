@@ -11,6 +11,7 @@ const state = {
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const copy = (value) => JSON.parse(JSON.stringify(value));
+const OUTPUT_VARIANTS = new Set(["raw", "srpg", "srmpgd", "auto"]);
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -70,7 +71,22 @@ function normalizeMethod(method) {
   method.tools.settings ||= {};
   method.generation ||= {};
   method.model ||= {};
+  if (!OUTPUT_VARIANTS.has(method.output_variant)) {
+    method.output_variant = method.tools.srmpgd_enabled
+      ? "srmpgd"
+      : method.tools.srpg_enabled ? "srpg" : "raw";
+  }
   return method;
+}
+
+function ensureOutputOption(select, value) {
+  if (![...select.options].some(option => option.value === value)) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value === "auto" ? "Meilleur Stage 1 / Stage 2" : value;
+    select.append(option);
+  }
+  select.value = value;
 }
 
 function renderMethods() {
@@ -85,7 +101,7 @@ function renderMethods() {
     $(".description", node).textContent = method.description || "";
     $(".name", node).value = method.name;
     $(".id", node).value = method.id;
-    $(".output", node).value = method.output_variant;
+    ensureOutputOption($(".output", node), method.output_variant);
     $(".steps", node).value = method.generation.steps ?? 40;
     $(".cfg", node).value = method.generation.guidance_scale ?? 7.5;
     $(".control", node).value = method.generation.controlnet_scale ?? 1.35;
@@ -117,7 +133,10 @@ function renderMethods() {
       item.enabled = $(".enabled", node).checked;
       item.name = $(".name", node).value.trim();
       item.id = slug($(".id", node).value);
-      item.output_variant = $(".output", node).value;
+      const selectedOutput = $(".output", node).value;
+      item.output_variant = OUTPUT_VARIANTS.has(selectedOutput)
+        ? selectedOutput
+        : OUTPUT_VARIANTS.has(item.output_variant) ? item.output_variant : "raw";
       item.reuse_stage1 = true;
       item.generation = {
         steps: Number($(".steps", node).value),
@@ -192,6 +211,14 @@ function renderMethods() {
 }
 
 function campaignPayload() {
+  state.methods.forEach((method, index) => {
+    if (!OUTPUT_VARIANTS.has(method.output_variant)) {
+      throw new Error(
+        `Méthode ${index + 1} (${method.name || method.id}) : sortie invalide. ` +
+        "Recharge la page avec Ctrl+F5."
+      );
+    }
+  });
   return {
     name: $("#campaign-name").value.trim(),
     payload: $("#payload").value.trim(),
