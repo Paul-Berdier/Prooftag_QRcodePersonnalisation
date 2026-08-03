@@ -1,6 +1,17 @@
+import hashlib
+
 import cv2
 import numpy as np
 from PIL import Image
+
+
+def image_sha256(image: Image.Image) -> str:
+    """Hash decoded pixels, mode and dimensions instead of encoder metadata."""
+    source = image.convert("RGB")
+    digest = hashlib.sha256()
+    digest.update(f"RGB:{source.width}x{source.height}:".encode())
+    digest.update(np.asarray(source, dtype=np.uint8).tobytes())
+    return digest.hexdigest()
 
 
 def image_quality_metrics(image: Image.Image) -> dict[str, float]:

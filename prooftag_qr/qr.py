@@ -124,6 +124,82 @@ def diffqrcoder_module_error_rate(
     return module_error_rate(source, core)
 
 
+def diffqrcoder_structure_metrics(
+    candidate: Image.Image,
+    blueprint: QRBlueprint,
+    *,
+    padding_px: int,
+    module_size: int,
+    center_fraction: float = 0.40,
+) -> dict[str, float]:
+    """Diagnose module confidence and texture on the exact upstream geometry."""
+    if not 0 < center_fraction <= 1:
+        raise ValueError("center_fraction must be between 0 (exclusive) and 1")
+    full = np.asarray(candidate.convert("L"), dtype=np.float32) / 255.0
+    if full.shape != (candidate.height, candidate.width):
+        raise ValueError("candidate must be a two-dimensional luminance image")
+    core = full[
+        padding_px : candidate.height - padding_px,
+        padding_px : candidate.width - padding_px,
+    ]
+    border = int(blueprint.border)
+    matrix = blueprint.matrix[border:-border, border:-border] if border else blueprint.matrix
+    expected_size = matrix.shape[0] * module_size
+    if core.shape != (expected_size, expected_size):
+        raise ValueError(
+            f"DiffQRCoder core is {core.shape[::-1]}, expected "
+            f"{(expected_size, expected_size)}"
+        )
+    means = np.empty(matrix.shape, dtype=np.float32)
+    centers = np.empty(matrix.shape, dtype=np.float32)
+    deviations = np.empty(matrix.shape, dtype=np.float32)
+    center_size = max(1, round(module_size * center_fraction))
+    center_offset = (module_size - center_size) // 2
+    for row in range(matrix.shape[0]):
+        for col in range(matrix.shape[1]):
+            region = core[
+                row * module_size : (row + 1) * module_size,
+                col * module_size : (col + 1) * module_size,
+            ]
+            center = region[
+                center_offset : center_offset + center_size,
+                center_offset : center_offset + center_size,
+            ]
+            means[row, col] = float(region.mean())
+            centers[row, col] = float(center.mean())
+            deviations[row, col] = float(region.std())
+    mean_errors = (means < 0.5) != matrix.astype(bool)
+    center_errors = (centers < 0.5) != matrix.astype(bool)
+    functional = functional_pattern_mask(blueprint)
+    functional = functional[border:-border, border:-border] if border else functional
+    data = ~functional
+    confidence = np.abs(centers - 0.5) * 2.0
+    quiet_mask = np.ones_like(full, dtype=bool)
+    quiet_mask[
+        padding_px : candidate.height - padding_px,
+        padding_px : candidate.width - padding_px,
+    ] = False
+    quiet = full[quiet_mask]
+    dark = matrix.astype(bool)
+    light = ~dark
+    return {
+        "module_mean_error_rate": float(mean_errors.mean()),
+        "module_center_error_rate": float(center_errors.mean()),
+        "functional_center_error_rate": float(center_errors[functional].mean()),
+        "data_center_error_rate": float(center_errors[data].mean()),
+        "center_confidence_mean": float(confidence.mean()),
+        "center_confidence_p10": float(np.quantile(confidence, 0.10)),
+        "center_ambiguous_ratio": float((confidence < 0.20).mean()),
+        "dark_center_luminance_mean": float(centers[dark].mean()),
+        "light_center_luminance_mean": float(centers[light].mean()),
+        "intra_module_std_mean": float(deviations.mean()),
+        "intra_module_std_p95": float(np.quantile(deviations, 0.95)),
+        "quiet_zone_luminance_mean": float(quiet.mean()),
+        "quiet_zone_luminance_std": float(quiet.std()),
+        "quiet_zone_dark_pixel_ratio": float((quiet < 0.75).mean()),
+    }
+
+
 def module_error_map(candidate: Image.Image, blueprint: QRBlueprint) -> np.ndarray:
     """Return the binary module error map on the delivered canvas."""
     gray = np.asarray(candidate.convert("L"), dtype=np.float32)

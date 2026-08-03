@@ -159,7 +159,11 @@ botanical | Delicate botanical engraving with white flowers, cyan leaves and dar
             <label class="choice"><input type="radio" name="human-scan" value="not_tested"> Non testé</label>
           </fieldset>
           <label>Note esthétique /10<input id="aesthetic-score" type="number" min="1" max="10"></label>
+          <label>Essais téléphone<input id="human-scan-attempts" type="number" min="0" max="20" value="0"></label>
+          <label>Lectures réussies<input id="human-scan-successes" type="number" min="0" max="20" value="0"></label>
+          <label>Téléphone / application<input id="human-scan-device" maxlength="200" placeholder="ex. Pixel 8 — caméra native"></label>
         </div>
+        <p class="muted">Recommandation : 3 essais dans les mêmes conditions. Le verdict est positif à partir de 2/3 lectures.</p>
         <label>Notes<textarea id="rating-notes" rows="3" placeholder="Ce qui fonctionne, défauts, conditions du scan…"></textarea></label>
         <div class="dialog-actions">
           <button id="previous-trial" class="button secondary" type="button">← Précédent</button>
@@ -215,6 +219,6 @@ botanical | Delicate botanical engraving with white flowers, cyan leaves and dar
     </article>
   </template>
 
-  <script src="/lab-assets/app.js?v=20260803-output-guard-2" defer></script>
+  <script src="/lab-assets/app.js?v=20260803-e017-phone-proxy-1" defer></script>
 </body>
 </html>

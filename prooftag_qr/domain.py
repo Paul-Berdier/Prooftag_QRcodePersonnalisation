@@ -51,3 +51,4 @@ class RunRecord:
     validations: list[ValidationRecord] = field(default_factory=list)
     attempt_details: list[AttemptRecord] = field(default_factory=list)
     quality_metrics: dict[str, float] = field(default_factory=dict)
+    provenance: dict[str, str] = field(default_factory=dict)

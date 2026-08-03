@@ -286,6 +286,8 @@ function aggregate(trials) {
   ));
   const strict = generated.filter(t => t.generation.exact_payload_match && t.generation.scan_pass_rate === 1);
   const humanScan = generated.filter(t => t.rating?.human_scan_result === "scannable");
+  const phoneAttempts = generated.reduce((sum, t) => sum + Number(t.rating?.human_scan_attempts || 0), 0);
+  const phoneSuccesses = generated.reduce((sum, t) => sum + Number(t.rating?.human_scan_successes || 0), 0);
   const aesthetic = generated.filter(t => t.rating?.aesthetic_ok === true);
   const mean = (items, getter) => items.length ? items.reduce((sum, item) => sum + Number(getter(item) || 0), 0) / items.length : null;
   return {
@@ -293,6 +295,8 @@ function aggregate(trials) {
     rated: rated.length,
     strict: strict.length,
     humanScan: humanScan.length,
+    phoneAttempts,
+    phoneSuccesses,
     aesthetic: aesthetic.length,
     meanSsr: mean(generated, t => t.generation.scan_pass_rate),
     meanAes: mean(generated.filter(t => t.generation.quality_metrics?.clip_aesthetic != null), t => t.generation.quality_metrics.clip_aesthetic),
@@ -308,6 +312,7 @@ function renderScores() {
     ["CLIP-aesthetic moyen", fmt(a.meanAes, 2)],
     ["CLIPScore moyen", fmt(a.meanClip, 2)],
     ["Tes scans positifs", `${a.humanScan}/${a.rated}`],
+    ["Lectures téléphone", `${a.phoneSuccesses}/${a.phoneAttempts}`],
     ["Tes esthétiques positives", `${a.aesthetic}/${a.rated}`],
     ["Évalués", `${a.rated}/${a.generated}`],
   ].map(([label, value]) => `<article><span>${label}</span><b>${value}</b></article>`).join("");
@@ -348,6 +353,7 @@ function renderTrials() {
           <span>SSR norm.<b>${pct(run.scan_pass_rate)}</b></span>
           <span>${qartContract ? "URL canon." : "Original norm."}<b>${fmt(originalScore.passed, 0)}/${fmt(originalScore.total, 0)}</b></span>
           <span>MER<b>${pct(run.module_error_rate)}</b></span>
+          <span>Phone Proxy<b>${pct(run.quality_metrics?.phone_proxy_normalized_pass_rate)}</b></span>
           <span>CLIP-AES<b>${fmt(run.quality_metrics?.clip_aesthetic, 2)}</b></span>
         </div>
         <div class="badges">
@@ -355,7 +361,7 @@ function renderTrials() {
           ${!diverged && warning ? "<i>Alerte couleur</i>" : ""}
           ${fallback ? "<i class='good'>Stage 1 préservé</i>" : ""}
           ${rating?.aesthetic_ok === true ? "<i class='good'>Esthétique ✓</i>" : rating?.aesthetic_ok === false ? "<i class='bad'>Esthétique ✕</i>" : "<i>Esthétique ?</i>"}
-          ${rating?.human_scan_result === "scannable" ? "<i class='good'>Scan ✓</i>" : rating?.human_scan_result === "not_scannable" ? "<i class='bad'>Scan ✕</i>" : "<i>Scan ?</i>"}
+          ${rating?.human_scan_result === "scannable" ? `<i class='good'>Scan ✓ ${rating.human_scan_successes || 0}/${rating.human_scan_attempts || 0}</i>` : rating?.human_scan_result === "not_scannable" ? `<i class='bad'>Scan ✕ ${rating.human_scan_successes || 0}/${rating.human_scan_attempts || 0}</i>` : "<i>Scan ?</i>"}
         </div>
       </div>
     </button>`;
@@ -404,6 +410,15 @@ async function openTrial(index) {
     metric("Tests normalisés", `${fmt(quality.validation_normalized_passed, 0)}/${fmt(quality.validation_normalized_total, 0)}`),
     metric(qartContract ? "URL canonique" : "Payload original normalisé", `${fmt(originalScore.passed, 0)}/${fmt(originalScore.total, 0)}`),
     metric("MER", pct(run.module_error_rate)),
+    metric("Phone Proxy normalisé", pct(quality.phone_proxy_normalized_pass_rate)),
+    metric("Phone Proxy brut", pct(quality.phone_proxy_raw_pass_rate)),
+    metric("Phone Proxy", Number(quality.phone_proxy_calibration_only || 0) === 1 ? "Calibration uniquement" : "Indisponible"),
+    metric("Erreur centres", pct(quality.structure_module_center_error_rate)),
+    metric("Erreur centres fonctionnels", pct(quality.structure_functional_center_error_rate)),
+    metric("Centres ambigus", pct(quality.structure_center_ambiguous_ratio)),
+    metric("Confiance centres P10", fmt(quality.structure_center_confidence_p10, 3)),
+    metric("Texture intra-module P95", fmt(quality.structure_intra_module_std_p95, 3)),
+    metric("Quiet zone sombre", pct(quality.structure_quiet_zone_dark_pixel_ratio)),
     metric("CLIP-aesthetic", fmt(run.quality_metrics?.clip_aesthetic, 3)),
     metric("CLIPScore", fmt(run.quality_metrics?.clip_score, 3)),
     metric("Init. papier", Number(quality.diffqrcoder_stage2_paper_initialization || 0) === 1 ? "Oui" : "Non"),
@@ -428,14 +443,17 @@ async function openTrial(index) {
     metric("Itération retenue", fmt(quality.diffqrcoder_srmpgd_selected_iteration, 0)),
     metric("Génération", `${fmt((run.generation_ms || 0) / 1000, 1)} s`),
     metric("Validation", `${fmt((run.validation_ms || 0) / 1000, 1)} s`),
+    metric("SHA image finale", run.provenance?.final_image_sha256?.slice(0, 16) || "—"),
+    metric("SHA Stage 1", run.provenance?.stage1_image_sha256?.slice(0, 16) || "—"),
+    metric("SHA latent Stage 2", run.provenance?.stage2_latent_sha256?.slice(0, 16) || "—"),
   ].join("");
   const artifacts = await api(`/v1/generations/${run.id}/artifacts`);
   $("#artifacts").innerHTML = artifacts.map(item => `
     <figure><img src="${item.url}" loading="lazy"><figcaption>${item.name}</figcaption></figure>`).join("");
   $("#validations").innerHTML = `<table>
-    <thead><tr><th>Décodeur</th><th>Scénario</th><th>${qartContract ? "URL canonique" : "Payload exact"}</th><th>Latence</th></tr></thead>
+    <thead><tr><th>Décodeur</th><th>Scénario</th><th>Prétraitement</th><th>${qartContract ? "URL canonique" : "Payload exact"}</th><th>Latence</th></tr></thead>
     <tbody>${(run.validations || []).map(item => `<tr>
-      <td>${item.decoder}</td><td>${item.scenario}</td>
+      <td>${item.decoder}</td><td>${item.scenario}</td><td>${item.parameters?.selected_preprocessor || "—"}</td>
       <td class="${item.exact_payload_match ? "pass" : "fail"}">${item.exact_payload_match ? "Oui" : "Non"}</td>
       <td>${fmt(item.latency_ms, 1)} ms</td>
     </tr>`).join("")}</tbody>
@@ -444,6 +462,9 @@ async function openTrial(index) {
   $$("input[name='aesthetic-ok']").forEach(input => input.checked = String(rating.aesthetic_ok) === input.value);
   $$("input[name='human-scan']").forEach(input => input.checked = (rating.human_scan_result || "not_tested") === input.value);
   $("#aesthetic-score").value = rating.aesthetic_score ?? "";
+  $("#human-scan-attempts").value = rating.human_scan_attempts ?? 0;
+  $("#human-scan-successes").value = rating.human_scan_successes ?? 0;
+  $("#human-scan-device").value = rating.human_scan_device ?? "";
   $("#rating-notes").value = rating.notes ?? "";
   $("#dialog-message").textContent = run.error || "";
   $("#dialog-message").classList.toggle("error", Boolean(run.error));
@@ -460,6 +481,9 @@ async function saveAndMove(direction = 1) {
       aesthetic_score: $("#aesthetic-score").value ? Number($("#aesthetic-score").value) : null,
       aesthetic_ok: aesthetic == null ? null : aesthetic === "true",
       human_scan_result: scan,
+      human_scan_attempts: Number($("#human-scan-attempts").value || 0),
+      human_scan_successes: Number($("#human-scan-successes").value || 0),
+      human_scan_device: $("#human-scan-device").value,
       prompt_fidelity_score: null,
       qr_discretion_score: null,
       overall_score: null,

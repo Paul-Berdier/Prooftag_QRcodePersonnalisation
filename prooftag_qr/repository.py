@@ -258,4 +258,5 @@ class RunRepository:
                 for item in attempt_rows
             ],
             quality_metrics={item["name"]: item["value"] for item in quality_rows},
+            provenance=dict(row["provenance"] or {}),
         )

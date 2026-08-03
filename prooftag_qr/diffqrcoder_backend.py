@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 import threading
 import time
@@ -53,6 +54,14 @@ def _pil_to_tensor(image: Image.Image, *, device: str, dtype):
         .unsqueeze(0)
         .to(device=device, dtype=dtype)
     )
+
+
+def _tensor_sha256(tensor) -> str:
+    source = tensor.detach().cpu().contiguous()
+    digest = hashlib.sha256()
+    digest.update(f"{source.dtype}:{tuple(source.shape)}:".encode())
+    digest.update(source.numpy().tobytes())
+    return digest.hexdigest()
 
 
 def _control_target_center_error_rate(
@@ -152,6 +161,7 @@ class UpstreamDiffQRCoderBackend:
         self._stage2_control: _Stage2Control | None = None
         self._stage2_override: dict | None = None
         self._last_stage2_state: dict | None = None
+        self._stage2_latent_sha256: str | None = None
 
     def import_stage2_state(self, state: dict) -> None:
         self._stage2_override = {
@@ -654,6 +664,7 @@ class UpstreamDiffQRCoderBackend:
                 device=self.settings.device,
                 dtype=pipe.unet.dtype,
             )
+            self._stage2_latent_sha256 = _tensor_sha256(latent)
             image = cached["image"].copy()
             self._diagnostics = dict(cached["diagnostics"])
             self._diagnostics["diffqrcoder_stage2_reused"] = 1.0
@@ -759,6 +770,7 @@ class UpstreamDiffQRCoderBackend:
                 output_type="latent",
             )
         latent = output.images.detach()
+        self._stage2_latent_sha256 = _tensor_sha256(latent)
         image = self._decode_latent(pipe, latent)
         self._debug_artifacts["stage2_before_srmpgd"] = image.copy()
         self._diagnostics.update(
@@ -838,3 +850,14 @@ class UpstreamDiffQRCoderBackend:
 
     def diagnostics(self) -> dict[str, float]:
         return self._diagnostics.copy()
+
+    def provenance(self) -> dict[str, str]:
+        values = {
+            "base_model_id": self.settings.base_model_id,
+            "controlnet_model_id": self.settings.controlnet_model_id,
+            "controlnet_model_subfolder": self.settings.controlnet_model_subfolder,
+            "diffqrcoder_revision": self.settings.diffqrcoder_revision,
+        }
+        if self._stage2_latent_sha256:
+            values["stage2_latent_sha256"] = self._stage2_latent_sha256
+        return values

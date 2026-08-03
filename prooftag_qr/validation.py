@@ -326,3 +326,97 @@ class QRValidator:
                     )
                 )
         return records
+
+    def validate_phone_proxy(
+        self,
+        image: Image.Image,
+        expected_payload: str,
+        *,
+        matcher: Callable[[str, str], bool] | None = None,
+        match_mode: str = "exact",
+    ) -> list[ValidationRecord]:
+        """Approximate a phone scanner's internal image enhancement pipeline.
+
+        This is deliberately reported as a separate calibration metric. It must
+        not be used as the production acceptance gate until it has been
+        calibrated against repeated scans on real devices.
+        """
+        expected_hash = hashlib.sha256(expected_payload.encode()).hexdigest()
+        comparator = matcher or (lambda decoded, expected: decoded == expected)
+        variants = _phone_proxy_variants(image)
+        records: list[ValidationRecord] = []
+        for decoder in self.decoders:
+            started = time.perf_counter()
+            selected_name: str | None = None
+            selected_decoded = ""
+            first_decoded = ""
+            attempts: list[dict[str, Any]] = []
+            for name, transformed in variants:
+                decoded, decoder_error = decode_safely(decoder, transformed)
+                exact = comparator(decoded, expected_payload)
+                attempts.append(
+                    {
+                        "preprocessor": name,
+                        "decoded": bool(decoded),
+                        "exact": exact,
+                        "decoder_error": decoder_error,
+                    }
+                )
+                if decoded and not first_decoded:
+                    first_decoded = decoded
+                if exact:
+                    selected_name = name
+                    selected_decoded = decoded
+                    break
+            decoded = selected_decoded or first_decoded
+            exact = bool(selected_name)
+            records.append(
+                ValidationRecord(
+                    decoder=decoder.name,
+                    scenario="phone_proxy_original",
+                    success=bool(decoded),
+                    exact_payload_match=exact,
+                    latency_ms=(time.perf_counter() - started) * 1000,
+                    decoded_hash=(
+                        hashlib.sha256(decoded.encode()).hexdigest() if decoded else None
+                    ),
+                    parameters={
+                        "expected_hash": expected_hash,
+                        "match_mode": match_mode,
+                        "selected_preprocessor": selected_name,
+                        "attempts": attempts,
+                    },
+                )
+            )
+        return records
+
+
+def _phone_proxy_variants(image: Image.Image) -> list[tuple[str, Image.Image]]:
+    """Return deterministic, non-generative views commonly tried by scanners."""
+    rgb = np.asarray(image.convert("RGB"), dtype=np.uint8)
+    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+    doubled = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+    _, otsu = cv2.threshold(doubled, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    adaptive = cv2.adaptiveThreshold(
+        doubled,
+        255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY,
+        31,
+        5,
+    )
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(doubled)
+    blurred = cv2.GaussianBlur(doubled, (0, 0), 1.2)
+    unsharp = cv2.addWeighted(doubled, 1.8, blurred, -0.8, 0)
+
+    def as_rgb(array: np.ndarray) -> Image.Image:
+        return Image.fromarray(array).convert("RGB")
+
+    return [
+        ("raw", image.convert("RGB")),
+        ("grayscale_x2", as_rgb(doubled)),
+        ("clahe_x2", as_rgb(clahe)),
+        ("unsharp_x2", as_rgb(unsharp)),
+        ("otsu_x2", as_rgb(otsu)),
+        ("adaptive_x2", as_rgb(adaptive)),
+    ]

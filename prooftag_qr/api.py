@@ -112,11 +112,13 @@ def response_from_record(run: RunRecord) -> GenerationResponse:
                 success=item.success,
                 exact_payload_match=item.exact_payload_match,
                 latency_ms=item.latency_ms,
+                parameters=item.parameters,
             )
             for item in run.validations
         ],
         attempt_details=[AttemptResult(**asdict(item)) for item in run.attempt_details],
         quality_metrics=run.quality_metrics,
+        provenance=run.provenance,
     )
 
 
@@ -382,10 +384,12 @@ def export_lab_campaign(campaign_id: str) -> StreamingResponse:
     stream = io.StringIO()
     export_rows = []
     quality_names: set[str] = set()
+    provenance_names: set[str] = set()
     for trial in lab_repository.list_trials(campaign_id):
         run = repository.get(trial["generation_run_id"]) if trial["generation_run_id"] else None
         rating = lab_repository.get_rating(trial["id"]) or {}
         quality_names.update(run.quality_metrics if run else {})
+        provenance_names.update(run.provenance if run else {})
         export_rows.append((trial, run, rating))
     fields = [
         "trial_id",
@@ -407,13 +411,18 @@ def export_lab_campaign(campaign_id: str) -> StreamingResponse:
         "aesthetic_score",
         "aesthetic_ok",
         "human_scan_result",
+        "human_scan_attempts",
+        "human_scan_successes",
+        "human_scan_device",
         "prompt_fidelity_score",
         "qr_discretion_score",
         "overall_score",
         "favorite",
         "notes",
         "error",
-    ] + [f"quality_{name}" for name in sorted(quality_names)]
+    ] + [f"quality_{name}" for name in sorted(quality_names)] + [
+        f"provenance_{name}" for name in sorted(provenance_names)
+    ]
     writer = csv.DictWriter(stream, fieldnames=fields)
     writer.writeheader()
     for trial, run, rating in export_rows:
@@ -437,6 +446,9 @@ def export_lab_campaign(campaign_id: str) -> StreamingResponse:
             "aesthetic_score": rating.get("aesthetic_score"),
             "aesthetic_ok": rating.get("aesthetic_ok"),
             "human_scan_result": rating.get("human_scan_result"),
+            "human_scan_attempts": rating.get("human_scan_attempts"),
+            "human_scan_successes": rating.get("human_scan_successes"),
+            "human_scan_device": rating.get("human_scan_device"),
             "prompt_fidelity_score": rating.get("prompt_fidelity_score"),
             "qr_discretion_score": rating.get("qr_discretion_score"),
             "overall_score": rating.get("overall_score"),
@@ -448,6 +460,12 @@ def export_lab_campaign(campaign_id: str) -> StreamingResponse:
             {
                 f"quality_{name}": run.quality_metrics.get(name) if run else None
                 for name in quality_names
+            }
+        )
+        row.update(
+            {
+                f"provenance_{name}": run.provenance.get(name) if run else None
+                for name in provenance_names
             }
         )
         writer.writerow(row)

@@ -4,6 +4,7 @@ from PIL import Image
 from prooftag_qr.qr import (
     adaptive_quiet_zone_color,
     diffqrcoder_module_error_rate,
+    diffqrcoder_structure_metrics,
     functional_pattern_mask,
     generate_diffqrcoder_qr,
     generate_qr,
@@ -13,7 +14,7 @@ from prooftag_qr.qr import (
     repair_qr_modules,
     restore_quiet_zone,
 )
-from prooftag_qr.validation import OpenCVDecoder, QRValidator
+from prooftag_qr.validation import Decoder, OpenCVDecoder, QRValidator
 
 
 def test_reference_qr_decodes_exact_payload():
@@ -62,6 +63,54 @@ def test_diffqrcoder_mer_uses_the_exact_580_pixel_core_geometry():
         padding_px=78,
         module_size=20,
     ) == 0.0
+
+    metrics = diffqrcoder_structure_metrics(
+        candidate,
+        blueprint,
+        padding_px=78,
+        module_size=20,
+    )
+    assert metrics["module_center_error_rate"] == 0.0
+    assert metrics["functional_center_error_rate"] == 0.0
+    assert metrics["center_confidence_p10"] == 1.0
+    assert metrics["quiet_zone_dark_pixel_ratio"] == 0.0
+
+
+class _ThresholdOnlyDecoder(Decoder):
+    name = "threshold-only"
+
+    def __init__(self, payload: str):
+        self.payload = payload
+
+    def decode(self, image: Image.Image) -> str:
+        values = np.unique(np.asarray(image.convert("L")))
+        return self.payload if set(values.tolist()) <= {0, 255} else ""
+
+
+def test_phone_proxy_reports_preprocessing_without_changing_the_main_validator():
+    payload = "https://ptag.io/t/phone-proxy"
+    blueprint = generate_qr(payload, "M", size=256)
+    low_contrast = np.where(
+        np.asarray(blueprint.image.convert("L"))[..., None] < 128,
+        80,
+        180,
+    ).astype(np.uint8)
+    image = Image.fromarray(np.repeat(low_contrast, 3, axis=2))
+    validator = QRValidator(decoders=[_ThresholdOnlyDecoder(payload)])
+
+    regular = validator.validate(image, payload)
+    proxy = validator.validate_phone_proxy(image, payload)
+
+    assert not next(
+        record for record in regular if record.scenario == "original"
+    ).exact_payload_match
+    assert len(proxy) == 1
+    assert proxy[0].exact_payload_match is True
+    assert proxy[0].scenario == "phone_proxy_original"
+    assert proxy[0].parameters["selected_preprocessor"] in {
+        "otsu_x2",
+        "adaptive_x2",
+    }
 
 
 def test_restore_quiet_zone_preserves_the_artistic_core_and_clears_only_the_margin():

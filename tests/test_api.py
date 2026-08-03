@@ -48,7 +48,7 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     lab_page = client.get("/lab")
     assert lab_page.status_code == 200
     assert "PROOFTAG × DIFFQRCODER" in lab_page.text
-    assert "20260803-output-guard-2" in lab_page.text
+    assert "20260803-e017-phone-proxy-1" in lab_page.text
     lab_javascript = client.get("/lab-assets/app.js")
     assert lab_javascript.status_code == 200
     assert "human_scan_result" in lab_javascript.text
@@ -155,6 +155,9 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
             "aesthetic_score": 4,
             "aesthetic_ok": True,
             "human_scan_result": "scannable",
+            "human_scan_attempts": 3,
+            "human_scan_successes": 2,
+            "human_scan_device": "Pixel test — native camera",
             "prompt_fidelity_score": 5,
             "qr_discretion_score": 1,
             "overall_score": 4,
@@ -166,10 +169,15 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     assert rating.json()["favorite"] is True
     assert rating.json()["aesthetic_ok"] is True
     assert rating.json()["human_scan_result"] == "scannable"
+    assert rating.json()["human_scan_attempts"] == 3
+    assert rating.json()["human_scan_successes"] == 2
     campaign_csv = client.get(f"/v1/lab/campaigns/{campaign_id}/results.csv")
     assert campaign_csv.status_code == 200
     assert "quality_brightness_mean" in campaign_csv.text.splitlines()[0]
     assert "human_scan_result" in campaign_csv.text.splitlines()[0]
+    assert "human_scan_attempts" in campaign_csv.text.splitlines()[0]
+    assert "human_scan_device" in campaign_csv.text.splitlines()[0]
+    assert "provenance_final_image_sha256" in campaign_csv.text.splitlines()[0]
     artifacts = client.get(
         f"/v1/generations/{trial['generation_run_id']}/artifacts"
     ).json()

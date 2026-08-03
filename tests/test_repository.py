@@ -23,6 +23,7 @@ def test_repository_round_trip(tmp_path):
         validations=[ValidationRecord("opencv", "original", True, True, 3.2)],
         attempt_details=[AttemptRecord(1, 42, 2.0, 3.2, 1.0, 0.0, True)],
         quality_metrics={"brightness_mean": 0.5},
+        provenance={"final_image_sha256": "abc123"},
     )
 
     repository.save(run)
@@ -33,6 +34,7 @@ def test_repository_round_trip(tmp_path):
     assert restored.validations[0].exact_payload_match
     assert restored.attempt_details[0].seed == 42
     assert restored.quality_metrics["brightness_mean"] == 0.5
+    assert restored.provenance["final_image_sha256"] == "abc123"
     assert repository.summary()["acceptance_rate"] == 1.0
 
     physical = repository.add_physical_validation(

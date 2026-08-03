@@ -24,6 +24,7 @@ class ValidationResult(BaseModel):
     success: bool
     exact_payload_match: bool
     latency_ms: float
+    parameters: dict[str, Any] = Field(default_factory=dict)
 
 
 class AttemptResult(BaseModel):
@@ -60,6 +61,7 @@ class GenerationResponse(BaseModel):
     validations: list[ValidationResult] = Field(default_factory=list)
     attempt_details: list[AttemptResult] = Field(default_factory=list)
     quality_metrics: dict[str, float] = Field(default_factory=dict)
+    provenance: dict[str, str] = Field(default_factory=dict)
 
 
 class MetricsSummary(BaseModel):
@@ -194,11 +196,33 @@ class LabRatingRequest(BaseModel):
     aesthetic_score: int | None = Field(default=None, ge=1, le=10)
     aesthetic_ok: bool | None = None
     human_scan_result: Literal["scannable", "not_scannable", "not_tested"] = "not_tested"
+    human_scan_attempts: int = Field(default=0, ge=0, le=20)
+    human_scan_successes: int = Field(default=0, ge=0, le=20)
+    human_scan_device: str = Field(default="", max_length=200)
     prompt_fidelity_score: int | None = Field(default=None, ge=1, le=10)
     qr_discretion_score: int | None = Field(default=None, ge=1, le=10)
     overall_score: int | None = Field(default=None, ge=1, le=10)
     favorite: bool = False
     notes: str = Field(default="", max_length=4000)
+
+    @model_validator(mode="after")
+    def normalize_repeated_phone_scan(self) -> "LabRatingRequest":
+        if self.human_scan_successes > self.human_scan_attempts:
+            raise ValueError("human scan successes cannot exceed attempts")
+        if self.human_scan_attempts == 0:
+            if self.human_scan_result == "scannable":
+                self.human_scan_attempts = 1
+                self.human_scan_successes = 1
+            elif self.human_scan_result == "not_scannable":
+                self.human_scan_attempts = 1
+                self.human_scan_successes = 0
+        else:
+            self.human_scan_result = (
+                "scannable"
+                if self.human_scan_successes / self.human_scan_attempts >= 2 / 3
+                else "not_scannable"
+            )
+        return self
 
 
 class LabRatingResponse(LabRatingRequest):

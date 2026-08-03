@@ -41,6 +41,7 @@ runs = Table(
     Column("validation_ms", Float),
     Column("total_ms", Float),
     Column("error", Text),
+    Column("provenance", JSON, nullable=False, default=dict),
     Index("idx_runs_created_at", "created_at"),
     Index("idx_runs_status", "status"),
 )
@@ -171,6 +172,9 @@ lab_ratings = Table(
     Column("aesthetic_score", Integer),
     Column("aesthetic_ok", Boolean),
     Column("human_scan_result", String(20), nullable=False, default="not_tested"),
+    Column("human_scan_attempts", Integer, nullable=False, default=0),
+    Column("human_scan_successes", Integer, nullable=False, default=0),
+    Column("human_scan_device", String(200), nullable=False, default=""),
     Column("prompt_fidelity_score", Integer),
     Column("qr_discretion_score", Integer),
     Column("overall_score", Integer),

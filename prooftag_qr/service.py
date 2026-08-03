@@ -14,8 +14,13 @@ from .artifacts import ArtifactStore
 from .backends import GLOBAL_REPAIR_VARIANTS, GenerationBackend
 from .config import Settings
 from .domain import AttemptRecord, RunRecord
-from .qr import generate_diffqrcoder_qr, generate_qr, module_error_rate
-from .quality import image_change_metrics, image_quality_metrics
+from .qr import (
+    diffqrcoder_structure_metrics,
+    generate_diffqrcoder_qr,
+    generate_qr,
+    module_error_rate,
+)
+from .quality import image_change_metrics, image_quality_metrics, image_sha256
 from .repository import RunRepository
 from .schemas import GenerationRequest
 from .validation import QRValidator, compare_validation_to_reference
@@ -523,6 +528,86 @@ class GenerationService:
                     best_validation_summary.get("original_total", 0)
                 ),
             }
+            if hasattr(self.validator, "validate_phone_proxy"):
+                phone_started = time.perf_counter()
+                validation_kwargs = (
+                    backend.validation_kwargs(best_variant)
+                    if hasattr(backend, "validation_kwargs")
+                    else {}
+                )
+                phone_records = self.validator.validate_phone_proxy(
+                    best,
+                    request.payload,
+                    **validation_kwargs,
+                )
+                phone_reference = blueprint.image.convert("RGB").resize(
+                    best.size,
+                    Image.Resampling.NEAREST,
+                )
+                phone_reference_records = self.validator.validate_phone_proxy(
+                    phone_reference,
+                    request.payload,
+                    **validation_kwargs,
+                )
+                phone_summary = compare_validation_to_reference(
+                    phone_records,
+                    phone_reference_records,
+                )
+                phone_elapsed_ms = (time.perf_counter() - phone_started) * 1000
+                validation_ms += phone_elapsed_ms
+                run.validations.extend(phone_records)
+                run.quality_metrics.update(
+                    {
+                        "phone_proxy_raw_pass_rate": float(
+                            phone_summary["raw_pass_rate"]
+                        ),
+                        "phone_proxy_reference_pass_rate": float(
+                            phone_summary["reference_pass_rate"]
+                        ),
+                        "phone_proxy_normalized_pass_rate": float(
+                            phone_summary["normalized_pass_rate"]
+                        ),
+                        "phone_proxy_normalized_passed": float(
+                            phone_summary["normalized_passed"]
+                        ),
+                        "phone_proxy_normalized_total": float(
+                            phone_summary["normalized_total"]
+                        ),
+                        "phone_proxy_calibration_only": 1.0,
+                    }
+                )
+                for item in phone_records:
+                    outcome = (
+                        "exact"
+                        if item.exact_payload_match
+                        else ("wrong_payload" if item.success else "not_detected")
+                    )
+                    metrics.VALIDATIONS.labels(
+                        item.decoder,
+                        item.scenario,
+                        outcome,
+                    ).inc()
+                    metrics.VALIDATION_DURATION.labels(item.decoder).observe(
+                        item.latency_ms / 1000
+                    )
+            if self.settings.diffqrcoder_upstream_enabled:
+                try:
+                    run.quality_metrics.update(
+                        {
+                            f"structure_{name}": value
+                            for name, value in diffqrcoder_structure_metrics(
+                                best,
+                                blueprint,
+                                padding_px=self.settings.diffqrcoder_qr_padding_px,
+                                module_size=self.settings.diffqrcoder_qr_module_size,
+                            ).items()
+                        }
+                    )
+                except ValueError as exc:
+                    logger.warning(
+                        "structure_metrics_skipped",
+                        extra={"run_id": run.id, "reason": str(exc)},
+                    )
             if backend_name == "controlnet" and best_raw_candidate is not None:
                 run.quality_metrics.update(
                     {
@@ -540,6 +625,22 @@ class GenerationService:
                 run.quality_metrics["selection_preserved_stage1"] = float(
                     target_variant is None and best_variant == "raw"
                 )
+            run.provenance = {
+                "final_image_sha256": image_sha256(best),
+                "qr_reference_sha256": image_sha256(
+                    blueprint.image.convert("RGB").resize(
+                        best.size,
+                        Image.Resampling.NEAREST,
+                    )
+                ),
+                "selected_variant": best_variant,
+            }
+            if best_raw_candidate is not None:
+                run.provenance["stage1_image_sha256"] = image_sha256(
+                    best_raw_candidate
+                )
+            if hasattr(backend, "provenance"):
+                run.provenance.update(backend.provenance())
             run.selected_variant = best_variant
             if backend_name == "controlnet":
                 metrics.REPAIR_SELECTED.labels(best_variant).inc()
