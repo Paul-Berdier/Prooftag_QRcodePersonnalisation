@@ -35,7 +35,11 @@ def test_web_lab_exposes_only_the_pinned_diffqrcoder_chain():
         "diffqrcoder_stage1",
         "diffqrcoder_srpg",
         "diffqrcoder_srmpgd",
-        "diffqrcoder_binary_srpg",
+        "diffqrcoder_auto",
+        "diffqrcoder_srpg_s035",
+        "diffqrcoder_srpg_s050",
+        "diffqrcoder_srpg_s080",
+        "diffqrcoder_qart_srpg",
     ]
     generated = [profile for profile in profiles if profile["backend"] == "controlnet"]
     assert all(
@@ -46,17 +50,23 @@ def test_web_lab_exposes_only_the_pinned_diffqrcoder_chain():
         "monster-labs/control_v1p_sd15_qrcode_monster"
     }
     srpg = next(profile for profile in profiles if profile["id"] == "diffqrcoder_srpg")
-    binary = next(
-        profile for profile in profiles if profile["id"] == "diffqrcoder_binary_srpg"
-    )
     assert (
         srpg["tools"]["settings"]["diffqrcoder_stage2_target_mode"]
-        == "qart_url_fragment"
-    )
-    assert (
-        binary["tools"]["settings"]["diffqrcoder_stage2_target_mode"]
         == "binary_exact"
     )
+    assert srpg["tools"]["settings"]["diffqrcoder_stage2_strength"] == 0.65
+    qart = next(
+        profile for profile in profiles if profile["id"] == "diffqrcoder_qart_srpg"
+    )
+    automatic = next(
+        profile for profile in profiles if profile["id"] == "diffqrcoder_auto"
+    )
+    assert (
+        qart["tools"]["settings"]["diffqrcoder_stage2_target_mode"]
+        == "qart_url_fragment"
+    )
+    assert qart["enabled"] is False
+    assert automatic["enabled"] is False
 
 
 def test_srmpgd_reuses_the_matching_srpg_stage2_cache_key(tmp_path):
@@ -76,6 +86,9 @@ def test_srmpgd_reuses_the_matching_srpg_stage2_cache_key(tmp_path):
     srmpgd = LabMethod.model_validate(
         next(item for item in profiles if item["id"] == "diffqrcoder_srmpgd")
     )
+    automatic = LabMethod.model_validate(
+        next(item for item in profiles if item["id"] == "diffqrcoder_auto")
+    )
     try:
         srpg_key = service._stage2_cache_key(
             srpg,
@@ -93,10 +106,19 @@ def test_srmpgd_reuses_the_matching_srpg_stage2_cache_key(tmp_path):
             "M",
             "https://ptag.io/t/cache",
         )
+        automatic_key = service._stage2_cache_key(
+            automatic,
+            "blue courtyard",
+            "easynegative",
+            51001,
+            "M",
+            "https://ptag.io/t/cache",
+        )
     finally:
         service.shutdown()
 
     assert srpg_key == srmpgd_key
+    assert srpg_key == automatic_key
 
 
 def test_lab_limits_cartesian_campaign_size():

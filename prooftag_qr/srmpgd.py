@@ -13,7 +13,12 @@ from .guidance import (
     qr_core_geometry,
     scanning_robust_loss,
 )
-from .qr import QRBlueprint, module_error_rate, prepare_scan_ready_image
+from .qr import (
+    QRBlueprint,
+    diffqrcoder_module_error_rate,
+    module_error_rate,
+    prepare_scan_ready_image,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,21 +211,16 @@ def _module_error_for_canvas(
     """Measure modules on the same core crop used by the differentiable objective."""
     if crop_padding_px == 0:
         return module_error_rate(image, blueprint)
-    core_image = image.crop(
-        (
-            crop_padding_px,
-            crop_padding_px,
-            image.width - crop_padding_px,
-            image.height - crop_padding_px,
-        )
-    )
-    core_blueprint = _core_blueprint(
+    core_modules = blueprint.matrix.shape[0] - 2 * blueprint.border
+    core_size = image.width - 2 * crop_padding_px
+    if core_modules <= 0 or core_size % core_modules:
+        raise ValueError("QR core does not have an integer module geometry")
+    return diffqrcoder_module_error_rate(
+        image,
         blueprint,
-        height=core_image.height,
-        width=core_image.width,
-        strip_border=blueprint.border > 0,
+        padding_px=crop_padding_px,
+        module_size=core_size // core_modules,
     )
-    return module_error_rate(core_image, core_blueprint)
 
 
 def _validation_values(values: Mapping[str, Any] | None) -> dict[str, Any]:

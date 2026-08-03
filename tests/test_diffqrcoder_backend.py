@@ -1,6 +1,8 @@
 import numpy as np
+import pytest
 from PIL import Image
 
+import prooftag_qr.diffqrcoder_backend as backend_module
 from prooftag_qr.config import Settings
 from prooftag_qr.diffqrcoder_backend import (
     UpstreamDiffQRCoderBackend,
@@ -77,3 +79,44 @@ def test_partial_stage2_schedule_avoids_custom_timesteps_and_keeps_stride():
         assert pipe.scheduler.timesteps == list(range(20, 40))
 
     assert pipe.scheduler.set_timesteps == original
+
+
+def test_color_guard_distinguishes_warning_from_destructive_divergence(monkeypatch):
+    change = {
+        "changed_pixel_ratio": 0.99,
+        "mean_absolute_change": 0.36,
+        "clipped_pixel_ratio_increase": 0.06,
+        "rgb_clipped_channel_ratio_increase": 0.03,
+        "saturation_mean_increase": 0.09,
+        "high_saturation_ratio_increase": 0.06,
+    }
+    quality = {
+        "clipped_pixel_ratio": 0.06,
+        "rgb_clipped_channel_ratio": 0.03,
+        "saturation_mean": 0.50,
+        "saturation_p95": 0.95,
+    }
+    monkeypatch.setattr(backend_module, "image_change_metrics", lambda *_: change)
+    monkeypatch.setattr(backend_module, "image_quality_metrics", lambda *_: quality)
+    backend = UpstreamDiffQRCoderBackend(Settings())
+    image = Image.new("RGB", (32, 32), "red")
+
+    backend._record_divergence_guard(image, image)
+
+    assert backend.diagnostics()["diffqrcoder_guard_warning"] == 1.0
+    assert backend.diagnostics()["diffqrcoder_guard_diverged"] == 0.0
+    assert backend.candidate_guard_ok("srpg") is True
+
+    change["saturation_mean_increase"] = 0.25
+    backend._record_divergence_guard(image, image)
+
+    assert backend.diagnostics()["diffqrcoder_guard_diverged"] == 1.0
+    assert backend.candidate_guard_ok("srpg") is False
+
+
+def test_hard_color_guard_must_be_at_least_the_warning_threshold():
+    with pytest.raises(ValueError, match="hard saturation mean guard"):
+        Settings(
+            diffqrcoder_guard_max_saturation_mean_increase=0.25,
+            diffqrcoder_guard_hard_max_saturation_mean_increase=0.20,
+        )

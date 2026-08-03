@@ -544,6 +544,11 @@ TOOL_SETTING_KEYS = {
     "diffqrcoder_guard_max_rgb_clipped_channel_ratio_increase",
     "diffqrcoder_guard_max_saturation_mean_increase",
     "diffqrcoder_guard_max_high_saturation_ratio_increase",
+    "diffqrcoder_guard_hard_max_mean_absolute_change",
+    "diffqrcoder_guard_hard_max_clipped_pixel_ratio_increase",
+    "diffqrcoder_guard_hard_max_rgb_clipped_channel_ratio_increase",
+    "diffqrcoder_guard_hard_max_saturation_mean_increase",
+    "diffqrcoder_guard_hard_max_high_saturation_ratio_increase",
 }
 
 
@@ -568,8 +573,8 @@ def laboratory_profiles() -> list[dict[str, Any]]:
         "diffqrcoder_control_guidance_start": 0.0,
         "diffqrcoder_control_guidance_end": 1.0,
         "diffqrcoder_stage2_initialization": "paper_stage1_noise",
-        "diffqrcoder_stage2_strength": 1.0,
-        "diffqrcoder_stage2_target_mode": "qart_url_fragment",
+        "diffqrcoder_stage2_strength": 0.65,
+        "diffqrcoder_stage2_target_mode": "binary_exact",
         "diffqrcoder_qart_thresholds": [96, 112, 128, 144, 160],
         "diffqrcoder_guard_max_changed_pixel_ratio": 0.995,
         "diffqrcoder_guard_max_mean_absolute_change": 0.35,
@@ -577,7 +582,20 @@ def laboratory_profiles() -> list[dict[str, Any]]:
         "diffqrcoder_guard_max_rgb_clipped_channel_ratio_increase": 0.02,
         "diffqrcoder_guard_max_saturation_mean_increase": 0.08,
         "diffqrcoder_guard_max_high_saturation_ratio_increase": 0.05,
+        "diffqrcoder_guard_hard_max_mean_absolute_change": 0.40,
+        "diffqrcoder_guard_hard_max_clipped_pixel_ratio_increase": 0.20,
+        "diffqrcoder_guard_hard_max_rgb_clipped_channel_ratio_increase": 0.25,
+        "diffqrcoder_guard_hard_max_saturation_mean_increase": 0.20,
+        "diffqrcoder_guard_hard_max_high_saturation_ratio_increase": 0.30,
     }
+
+    def stage2_at(strength: float, *, target: str = "binary_exact") -> dict:
+        return {
+            **stage2,
+            "diffqrcoder_stage2_strength": strength,
+            "diffqrcoder_stage2_target_mode": target,
+        }
+
     return [
         {
             "id": "qr_reference",
@@ -619,12 +637,11 @@ def laboratory_profiles() -> list[dict[str, Any]]:
             "model": DIFFQRCODER_MODEL_SETTINGS.copy(),
             "tools": {
                 "srpg_enabled": True,
-                "settings": stage2.copy(),
+                "settings": stage2_at(0.65),
             },
             "description": (
-                "Chaîne du papier : Stage 1 bruité, vraie cible QArt "
-                "Reed-Solomon puis SRPG. QArt conserve l'URL avant le fragment, "
-                "mais le payload n'est pas identique byte à byte."
+                "Recette principale mesurée : cible binaire exacte, Stage 1 "
+                "partiellement bruité à 65 %, puis SRPG."
             ),
         },
         {
@@ -640,7 +657,7 @@ def laboratory_profiles() -> list[dict[str, Any]]:
                 "srpg_enabled": True,
                 "srmpgd_enabled": True,
                 "settings": {
-                    **stage2,
+                    **stage2_at(0.65),
                     "srmpgd_max_iterations": 20,
                     "srmpgd_step_size": 1000.0,
                     "srmpgd_lpips_weight": 0.01,
@@ -649,17 +666,58 @@ def laboratory_profiles() -> list[dict[str, Any]]:
                     "srmpgd_dark_threshold": 0.45,
                     "srmpgd_light_threshold": 0.65,
                     "srmpgd_center_fraction": 1 / 3,
-                    "srmpgd_max_initial_module_error_rate": 0.35,
+                    "srmpgd_max_initial_module_error_rate": 0.12,
                 },
             },
             "description": (
-                "Stage 2 QArt puis Eq. 13-14 : SRL + 0,01 LPIPS, gamma 1000, "
-                "validation à chaque itération et conservation du meilleur état."
+                "Reprend exactement le latent du Stage 2 binaire à 65 %, puis "
+                "Eq. 13-14. Arrêt si le MER initial dépasse 12 %."
             ),
         },
         {
-            "id": "diffqrcoder_binary_srpg",
-            "name": "DiffQRCoder — SRPG cible binaire (témoin)",
+            "id": "diffqrcoder_auto",
+            "name": "DiffQRCoder — meilleur Stage 1 / Stage 2",
+            "backend": "controlnet",
+            "enabled": False,
+            "output_variant": "auto",
+            "reuse_stage1": True,
+            "generation": generation.copy(),
+            "model": DIFFQRCODER_MODEL_SETTINGS.copy(),
+            "tools": {
+                "srpg_enabled": True,
+                "settings": stage2_at(0.65),
+            },
+            "description": (
+                "Mode livraison optionnel. Aucun recalcul GPU : compare le Stage 1 "
+                "et le Stage 2 appariés, puis conserve d'abord la sortie lisible, "
+                "ensuite la moins altérée. Le laisser désactivé pendant une campagne "
+                "visuelle évite une vignette dupliquée."
+            ),
+        },
+        *[
+            {
+                "id": f"diffqrcoder_srpg_s{int(strength * 100):03d}",
+                "name": f"DiffQRCoder — SRPG binaire force {strength:.2f}",
+                "backend": "controlnet",
+                "enabled": False,
+                "output_variant": "srpg",
+                "reuse_stage1": True,
+                "generation": generation.copy(),
+                "model": DIFFQRCODER_MODEL_SETTINGS.copy(),
+                "tools": {
+                    "srpg_enabled": True,
+                    "settings": stage2_at(strength),
+                },
+                "description": (
+                    "Point de l'ablation appariée de force de bruit ; activez-le "
+                    "pour comparer 0,35 / 0,50 / 0,65 / 0,80."
+                ),
+            }
+            for strength in (0.35, 0.50, 0.80)
+        ],
+        {
+            "id": "diffqrcoder_qart_srpg",
+            "name": "DiffQRCoder — QArt public expérimental",
             "backend": "controlnet",
             "enabled": False,
             "output_variant": "srpg",
@@ -668,14 +726,11 @@ def laboratory_profiles() -> list[dict[str, Any]]:
             "model": DIFFQRCODER_MODEL_SETTINGS.copy(),
             "tools": {
                 "srpg_enabled": True,
-                "settings": {
-                    **stage2,
-                    "diffqrcoder_stage2_target_mode": "binary_exact",
-                },
+                "settings": stage2_at(0.65, target="qart_url_fragment"),
             },
             "description": (
-                "Ablation payload exact : cible QR binaire sans QArt. Le "
-                "redémarrage complet peut reconstruire et dégrader tout le Stage 1."
+                "Ablation uniquement : la campagne fc403349 a obtenu 0/4 scans "
+                "téléphone. Le payload suit le contrat URL avant fragment."
             ),
         },
     ]

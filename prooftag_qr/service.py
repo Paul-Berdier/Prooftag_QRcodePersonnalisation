@@ -18,7 +18,7 @@ from .qr import generate_diffqrcoder_qr, generate_qr, module_error_rate
 from .quality import image_change_metrics, image_quality_metrics
 from .repository import RunRepository
 from .schemas import GenerationRequest
-from .validation import QRValidator, summarize_validation_records
+from .validation import QRValidator, compare_validation_to_reference
 
 logger = logging.getLogger(__name__)
 
@@ -95,11 +95,66 @@ class GenerationService:
             )
             run.qr_version = blueprint.version
             backend = self.backends[backend_name]
+            reference_validation_cache: dict[tuple[str, tuple[int, int]], list] = {}
+
+            def validate_against_reference(
+                image: Image.Image,
+                variant_name: str,
+            ) -> tuple[list, dict[str, object]]:
+                validation_kwargs = (
+                    backend.validation_kwargs(variant_name)
+                    if hasattr(backend, "validation_kwargs")
+                    else {}
+                )
+                match_mode = str(validation_kwargs.get("match_mode", "exact"))
+                cache_key = (match_mode, image.size)
+                reference_records = reference_validation_cache.get(cache_key)
+                if reference_records is None:
+                    reference_image = blueprint.image.convert("RGB").resize(
+                        image.size,
+                        Image.Resampling.NEAREST,
+                    )
+                    reference_records = self.validator.validate(
+                        reference_image,
+                        request.payload,
+                        **validation_kwargs,
+                    )
+                    reference_validation_cache[cache_key] = reference_records
+                records = self.validator.validate(
+                    image,
+                    request.payload,
+                    **validation_kwargs,
+                )
+                return records, compare_validation_to_reference(
+                    records,
+                    reference_records,
+                )
+
+            def measure_module_error(
+                image: Image.Image,
+                variant_name: str,
+            ) -> float:
+                if hasattr(backend, "measure_module_error"):
+                    return backend.measure_module_error(
+                        variant_name,
+                        image,
+                        blueprint,
+                    )
+                metric_blueprint = (
+                    backend.module_blueprint(variant_name, blueprint)
+                    if hasattr(backend, "module_blueprint")
+                    else blueprint
+                )
+                return module_error_rate(image, metric_blueprint)
+
             max_attempts = request.max_attempts or self.settings.max_attempts
             best = None
             best_records = []
+            best_validation_summary: dict[str, object] = {}
             best_pass_rate = -1.0
+            best_module_error_rate = 1.0
             best_changed_pixel_ratio = float("inf")
+            best_accepted = False
             generation_ms = 0.0
             validation_ms = 0.0
 
@@ -121,6 +176,7 @@ class GenerationService:
 
                     attempt_best = None
                     attempt_best_records = []
+                    attempt_best_validation_summary: dict[str, object] = {}
                     attempt_best_pass_rate = -1.0
                     attempt_best_module_error_rate = 1.0
                     attempt_best_changed_pixel_ratio = float("inf")
@@ -144,26 +200,23 @@ class GenerationService:
                         iteration: int,
                     ) -> dict[str, object]:
                         del iteration
-                        validation_kwargs = (
-                            backend.validation_kwargs("srmpgd")
-                            if hasattr(backend, "validation_kwargs")
-                            else {}
-                        )
-                        refinement_records = self.validator.validate(
+                        _, summary = validate_against_reference(
                             image,
-                            request.payload,
-                            **validation_kwargs,
+                            "srmpgd",
                         )
-                        passed = sum(
-                            item.exact_payload_match for item in refinement_records
-                        )
-                        total = len(refinement_records)
                         return {
-                            "passed": passed,
-                            "total": total,
-                            "pass_rate": passed / total if total else 0.0,
-                            "strict_all": total > 0 and passed == total,
-                            **summarize_validation_records(refinement_records),
+                            "passed": summary["normalized_passed"],
+                            "total": summary["normalized_total"],
+                            "pass_rate": summary["normalized_pass_rate"],
+                            "strict_all": summary["normalized_strict_all"],
+                            "decoder_pass_rates": summary["decoder_pass_rates"],
+                            "scenario_pass_rates": summary["scenario_pass_rates"],
+                            "worst_decoder_pass_rate": summary[
+                                "worst_decoder_pass_rate"
+                            ],
+                            "worst_scenario_pass_rate": summary[
+                                "worst_scenario_pass_rate"
+                            ],
                         }
 
                     variant_iterator = iter(
@@ -200,15 +253,9 @@ class GenerationService:
                         if variant_name in GLOBAL_REPAIR_VARIANTS and not allow_global_repair:
                             continue
                         validation_started = time.perf_counter()
-                        validation_kwargs = (
-                            backend.validation_kwargs(variant_name)
-                            if hasattr(backend, "validation_kwargs")
-                            else {}
-                        )
-                        records = self.validator.validate(
+                        records, validation_summary = validate_against_reference(
                             candidate,
-                            request.payload,
-                            **validation_kwargs,
+                            variant_name,
                         )
                         variant_validation_ms = (time.perf_counter() - validation_started) * 1000
                         attempt_validation_ms += variant_validation_ms
@@ -216,16 +263,12 @@ class GenerationService:
                         metrics.DURATION.labels(backend_name, "validation").observe(
                             variant_validation_ms / 1000
                         )
-                        exact_count = sum(item.exact_payload_match for item in records)
-                        pass_rate = exact_count / len(records) if records else 0.0
-                        metric_blueprint = (
-                            backend.module_blueprint(variant_name, blueprint)
-                            if hasattr(backend, "module_blueprint")
-                            else blueprint
+                        pass_rate = float(
+                            validation_summary["normalized_pass_rate"]
                         )
-                        variant_module_error_rate = module_error_rate(
+                        variant_module_error_rate = measure_module_error(
                             candidate,
-                            metric_blueprint,
+                            variant_name,
                         )
                         variant_quality = {
                             **image_quality_metrics(candidate),
@@ -241,10 +284,8 @@ class GenerationService:
                             metrics.VALIDATION_DURATION.labels(item.decoder).observe(
                                 item.latency_ms / 1000
                             )
-                        original_ok = all(
-                            item.exact_payload_match
-                            for item in records
-                            if item.scenario == "original"
+                        original_ok = bool(
+                            validation_summary["original_strict_all"]
                         )
                         accepted = (
                             original_ok
@@ -371,6 +412,7 @@ class GenerationService:
                         if accepted_is_better or rejected_is_better:
                             attempt_best = candidate
                             attempt_best_records = records
+                            attempt_best_validation_summary = validation_summary
                             attempt_best_pass_rate = pass_rate
                             attempt_best_module_error_rate = variant_module_error_rate
                             attempt_best_changed_pixel_ratio = variant_changed_pixel_ratio
@@ -410,8 +452,11 @@ class GenerationService:
                     ):
                         best = attempt_best
                         best_records = attempt_best_records
+                        best_validation_summary = attempt_best_validation_summary
                         best_pass_rate = attempt_best_pass_rate
+                        best_module_error_rate = attempt_best_module_error_rate
                         best_changed_pixel_ratio = attempt_best_changed_pixel_ratio
+                        best_accepted = attempt_best_accepted
                         best_variant = attempt_best_variant
                         best_attempt = attempt + 1
                         best_raw_candidate = raw_candidate.copy()
@@ -450,11 +495,34 @@ class GenerationService:
                 raise RuntimeError("The backend did not produce an image")
             run.validations = best_records
             run.scan_pass_rate = best_pass_rate
-            run.exact_payload_match = all(
-                item.exact_payload_match for item in best_records if item.scenario == "original"
+            run.exact_payload_match = bool(
+                best_validation_summary.get("original_strict_all", False)
             )
-            run.module_error_rate = module_error_rate(best, blueprint)
-            run.quality_metrics = image_quality_metrics(best)
+            run.module_error_rate = best_module_error_rate
+            run.quality_metrics = {
+                **image_quality_metrics(best),
+                "validation_raw_pass_rate": float(
+                    best_validation_summary.get("raw_pass_rate", 0.0)
+                ),
+                "validation_reference_pass_rate": float(
+                    best_validation_summary.get("reference_pass_rate", 0.0)
+                ),
+                "validation_normalized_pass_rate": float(
+                    best_validation_summary.get("normalized_pass_rate", 0.0)
+                ),
+                "validation_normalized_passed": float(
+                    best_validation_summary.get("normalized_passed", 0)
+                ),
+                "validation_normalized_total": float(
+                    best_validation_summary.get("normalized_total", 0)
+                ),
+                "validation_original_passed": float(
+                    best_validation_summary.get("original_passed", 0)
+                ),
+                "validation_original_total": float(
+                    best_validation_summary.get("original_total", 0)
+                ),
+            }
             if backend_name == "controlnet" and best_raw_candidate is not None:
                 run.quality_metrics.update(
                     {
@@ -466,18 +534,19 @@ class GenerationService:
                     }
                 )
                 run.quality_metrics.update(backend.diagnostics())
+                run.quality_metrics["selection_auto_mode"] = float(
+                    target_variant is None
+                )
+                run.quality_metrics["selection_preserved_stage1"] = float(
+                    target_variant is None and best_variant == "raw"
+                )
             run.selected_variant = best_variant
             if backend_name == "controlnet":
                 metrics.REPAIR_SELECTED.labels(best_variant).inc()
             run.image_path = self.artifact_store.save_image(run.id, best)
             run.generation_ms = generation_ms
             run.validation_ms = validation_ms
-            run.status = (
-                "accepted"
-                if run.exact_payload_match
-                and run.scan_pass_rate >= self.settings.validation_min_pass_rate
-                else "rejected"
-            )
+            run.status = "accepted" if best_accepted else "rejected"
             metrics.SCAN_PASS_RATE.observe(run.scan_pass_rate)
             metrics.MODULE_ERROR_RATE.observe(run.module_error_rate)
             for name, value in run.quality_metrics.items():

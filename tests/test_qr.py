@@ -3,6 +3,7 @@ from PIL import Image
 
 from prooftag_qr.qr import (
     adaptive_quiet_zone_color,
+    diffqrcoder_module_error_rate,
     functional_pattern_mask,
     generate_diffqrcoder_qr,
     generate_qr,
@@ -43,6 +44,24 @@ def test_diffqrcoder_reference_uses_the_public_integer_geometry():
     assert blueprint.version == 3
     assert blueprint.border == 4
     assert OpenCVDecoder().decode(blueprint.image) == payload
+
+
+def test_diffqrcoder_mer_uses_the_exact_580_pixel_core_geometry():
+    blueprint = generate_diffqrcoder_qr("https://ptag.io/t/lab01", "M")
+    core_matrix = blueprint.matrix[4:-4, 4:-4]
+    core = Image.fromarray(np.where(core_matrix, 0, 255).astype(np.uint8)).resize(
+        (580, 580),
+        Image.Resampling.NEAREST,
+    )
+    candidate = Image.new("RGB", (736, 736), "white")
+    candidate.paste(core.convert("RGB"), (78, 78))
+
+    assert diffqrcoder_module_error_rate(
+        candidate,
+        blueprint,
+        padding_px=78,
+        module_size=20,
+    ) == 0.0
 
 
 def test_restore_quiet_zone_preserves_the_artistic_core_and_clears_only_the_margin():

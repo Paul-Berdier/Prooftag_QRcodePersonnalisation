@@ -15,7 +15,7 @@ from . import metrics
 from .blueprints import canonical_url_match
 from .config import Settings
 from .qart import build_qart_target
-from .qr import QRBlueprint
+from .qr import QRBlueprint, diffqrcoder_module_error_rate, module_error_rate
 from .quality import image_change_metrics, image_quality_metrics
 from .schemas import GenerationRequest
 from .srmpgd import SRMPGDConfig, run_srmpgd
@@ -401,6 +401,22 @@ class UpstreamDiffQRCoderBackend:
             return self._stage2_control.blueprint
         return fallback
 
+    def measure_module_error(
+        self,
+        variant_name: str,
+        image: Image.Image,
+        fallback: QRBlueprint,
+    ) -> float:
+        blueprint = self.module_blueprint(variant_name, fallback)
+        if variant_name not in {"srpg", "srmpgd"}:
+            return module_error_rate(image, blueprint)
+        return diffqrcoder_module_error_rate(
+            image,
+            blueprint,
+            padding_px=self.settings.diffqrcoder_qr_padding_px,
+            module_size=self.settings.diffqrcoder_qr_module_size,
+        )
+
     def _record_divergence_guard(
         self,
         image: Image.Image,
@@ -408,7 +424,7 @@ class UpstreamDiffQRCoderBackend:
     ) -> None:
         change = image_change_metrics(image, candidate)
         quality = image_quality_metrics(image)
-        reasons = {
+        warnings = {
             "changed_pixels": (
                 change["changed_pixel_ratio"]
                 > self.settings.diffqrcoder_guard_max_changed_pixel_ratio
@@ -434,9 +450,32 @@ class UpstreamDiffQRCoderBackend:
                 > self.settings.diffqrcoder_guard_max_high_saturation_ratio_increase
             ),
         }
+        hard_failures = {
+            "mean_absolute_change": (
+                change["mean_absolute_change"]
+                > self.settings.diffqrcoder_guard_hard_max_mean_absolute_change
+            ),
+            "clipped_pixels": (
+                change["clipped_pixel_ratio_increase"]
+                > self.settings.diffqrcoder_guard_hard_max_clipped_pixel_ratio_increase
+            ),
+            "rgb_clipped_channels": (
+                change["rgb_clipped_channel_ratio_increase"]
+                > self.settings.diffqrcoder_guard_hard_max_rgb_clipped_channel_ratio_increase
+            ),
+            "saturation_mean_increase": (
+                change["saturation_mean_increase"]
+                > self.settings.diffqrcoder_guard_hard_max_saturation_mean_increase
+            ),
+            "high_saturation_increase": (
+                change["high_saturation_ratio_increase"]
+                > self.settings.diffqrcoder_guard_hard_max_high_saturation_ratio_increase
+            ),
+        }
         self._diagnostics.update(
             {
-                "diffqrcoder_guard_diverged": float(any(reasons.values())),
+                "diffqrcoder_guard_warning": float(any(warnings.values())),
+                "diffqrcoder_guard_diverged": float(any(hard_failures.values())),
                 "diffqrcoder_stage2_changed_pixel_ratio": float(
                     change["changed_pixel_ratio"]
                 ),
@@ -468,20 +507,33 @@ class UpstreamDiffQRCoderBackend:
                     change["high_saturation_ratio_increase"]
                 ),
                 "diffqrcoder_guard_changed_pixels": float(
-                    reasons["changed_pixels"]
+                    warnings["changed_pixels"]
                 ),
                 "diffqrcoder_guard_mean_absolute_change": float(
-                    reasons["mean_absolute_change"]
+                    warnings["mean_absolute_change"]
                 ),
                 "diffqrcoder_guard_clipped_pixels": float(
-                    reasons["clipped_pixels"]
+                    warnings["clipped_pixels"]
                 ),
                 "diffqrcoder_guard_rgb_clipped_channels": float(
-                    reasons["rgb_clipped_channels"]
+                    warnings["rgb_clipped_channels"]
                 ),
                 "diffqrcoder_guard_saturation": float(
-                    reasons["saturation_mean_increase"]
-                    or reasons["high_saturation_increase"]
+                    warnings["saturation_mean_increase"]
+                    or warnings["high_saturation_increase"]
+                ),
+                "diffqrcoder_guard_hard_mean_absolute_change": float(
+                    hard_failures["mean_absolute_change"]
+                ),
+                "diffqrcoder_guard_hard_clipped_pixels": float(
+                    hard_failures["clipped_pixels"]
+                ),
+                "diffqrcoder_guard_hard_rgb_clipped_channels": float(
+                    hard_failures["rgb_clipped_channels"]
+                ),
+                "diffqrcoder_guard_hard_saturation": float(
+                    hard_failures["saturation_mean_increase"]
+                    or hard_failures["high_saturation_increase"]
                 ),
             }
         )

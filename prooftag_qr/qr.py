@@ -76,6 +76,54 @@ def module_error_rate(candidate: Image.Image, blueprint: QRBlueprint) -> float:
     return float(errors.mean())
 
 
+def diffqrcoder_module_error_rate(
+    candidate: Image.Image,
+    blueprint: QRBlueprint,
+    *,
+    padding_px: int,
+    module_size: int,
+) -> float:
+    """Measure the exact 20 px QR core used by DiffQRCoder's losses.
+
+    The public pipeline uses a 736 px canvas, a 78 px crop and a 580 px
+    version-3 core. Dividing the complete canvas into 37 equal cells introduces
+    a cumulative offset because 78 px is 3.9 modules, not four modules.
+    """
+    if padding_px < 0:
+        raise ValueError("padding_px cannot be negative")
+    source = candidate.convert("RGB")
+    if padding_px:
+        if source.width <= 2 * padding_px or source.height <= 2 * padding_px:
+            raise ValueError("padding removes the complete QR image")
+        source = source.crop(
+            (
+                padding_px,
+                padding_px,
+                source.width - padding_px,
+                source.height - padding_px,
+            )
+        )
+    border = int(blueprint.border)
+    matrix = (
+        blueprint.matrix[border:-border, border:-border].copy()
+        if border
+        else blueprint.matrix.copy()
+    )
+    expected_size = matrix.shape[0] * module_size
+    if source.size != (expected_size, expected_size):
+        raise ValueError(
+            f"DiffQRCoder core is {source.size}, expected "
+            f"{(expected_size, expected_size)}"
+        )
+    core = QRBlueprint(
+        image=Image.new("RGB", source.size, "white"),
+        matrix=matrix,
+        version=blueprint.version,
+        border=0,
+    )
+    return module_error_rate(source, core)
+
+
 def module_error_map(candidate: Image.Image, blueprint: QRBlueprint) -> np.ndarray:
     """Return the binary module error map on the delivered canvas."""
     gray = np.asarray(candidate.convert("L"), dtype=np.float32)

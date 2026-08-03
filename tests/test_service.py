@@ -78,6 +78,40 @@ class RefinementCallbackBackend(GenerationBackend):
         yield "srmpgd", candidate
 
 
+class AutoFallbackBackend(GenerationBackend):
+    def generate(self, request, blueprint, seed):
+        return Image.new("RGB", blueprint.image.size, "red")
+
+    def variants(self, candidate, blueprint, **kwargs):
+        yield "raw", candidate
+        yield "srpg", Image.new("RGB", blueprint.image.size, "black")
+
+
+class ReferenceLimitedValidator:
+    def validate(self, image, expected_payload):
+        readable = image.getpixel((0, 0)) != (0, 0, 0)
+        return [
+            ValidationRecord(
+                decoder="fake",
+                scenario="original",
+                success=readable,
+                exact_payload_match=readable,
+                latency_ms=0.0,
+                decoded_hash=None,
+                parameters={},
+            ),
+            ValidationRecord(
+                decoder="fake",
+                scenario="unsupported_blur",
+                success=False,
+                exact_payload_match=False,
+                latency_ms=0.0,
+                decoded_hash=None,
+                parameters={},
+            ),
+        ]
+
+
 class ColorValidator:
     def validate(self, image, expected_payload):
         exact = image.getpixel((0, 0)) != (0, 0, 0)
@@ -384,3 +418,68 @@ def test_forced_laboratory_output_reuses_supplied_stage1_without_regeneration(tm
     assert run.stage1_source_run_id == "source-run"
     assert run.selected_variant == "srpg"
     assert service.last_raw_candidate.getpixel((0, 0)) == (255, 0, 0)
+
+
+def test_reference_limited_validation_is_normalized_in_the_service(tmp_path):
+    settings = Settings(
+        data_dir=tmp_path / "data",
+        model_cache_dir=tmp_path / "models",
+        validation_min_pass_rate=1.0,
+        max_attempts=1,
+    )
+    settings.ensure_directories()
+    service = GenerationService(
+        settings=settings,
+        repository=RunRepository(settings.database_url),
+        artifact_store=LocalArtifactStore(settings.artifacts_dir),
+        backends={"controlnet": AutoFallbackBackend()},
+        validator=ReferenceLimitedValidator(),
+    )
+
+    run = service.generate(
+        GenerationRequest(
+            payload="https://example.prooftag.test/t/normalized",
+            backend="controlnet",
+            max_attempts=1,
+        ),
+        target_variant="raw",
+    )
+
+    assert run.status == "accepted"
+    assert run.scan_pass_rate == 1.0
+    assert run.quality_metrics["validation_raw_pass_rate"] == 0.5
+    assert run.quality_metrics["validation_reference_pass_rate"] == 0.5
+    assert run.quality_metrics["validation_normalized_pass_rate"] == 1.0
+
+
+def test_auto_mode_keeps_stage1_when_stage2_loses_scannability(tmp_path):
+    settings = Settings(
+        data_dir=tmp_path / "data",
+        model_cache_dir=tmp_path / "models",
+        validation_min_pass_rate=1.0,
+        max_attempts=1,
+    )
+    settings.ensure_directories()
+    service = GenerationService(
+        settings=settings,
+        repository=RunRepository(settings.database_url),
+        artifact_store=LocalArtifactStore(settings.artifacts_dir),
+        backends={"controlnet": AutoFallbackBackend()},
+        validator=ColorValidator(),
+    )
+
+    run = service.generate(
+        GenerationRequest(
+            payload="https://example.prooftag.test/t/auto-fallback",
+            backend="controlnet",
+            max_attempts=1,
+        )
+    )
+
+    assert run.status == "accepted"
+    assert run.selection_mode == "delivery"
+    assert run.selected_variant == "raw"
+    assert run.quality_metrics["selection_auto_mode"] == 1.0
+    assert run.quality_metrics["selection_preserved_stage1"] == 1.0
+    with Image.open(run.image_path) as selected:
+        assert selected.getpixel((0, 0)) == (255, 0, 0)

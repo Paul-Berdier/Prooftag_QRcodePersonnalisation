@@ -138,7 +138,7 @@ class LabMethod(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     backend: Literal["qr", "controlnet"] = "controlnet"
     enabled: bool = True
-    output_variant: Literal["raw", "srpg", "srmpgd"] = "raw"
+    output_variant: Literal["raw", "srpg", "srmpgd", "auto"] = "raw"
     reuse_stage1: bool = True
     generation: dict[str, Any] = Field(default_factory=dict)
     model: dict[str, Any] = Field(default_factory=dict)

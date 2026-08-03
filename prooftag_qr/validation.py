@@ -16,6 +16,90 @@ from PIL import Image, ImageEnhance, ImageFilter
 from .domain import ValidationRecord
 
 
+def compare_validation_to_reference(
+    records: list[ValidationRecord],
+    reference_records: list[ValidationRecord],
+) -> dict[str, Any]:
+    """Score only decoder/scenario pairs that the binary control can pass.
+
+    A robust transform that already defeats a pristine QR is not a meaningful
+    failure of an artistic candidate. Raw and reference rates remain available
+    for audit, while ``normalized_pass_rate`` is the production gate.
+    """
+    candidate_by_key = {
+        (record.decoder, record.scenario): record.exact_payload_match
+        for record in records
+    }
+    supported = [
+        record
+        for record in reference_records
+        if record.exact_payload_match
+    ]
+    supported_values = [
+        bool(candidate_by_key.get((record.decoder, record.scenario), False))
+        for record in supported
+    ]
+    original_supported = [
+        record for record in supported if record.scenario == "original"
+    ]
+    original_values = [
+        bool(candidate_by_key.get((record.decoder, record.scenario), False))
+        for record in original_supported
+    ]
+    grouped_decoders: dict[str, list[bool]] = defaultdict(list)
+    grouped_scenarios: dict[str, list[bool]] = defaultdict(list)
+    for reference, passed in zip(supported, supported_values, strict=True):
+        grouped_decoders[reference.decoder].append(passed)
+        grouped_scenarios[reference.scenario].append(passed)
+    decoder_pass_rates = {
+        name: sum(values) / len(values)
+        for name, values in sorted(grouped_decoders.items())
+    }
+    scenario_pass_rates = {
+        name: sum(values) / len(values)
+        for name, values in sorted(grouped_scenarios.items())
+    }
+    raw_passed = sum(record.exact_payload_match for record in records)
+    reference_passed = sum(
+        record.exact_payload_match for record in reference_records
+    )
+    normalized_passed = sum(supported_values)
+    normalized_total = len(supported_values)
+    original_passed = sum(original_values)
+    original_total = len(original_values)
+    return {
+        "raw_passed": raw_passed,
+        "raw_total": len(records),
+        "raw_pass_rate": raw_passed / len(records) if records else 0.0,
+        "reference_passed": reference_passed,
+        "reference_total": len(reference_records),
+        "reference_pass_rate": (
+            reference_passed / len(reference_records)
+            if reference_records
+            else 0.0
+        ),
+        "normalized_passed": normalized_passed,
+        "normalized_total": normalized_total,
+        "normalized_pass_rate": (
+            normalized_passed / normalized_total if normalized_total else 0.0
+        ),
+        "normalized_strict_all": (
+            normalized_total > 0 and normalized_passed == normalized_total
+        ),
+        "original_passed": original_passed,
+        "original_total": original_total,
+        "original_strict_all": (
+            original_total > 0 and original_passed == original_total
+        ),
+        "decoder_pass_rates": decoder_pass_rates,
+        "scenario_pass_rates": scenario_pass_rates,
+        "worst_decoder_pass_rate": min(decoder_pass_rates.values(), default=0.0),
+        "worst_scenario_pass_rate": min(
+            scenario_pass_rates.values(), default=0.0
+        ),
+    }
+
+
 def summarize_validation_records(records: list[ValidationRecord]) -> dict[str, Any]:
     """Expose the weak decoder and scenario instead of hiding them in a global mean."""
     grouped_decoders: dict[str, list[bool]] = defaultdict(list)

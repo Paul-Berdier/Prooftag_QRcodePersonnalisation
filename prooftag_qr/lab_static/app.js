@@ -91,7 +91,7 @@ function renderMethods() {
     $(".control", node).value = method.generation.controlnet_scale ?? 1.35;
     $(".stage2-init", node).value = settings.diffqrcoder_stage2_initialization ?? "paper_stage1_noise";
     $(".stage2-target", node).value = settings.diffqrcoder_stage2_target_mode ?? "binary_exact";
-    $(".stage2-strength", node).value = settings.diffqrcoder_stage2_strength ?? 1;
+    $(".stage2-strength", node).value = settings.diffqrcoder_stage2_strength ?? 0.65;
     $(".srpg-steps", node).value = settings.srpg_steps ?? 40;
     $(".srpg-control", node).value = settings.srpg_controlnet_scale ?? 1.35;
     $(".srg", node).value = settings.srpg_qr_weight ?? 500;
@@ -102,7 +102,11 @@ function renderMethods() {
     $(".mpgd-iterations", node).value = settings.srmpgd_max_iterations ?? 20;
     $(".mpgd-lr", node).value = settings.srmpgd_step_size ?? 1000;
     $(".mpgd-lpips", node).value = settings.srmpgd_lpips_weight ?? 0.01;
-    $(".mpgd-max-mer", node).value = settings.srmpgd_max_initial_module_error_rate ?? 0.35;
+    $(".mpgd-max-mer", node).value = settings.srmpgd_max_initial_module_error_rate ?? 0.12;
+    $(".warn-saturation", node).value = settings.diffqrcoder_guard_max_saturation_mean_increase ?? 0.08;
+    $(".hard-saturation", node).value = settings.diffqrcoder_guard_hard_max_saturation_mean_increase ?? 0.20;
+    $(".warn-rgb-clipping", node).value = settings.diffqrcoder_guard_max_rgb_clipped_channel_ratio_increase ?? 0.02;
+    $(".hard-rgb-clipping", node).value = settings.diffqrcoder_guard_hard_max_rgb_clipped_channel_ratio_increase ?? 0.25;
     $(".model-json", node).value = JSON.stringify(method.model, null, 2);
     node.classList.toggle("disabled", !method.enabled);
     node.classList.toggle("has-stage2", method.output_variant !== "raw");
@@ -137,9 +141,14 @@ function renderMethods() {
         diffqrcoder_guard_max_changed_pixel_ratio: 0.995,
         diffqrcoder_guard_max_mean_absolute_change: 0.35,
         diffqrcoder_guard_max_clipped_pixel_ratio_increase: 0.05,
-        diffqrcoder_guard_max_rgb_clipped_channel_ratio_increase: 0.02,
-        diffqrcoder_guard_max_saturation_mean_increase: 0.08,
+        diffqrcoder_guard_max_rgb_clipped_channel_ratio_increase: Number($(".warn-rgb-clipping", node).value),
+        diffqrcoder_guard_max_saturation_mean_increase: Number($(".warn-saturation", node).value),
         diffqrcoder_guard_max_high_saturation_ratio_increase: 0.05,
+        diffqrcoder_guard_hard_max_mean_absolute_change: 0.40,
+        diffqrcoder_guard_hard_max_clipped_pixel_ratio_increase: 0.20,
+        diffqrcoder_guard_hard_max_rgb_clipped_channel_ratio_increase: Number($(".hard-rgb-clipping", node).value),
+        diffqrcoder_guard_hard_max_saturation_mean_increase: Number($(".hard-saturation", node).value),
+        diffqrcoder_guard_hard_max_high_saturation_ratio_increase: 0.30,
         srpg_eta: Number($(".eta", node).value),
         srpg_seed_offset: Number($(".seed-offset", node).value),
         srpg_save_step_previews: true,
@@ -234,6 +243,14 @@ function autoOriginal(trial) {
   return (trial.generation?.validations || []).filter(v => v.scenario === "original");
 }
 
+function normalizedOriginal(run, records) {
+  const quality = run.quality_metrics || {};
+  return {
+    passed: quality.validation_original_passed ?? records.filter(v => v.exact_payload_match).length,
+    total: quality.validation_original_total ?? records.length,
+  };
+}
+
 function aggregate(trials) {
   const allGenerated = trials.filter(t => t.generation);
   const generated = allGenerated.filter(t => t.method_id !== "qr_reference");
@@ -288,9 +305,11 @@ function renderTrials() {
     const run = trial.generation;
     const rating = trial.rating;
     const original = autoOriginal(trial);
-    const originalPass = original.filter(v => v.exact_payload_match).length;
+    const originalScore = normalizedOriginal(run, original);
     const qartContract = Number(run.quality_metrics?.diffqrcoder_stage2_control_target_qart || 0) === 1;
     const diverged = Number(run.quality_metrics?.diffqrcoder_guard_diverged || 0) === 1;
+    const warning = Number(run.quality_metrics?.diffqrcoder_guard_warning || 0) === 1;
+    const fallback = Number(run.quality_metrics?.selection_preserved_stage1 || 0) === 1;
     return `<button class="trial" data-index="${index}">
       <div class="image">${run.image_url
         ? `<img src="${run.image_url}" loading="lazy" alt="${trial.prompt_id}">`
@@ -299,13 +318,15 @@ function renderTrials() {
         <div class="trial-title"><b>${trial.prompt_id} / ${trial.method_id}</b><span class="status ${trial.status}">${trial.status}</span></div>
         <p class="${run.error ? "run-error" : ""}">${run.error || `seed ${trial.seed} · ${run.selected_variant}`}</p>
         <div class="trial-stats">
-          <span>SSR<b>${pct(run.scan_pass_rate)}</b></span>
-          <span>${qartContract ? "URL canon." : "Original"}<b>${originalPass}/${original.length}</b></span>
+          <span>SSR norm.<b>${pct(run.scan_pass_rate)}</b></span>
+          <span>${qartContract ? "URL canon." : "Original norm."}<b>${fmt(originalScore.passed, 0)}/${fmt(originalScore.total, 0)}</b></span>
           <span>MER<b>${pct(run.module_error_rate)}</b></span>
           <span>CLIP-AES<b>${fmt(run.quality_metrics?.clip_aesthetic, 2)}</b></span>
         </div>
         <div class="badges">
           ${diverged ? "<i class='bad'>Divergence Stage 2</i>" : ""}
+          ${!diverged && warning ? "<i>Alerte couleur</i>" : ""}
+          ${fallback ? "<i class='good'>Stage 1 préservé</i>" : ""}
           ${rating?.aesthetic_ok === true ? "<i class='good'>Esthétique ✓</i>" : rating?.aesthetic_ok === false ? "<i class='bad'>Esthétique ✕</i>" : "<i>Esthétique ?</i>"}
           ${rating?.human_scan_result === "scannable" ? "<i class='good'>Scan ✓</i>" : rating?.human_scan_result === "not_scannable" ? "<i class='bad'>Scan ✕</i>" : "<i>Scan ?</i>"}
         </div>
@@ -347,10 +368,14 @@ async function openTrial(index) {
   $("#dialog-kicker").textContent = `${trial.status} · seed ${trial.seed}`;
   $("#dialog-title").textContent = `${trial.prompt_id} / ${trial.method_id}`;
   const original = autoOriginal(trial);
+  const originalScore = normalizedOriginal(run, original);
   $("#dialog-metrics").innerHTML = [
     metric("Sortie", run.selected_variant),
-    metric("SSR robuste", pct(run.scan_pass_rate)),
-    metric(qartContract ? "URL canonique" : "Payload original", `${original.filter(v => v.exact_payload_match).length}/${original.length}`),
+    metric("SSR normalisé", pct(run.scan_pass_rate)),
+    metric("SSR brut", pct(quality.validation_raw_pass_rate)),
+    metric("Capacité du QR témoin", pct(quality.validation_reference_pass_rate)),
+    metric("Tests normalisés", `${fmt(quality.validation_normalized_passed, 0)}/${fmt(quality.validation_normalized_total, 0)}`),
+    metric(qartContract ? "URL canonique" : "Payload original normalisé", `${fmt(originalScore.passed, 0)}/${fmt(originalScore.total, 0)}`),
     metric("MER", pct(run.module_error_rate)),
     metric("CLIP-aesthetic", fmt(run.quality_metrics?.clip_aesthetic, 3)),
     metric("CLIPScore", fmt(run.quality_metrics?.clip_score, 3)),
@@ -368,6 +393,9 @@ async function openTrial(index) {
     metric("Canaux RGB écrêtés", pct(quality.diffqrcoder_stage2_rgb_clipped_channel_ratio)),
     metric("Canaux RGB écrêtés Δ", pct(quality.diffqrcoder_stage2_rgb_clipped_channel_ratio_increase)),
     metric("Divergence", Number(quality.diffqrcoder_guard_diverged || 0) === 1 ? "OUI — résultat à écarter" : "Non"),
+    metric("Alerte couleur", Number(quality.diffqrcoder_guard_warning || 0) === 1 ? "Oui — inspection humaine" : "Non"),
+    metric("Sélection automatique", Number(quality.selection_auto_mode || 0) === 1 ? "Oui" : "Non"),
+    metric("Repli Stage 1", Number(quality.selection_preserved_stage1 || 0) === 1 ? "Oui — Stage 2 écarté" : "Non"),
     metric("SR-MPGD gamma", fmt(quality.diffqrcoder_srmpgd_gamma, 3)),
     metric("SR-MPGD LPIPS lambda", fmt(quality.diffqrcoder_srmpgd_lpips_weight, 3)),
     metric("Itération retenue", fmt(quality.diffqrcoder_srmpgd_selected_iteration, 0)),

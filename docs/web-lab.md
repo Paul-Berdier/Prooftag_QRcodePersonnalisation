@@ -8,8 +8,10 @@ contient uniquement :
 
 1. le QR binaire témoin ;
 2. le Stage 1 public de DiffQRCoder ;
-3. le Stage 2 SRPG initialisé selon l’équation 9 du papier ;
-4. facultativement, le Stage 2 suivi du SR-MPGD des équations 13–14.
+3. le Stage 2 SRPG binaire initialisé selon l’équation 9 du papier ;
+4. la sélection automatique du meilleur Stage 1 / Stage 2 ;
+5. facultativement, le Stage 2 suivi du SR-MPGD des équations 13–14 ;
+6. des ablations désactivées par défaut (force de bruit et QArt public).
 
 Le socle est figé au commit DiffQRCoder
 `e24ea73ee2e13c7e6e87cb422e8b11784e70ae00`, avec Cetus-Mix Whalefall et
@@ -23,11 +25,12 @@ flowchart LR
     N --> S2["Stage 2\nDDIM + SRPG"]
     TARGET --> S2
     S2 --> M["SR-MPGD Eq. 13–14\noptionnel"]
-    Q --> V["Validation automatique"]
+    Q --> R["Capacité du QR témoin\npar décodeur/scénario"]
+    R --> V["Validation automatique normalisée"]
     S1 --> V
     S2 --> V
     M --> V
-    V --> A["SSR, payload, MER,\nCLIP-aesthetic, CLIPScore"]
+    V --> A["SSR normalisé, payload, MER exact,\nCLIP-aesthetic, CLIPScore"]
     A --> H["Verdict humain\nesthétique + scan téléphone"]
 ```
 
@@ -130,7 +133,9 @@ départ, pas une garantie de lecture.
 Chaque image finale est testée avec les décodeurs installés et les scénarios de
 dégradation du projet. L’interface affiche :
 
-- **SSR robuste** : proportion de validations relisant le payload exact ;
+- **SSR normalisé** : proportion des cas relisant le payload parmi ceux que le
+  QR témoin sait lui-même passer ;
+- **SSR brut et capacité du témoin** : valeurs d'audit non masquées ;
 - **Payload original** : réussite sans dégradation ;
 - **MER** : taux de modules incorrects ;
 - **CLIP-aesthetic**, **CLIPScore** et similarité CLIP ;
@@ -140,8 +145,34 @@ dégradation du projet. L’interface affiche :
 - paramètres SR-MPGD réellement appliqués et itération retenue ;
 - tableau `décodeur × scénario × résultat × latence`.
 
-Une sortie est `accepted` seulement si tous les décodeurs originaux relisent le
-payload exact et si le SSR atteint le seuil configuré, actuellement 100 %.
+Le SSR de décision est normalisé par le QR témoin. Un couple
+`décodeur × dégradation` que le QR binaire propre ne sait pas relire est exclu
+de la porte de livraison, mais reste conservé dans le SSR brut. Cela corrige le
+cas observé où le témoin obtenait 38/39 et était lui-même rejeté par une porte
+39/39 impossible.
+
+Le MER Stage 2/SR-MPGD est mesuré sur la géométrie réellement optimisée par
+DiffQRCoder : crop 78 px, cœur 580×580 et modules entiers de 20 px. Il n'est
+plus calculé en découpant naïvement le canvas 736 px en 37 cellules.
+
+Une sortie est `accepted` seulement si tous les décodeurs originaux supportés
+par le témoin relisent le payload et si le SSR normalisé atteint le seuil
+configuré, actuellement 100 %. Une alerte couleur demande une inspection
+humaine ; seule une divergence forte rejette automatiquement l'image.
+
+### Recette par défaut après la campagne fc403349
+
+- cible Stage 2 : QR binaire exact ;
+- force de bruit : `0,65`, pour préserver davantage le Stage 1 que la force
+  `1,0`, qui démarrait presque dans du bruit pur ;
+- sélection automatique : mode de livraison optionnel qui conserve d'abord une
+  sortie acceptée, puis la moins altérée. Il est désactivé dans les campagnes
+  visuelles pour ne pas afficher une copie supplémentaire de la sortie retenue ;
+- SR-MPGD : désactivé par défaut et lancé seulement si le MER Stage 2 est au
+  plus `12 %` ;
+- QArt public : expérimental et désactivé, car les quatre sorties testées ont
+  échoué au téléphone malgré une cible valide avant diffusion ;
+- ablation de force disponible : `0,35 / 0,50 / 0,65 / 0,80`.
 
 ## Validation humaine à la chaîne
 
@@ -170,9 +201,10 @@ bash scripts/deploy-app-image.sh
 Le script refuse un dépôt sale, construit une image taguée avec le commit Git,
 vérifie le commit DiffQRCoder, importe l’image dans containerd K3s, applique la
 migration `0004_human_verdicts`, attend le rollout puis contrôle dans le pod les
-quatre profils, l’import DiffQRCoder et la version
-`20260730-binary-target-1` des assets Web, l’initialisation Stage 1 bruitée,
-la cible binaire exacte et les constantes SR-MPGD.
+profils de production et d'ablation, l’import DiffQRCoder et la version
+`20260803-normalized-chain-1` des assets Web, l’initialisation Stage 1 bruitée,
+la cible binaire exacte, la force `0,65`, le repli automatique et le seuil
+SR-MPGD.
 
 Le taux publiable sera calculé sur les sorties artistiques réellement générées,
 jamais sur le QR témoin ni sur une réparation cachée.

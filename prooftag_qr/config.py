@@ -59,6 +59,21 @@ class Settings(BaseSettings):
     diffqrcoder_guard_max_high_saturation_ratio_increase: float = Field(
         default=0.05, ge=0.0, le=1.0
     )
+    diffqrcoder_guard_hard_max_mean_absolute_change: float = Field(
+        default=0.40, gt=0.0, le=1.0
+    )
+    diffqrcoder_guard_hard_max_clipped_pixel_ratio_increase: float = Field(
+        default=0.20, ge=0.0, le=1.0
+    )
+    diffqrcoder_guard_hard_max_rgb_clipped_channel_ratio_increase: float = Field(
+        default=0.25, ge=0.0, le=1.0
+    )
+    diffqrcoder_guard_hard_max_saturation_mean_increase: float = Field(
+        default=0.20, ge=0.0, le=1.0
+    )
+    diffqrcoder_guard_hard_max_high_saturation_ratio_increase: float = Field(
+        default=0.30, ge=0.0, le=1.0
+    )
     device: str = "cuda"
     validation_min_pass_rate: float = Field(default=1.0, ge=0.0, le=1.0)
     max_attempts: int = Field(default=3, ge=1, le=20)
@@ -182,6 +197,38 @@ class Settings(BaseSettings):
             raise ValueError("SRPG latent fusion start cannot exceed end")
         if self.diffqrcoder_control_guidance_start > self.diffqrcoder_control_guidance_end:
             raise ValueError("DiffQRCoder control guidance start cannot exceed end")
+        guard_pairs = (
+            (
+                "mean absolute change",
+                self.diffqrcoder_guard_max_mean_absolute_change,
+                self.diffqrcoder_guard_hard_max_mean_absolute_change,
+            ),
+            (
+                "clipped pixels",
+                self.diffqrcoder_guard_max_clipped_pixel_ratio_increase,
+                self.diffqrcoder_guard_hard_max_clipped_pixel_ratio_increase,
+            ),
+            (
+                "RGB clipped channels",
+                self.diffqrcoder_guard_max_rgb_clipped_channel_ratio_increase,
+                self.diffqrcoder_guard_hard_max_rgb_clipped_channel_ratio_increase,
+            ),
+            (
+                "saturation mean",
+                self.diffqrcoder_guard_max_saturation_mean_increase,
+                self.diffqrcoder_guard_hard_max_saturation_mean_increase,
+            ),
+            (
+                "high saturation",
+                self.diffqrcoder_guard_max_high_saturation_ratio_increase,
+                self.diffqrcoder_guard_hard_max_high_saturation_ratio_increase,
+            ),
+        )
+        for name, warning_threshold, hard_threshold in guard_pairs:
+            if hard_threshold < warning_threshold:
+                raise ValueError(
+                    f"DiffQRCoder hard {name} guard cannot be lower than its warning"
+                )
         return self
 
     @property
