@@ -27,6 +27,32 @@ def test_lab_rejects_srmpgd_without_stage2_srpg():
         LabToolConfig(srmpgd_enabled=True)
 
 
+@pytest.mark.parametrize(
+    ("method_id", "tools", "expected"),
+    [
+        ("diffqrcoder_auto", {"srpg_enabled": True}, "auto"),
+        ("custom_srmpgd", {"srpg_enabled": True, "srmpgd_enabled": True}, "srmpgd"),
+        ("custom_srpg", {"srpg_enabled": True}, "srpg"),
+        ("custom_stage1", {}, "raw"),
+    ],
+)
+def test_lab_recovers_empty_output_from_a_cached_web_form(
+    method_id,
+    tools,
+    expected,
+):
+    method = LabMethod.model_validate(
+        {
+            "id": method_id,
+            "name": method_id,
+            "output_variant": "",
+            "tools": tools,
+        }
+    )
+
+    assert method.output_variant == expected
+
+
 def test_web_lab_exposes_only_the_pinned_diffqrcoder_chain():
     profiles = laboratory_profiles()
 

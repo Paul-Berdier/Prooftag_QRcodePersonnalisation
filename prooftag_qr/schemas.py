@@ -144,6 +144,24 @@ class LabMethod(BaseModel):
     model: dict[str, Any] = Field(default_factory=dict)
     tools: LabToolConfig = Field(default_factory=LabToolConfig)
 
+    @model_validator(mode="before")
+    @classmethod
+    def recover_output_variant_from_legacy_web_form(cls, value: Any) -> Any:
+        """Repair the empty value emitted by a cached pre-auto HTML select."""
+        if not isinstance(value, dict) or value.get("output_variant") not in {None, ""}:
+            return value
+        method_id = str(value.get("id", ""))
+        tools = value.get("tools") or {}
+        if method_id == "diffqrcoder_auto" or method_id.endswith("_auto"):
+            output_variant = "auto"
+        elif bool(tools.get("srmpgd_enabled")):
+            output_variant = "srmpgd"
+        elif bool(tools.get("srpg_enabled")):
+            output_variant = "srpg"
+        else:
+            output_variant = "raw"
+        return {**value, "output_variant": output_variant}
+
 
 class LabCampaignCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
