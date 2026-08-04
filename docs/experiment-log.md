@@ -1280,3 +1280,16 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   recette finale, mais le point de départ de la recherche E019.
 - **Recherche :** cinq lots appariés couvrent 100 configurations : 5 nombres
   d'itérations × 5 gamma × 4 poids LPIPS. Un seul lot est lancé à la fois.
+
+## E020 — trajectoire complète et loss robuste — 4 août 2026
+
+- **Résultat E019B :** gamma 10/30/100/300/1000 a bien modifié les pas, mais
+  les cinq sorties ont retenu l’état zéro. MER initial 0 %, SSR 2,56 % et
+  original 0/3 : la métrique module-centre ne décrit pas l’échec des scanners.
+- **Arrêt de la grille :** aucun nouveau balayage massif n’est lancé tant que
+  la trajectoire de loss n’est pas observable.
+- **Traçabilité :** chaque itération exporte SRL, MER, SSR, LPIPS, déplacement,
+  garde, gain QR et composantes robustes dans `srmpgd_trace.json` et le Web Lab.
+- **Ablation :** `diffqrcoder_srmpgd_robust` partage strictement le latent SRPG
+  du témoin et moyenne la loss publique sur flou, réduction, luminosité et
+  contraste. La sortie sûre conserve toujours l’état zéro comme candidat.

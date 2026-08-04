@@ -8,6 +8,38 @@ from prooftag_qr.qr import generate_qr
 from prooftag_qr.srmpgd import SRMPGDConfig
 
 
+def test_robust_srmpgd_loss_keeps_every_scan_transform_differentiable():
+    torch = pytest.importorskip("torch")
+    from prooftag_qr.srmpgd import _robust_scanning_loss
+
+    images = torch.linspace(0, 1, 3 * 32 * 32).reshape(1, 3, 32, 32)
+    images.requires_grad_(True)
+    target = torch.zeros((1, 1, 32, 32))
+    calls = []
+
+    def loss_fn(value, expected):
+        calls.append(tuple(value.shape))
+        return (value.mean() - expected.mean()).square()
+
+    loss, components = _robust_scanning_loss(
+        images,
+        target,
+        loss_fn,
+        SRMPGDConfig(
+            robust_blur_weight=1.0,
+            robust_downscale_weight=1.0,
+            robust_brightness_weight=1.0,
+            robust_contrast_weight=1.0,
+        ),
+    )
+    loss.backward()
+
+    assert len(calls) == 6
+    assert all(components[name] is not None for name in components)
+    assert images.grad is not None
+    assert torch.isfinite(images.grad).all()
+
+
 def test_srmpgd_uses_exact_latent_original_qr_and_stops_on_strict_validation(monkeypatch):
     torch = pytest.importorskip("torch")
     from prooftag_qr import srmpgd
@@ -267,6 +299,9 @@ def test_srmpgd_rejects_a_tainted_iteration_and_keeps_stage2_state_zero(monkeypa
             "min_relative_module_improvement",
         ),
         (SRMPGDConfig(max_mean_absolute_change=1.1), "max_mean_absolute_change"),
+        (SRMPGDConfig(robust_blur_weight=-1), "robust_blur_weight"),
+        (SRMPGDConfig(robust_blur_kernel=4), "robust_blur_kernel"),
+        (SRMPGDConfig(robust_downscale_factor=0), "robust_downscale_factor"),
     ],
 )
 def test_srmpgd_rejects_invalid_configuration(config, message):

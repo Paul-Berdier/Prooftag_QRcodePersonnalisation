@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import io
+import json
 from pathlib import Path
+from typing import Any
 
 from PIL import Image
 
@@ -16,6 +18,9 @@ class ArtifactStore:
         raise NotImplementedError
 
     def load_image(self, location: str) -> Image.Image:
+        raise NotImplementedError
+
+    def save_metadata(self, run_id: str, name: str, payload: Any) -> str:
         raise NotImplementedError
 
 
@@ -41,6 +46,16 @@ class LocalArtifactStore(ArtifactStore):
     def load_image(self, location: str) -> Image.Image:
         with Image.open(location) as image:
             return image.convert("RGB").copy()
+
+    def save_metadata(self, run_id: str, name: str, payload: Any) -> str:
+        metadata_dir = self.root / run_id / "metadata"
+        metadata_dir.mkdir(parents=True, exist_ok=True)
+        path = metadata_dir / f"{name}.json"
+        path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        return str(path)
 
 
 class S3ArtifactStore(ArtifactStore):
@@ -85,6 +100,16 @@ class S3ArtifactStore(ArtifactStore):
         response = self.client.get_object(Bucket=self.bucket, Key=key)
         with Image.open(io.BytesIO(response["Body"].read())) as image:
             return image.convert("RGB").copy()
+
+    def save_metadata(self, run_id: str, name: str, payload: Any) -> str:
+        key = f"runs/{run_id}/metadata/{name}.json"
+        self.client.put_object(
+            Bucket=self.bucket,
+            Key=key,
+            Body=json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8"),
+            ContentType="application/json",
+        )
+        return f"s3://{self.bucket}/{key}"
 
 
 def build_artifact_store(settings: Settings) -> ArtifactStore:

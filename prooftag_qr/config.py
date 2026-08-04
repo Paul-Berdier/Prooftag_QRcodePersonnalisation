@@ -158,6 +158,15 @@ class Settings(BaseSettings):
     srmpgd_max_rgb_clipped_channel_ratio_increase: float = Field(
         default=0.01, ge=0.0, le=1.0
     )
+    srmpgd_robust_blur_weight: float = Field(default=0.0, ge=0.0, le=10.0)
+    srmpgd_robust_blur_kernel: int = Field(default=3, ge=1, le=15)
+    srmpgd_robust_downscale_weight: float = Field(default=0.0, ge=0.0, le=10.0)
+    srmpgd_robust_downscale_factor: float = Field(default=0.75, gt=0.0, le=1.0)
+    srmpgd_robust_brightness_weight: float = Field(default=0.0, ge=0.0, le=10.0)
+    srmpgd_robust_brightness_low: float = Field(default=0.80, gt=0.0, le=1.0)
+    srmpgd_robust_brightness_high: float = Field(default=1.20, ge=1.0, le=2.0)
+    srmpgd_robust_contrast_weight: float = Field(default=0.0, ge=0.0, le=10.0)
+    srmpgd_robust_contrast_factor: float = Field(default=0.75, gt=0.0, le=1.0)
     latent_refinement_enabled: bool = False
     latent_refinement_iterations: int = Field(default=8, ge=1, le=100)
     latent_refinement_learning_rate: float = Field(default=0.02, gt=0.0, le=10.0)
@@ -209,6 +218,8 @@ class Settings(BaseSettings):
             raise ValueError(
                 "SR-MPGD maximum step RMS cannot exceed total latent delta RMS"
             )
+        if self.srmpgd_robust_blur_kernel % 2 == 0:
+            raise ValueError("SR-MPGD robust blur kernel must be odd")
         if self.srpg_dark_threshold > self.srpg_light_threshold:
             raise ValueError("SRPG dark threshold cannot exceed light threshold")
         if self.srpg_robust_blur_kernel % 2 == 0:

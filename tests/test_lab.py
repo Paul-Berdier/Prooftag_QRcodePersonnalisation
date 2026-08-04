@@ -61,6 +61,7 @@ def test_web_lab_exposes_only_the_pinned_diffqrcoder_chain():
         "diffqrcoder_stage1",
         "diffqrcoder_srpg",
         "diffqrcoder_srmpgd",
+        "diffqrcoder_srmpgd_robust",
         "diffqrcoder_auto",
         "diffqrcoder_srpg_s035",
         "diffqrcoder_srpg_s050",
@@ -90,6 +91,11 @@ def test_web_lab_exposes_only_the_pinned_diffqrcoder_chain():
     srmpgd = next(
         profile for profile in profiles if profile["id"] == "diffqrcoder_srmpgd"
     )
+    robust_srmpgd = next(
+        profile
+        for profile in profiles
+        if profile["id"] == "diffqrcoder_srmpgd_robust"
+    )
     assert (
         qart["tools"]["settings"]["diffqrcoder_stage2_target_mode"]
         == "qart_url_fragment"
@@ -97,6 +103,8 @@ def test_web_lab_exposes_only_the_pinned_diffqrcoder_chain():
     assert qart["enabled"] is False
     assert automatic["enabled"] is False
     assert srmpgd["enabled"] is True
+    assert robust_srmpgd["enabled"] is True
+    assert robust_srmpgd["tools"]["settings"]["srmpgd_robust_blur_weight"] == 1.0
 
 
 def test_srmpgd_reuses_the_matching_srpg_stage2_cache_key(tmp_path):
@@ -118,6 +126,13 @@ def test_srmpgd_reuses_the_matching_srpg_stage2_cache_key(tmp_path):
     )
     automatic = LabMethod.model_validate(
         next(item for item in profiles if item["id"] == "diffqrcoder_auto")
+    )
+    robust_srmpgd = LabMethod.model_validate(
+        next(
+            item
+            for item in profiles
+            if item["id"] == "diffqrcoder_srmpgd_robust"
+        )
     )
     try:
         srpg_key = service._stage2_cache_key(
@@ -144,11 +159,20 @@ def test_srmpgd_reuses_the_matching_srpg_stage2_cache_key(tmp_path):
             "M",
             "https://ptag.io/t/cache",
         )
+        robust_srmpgd_key = service._stage2_cache_key(
+            robust_srmpgd,
+            "blue courtyard",
+            "easynegative",
+            51001,
+            "M",
+            "https://ptag.io/t/cache",
+        )
     finally:
         service.shutdown()
 
     assert srpg_key == srmpgd_key
     assert srpg_key == automatic_key
+    assert srpg_key == robust_srmpgd_key
 
 
 def test_stage2_cache_key_uses_effective_math_not_debug_settings(tmp_path):

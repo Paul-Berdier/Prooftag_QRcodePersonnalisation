@@ -9,7 +9,7 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
 
     from fastapi.testclient import TestClient
 
-    from prooftag_qr.api import app
+    from prooftag_qr.api import app, artifact_store
 
     client = TestClient(app)
     payload = "https://example.prooftag.test/t/api-test"
@@ -22,6 +22,16 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     run = response.json()
     assert run["status"] == "accepted"
     assert run["scan_pass_rate"] == 1.0
+
+    artifact_store.save_metadata(
+        run["id"],
+        "srmpgd_trace",
+        {"selected_iteration": 0, "steps": [{"iteration": 0}]},
+    )
+    trace = client.get(f"/v1/generations/{run['id']}/metadata/srmpgd_trace")
+    assert trace.status_code == 200
+    assert trace.json()["steps"] == [{"iteration": 0}]
+    assert client.get(f"/v1/generations/{run['id']}/metadata/MALFORMED").status_code == 400
 
     physical = client.post(
         f"/v1/generations/{run['id']}/physical-validations",
@@ -51,7 +61,7 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     lab_page = client.get("/lab")
     assert lab_page.status_code == 200
     assert "PROOFTAG × DIFFQRCODER" in lab_page.text
-    assert "20260804-e019-safe-srmpgd-1" in lab_page.text
+    assert "20260804-e020-trace-robust-1" in lab_page.text
     lab_javascript = client.get("/lab-assets/app.js")
     assert lab_javascript.status_code == 200
     assert "human_scan_result" in lab_javascript.text
@@ -62,6 +72,7 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
         "diffqrcoder_stage1",
         "diffqrcoder_srpg",
         "diffqrcoder_srmpgd",
+        "diffqrcoder_srmpgd_robust",
         "diffqrcoder_auto",
         "diffqrcoder_srpg_s035",
         "diffqrcoder_srpg_s050",
@@ -78,6 +89,11 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
         item
         for item in schema.json()["profiles"]
         if item["id"] == "diffqrcoder_srmpgd"
+    )
+    robust_srmpgd_profile = next(
+        item
+        for item in schema.json()["profiles"]
+        if item["id"] == "diffqrcoder_srmpgd_robust"
     )
     assert controlnet_profile["model"]["base_model_id"]
     assert controlnet_profile["model"]["controlnet_model_id"]
@@ -116,6 +132,16 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     assert srmpgd_profile["model"]["controlnet_conditioning_profile"] == "binary"
     assert srmpgd_profile["model"]["diffqrcoder_upstream_enabled"] is True
     assert srmpgd_profile["enabled"] is True
+    assert robust_srmpgd_profile["enabled"] is True
+    assert (
+        robust_srmpgd_profile["tools"]["settings"]["srmpgd_robust_blur_weight"]
+        == 1.0
+    )
+    assert (
+        robust_srmpgd_profile["tools"]["settings"]
+        ["srmpgd_robust_downscale_weight"]
+        == 1.0
+    )
 
     campaign_response = client.post(
         "/v1/lab/campaigns",

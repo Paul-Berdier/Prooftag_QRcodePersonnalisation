@@ -242,6 +242,25 @@ def list_generation_artifacts(run_id: str) -> list[dict[str, str]]:
     return artifacts
 
 
+@app.get("/v1/generations/{run_id}/metadata/{name}", tags=["experiments"])
+def get_generation_metadata(run_id: str, name: str):
+    run = repository.get(run_id)
+    if not run or not run.image_path:
+        raise HTTPException(status_code=404, detail="Generation not found")
+    if not re.fullmatch(r"[a-z0-9_]+", name):
+        raise HTTPException(status_code=400, detail="Invalid metadata name")
+    if run.image_path.startswith("s3://"):
+        raise HTTPException(status_code=501, detail="S3 metadata endpoint is not enabled yet")
+    path = Path(run.image_path).parent / "metadata" / f"{name}.json"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Metadata not found")
+    return FileResponse(
+        path,
+        media_type="application/json",
+        filename=f"{run_id}-{name}.json",
+    )
+
+
 @app.get("/v1/reports/summary", response_model=MetricsSummary, tags=["reports"])
 def summary() -> MetricsSummary:
     return MetricsSummary(**repository.summary())

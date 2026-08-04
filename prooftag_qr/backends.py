@@ -95,6 +95,9 @@ class GenerationBackend(ABC):
     def diagnostics(self) -> dict[str, float]:
         return {}
 
+    def debug_metadata(self) -> dict[str, object]:
+        return {}
+
 
 class QRBackend(GenerationBackend):
     def generate(

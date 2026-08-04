@@ -127,6 +127,15 @@ function renderMethods() {
     $(".mpgd-max-saturation", node).value = settings.srmpgd_max_saturation_mean_increase ?? 0.04;
     $(".mpgd-max-high-saturation", node).value = settings.srmpgd_max_high_saturation_ratio_increase ?? 0.05;
     $(".mpgd-max-rgb-clipping", node).value = settings.srmpgd_max_rgb_clipped_channel_ratio_increase ?? 0.01;
+    $(".mpgd-robust-blur-weight", node).value = settings.srmpgd_robust_blur_weight ?? 0;
+    $(".mpgd-robust-blur-kernel", node).value = settings.srmpgd_robust_blur_kernel ?? 3;
+    $(".mpgd-robust-downscale-weight", node).value = settings.srmpgd_robust_downscale_weight ?? 0;
+    $(".mpgd-robust-downscale-factor", node).value = settings.srmpgd_robust_downscale_factor ?? 0.75;
+    $(".mpgd-robust-brightness-weight", node).value = settings.srmpgd_robust_brightness_weight ?? 0;
+    $(".mpgd-robust-brightness-low", node).value = settings.srmpgd_robust_brightness_low ?? 0.80;
+    $(".mpgd-robust-brightness-high", node).value = settings.srmpgd_robust_brightness_high ?? 1.20;
+    $(".mpgd-robust-contrast-weight", node).value = settings.srmpgd_robust_contrast_weight ?? 0;
+    $(".mpgd-robust-contrast-factor", node).value = settings.srmpgd_robust_contrast_factor ?? 0.75;
     $(".warn-saturation", node).value = settings.diffqrcoder_guard_max_saturation_mean_increase ?? 0.08;
     $(".hard-saturation", node).value = settings.diffqrcoder_guard_hard_max_saturation_mean_increase ?? 0.20;
     $(".warn-rgb-clipping", node).value = settings.diffqrcoder_guard_max_rgb_clipped_channel_ratio_increase ?? 0.02;
@@ -200,6 +209,15 @@ function renderMethods() {
           srmpgd_max_saturation_mean_increase: Number($(".mpgd-max-saturation", node).value),
           srmpgd_max_high_saturation_ratio_increase: Number($(".mpgd-max-high-saturation", node).value),
           srmpgd_max_rgb_clipped_channel_ratio_increase: Number($(".mpgd-max-rgb-clipping", node).value),
+          srmpgd_robust_blur_weight: Number($(".mpgd-robust-blur-weight", node).value),
+          srmpgd_robust_blur_kernel: Number($(".mpgd-robust-blur-kernel", node).value),
+          srmpgd_robust_downscale_weight: Number($(".mpgd-robust-downscale-weight", node).value),
+          srmpgd_robust_downscale_factor: Number($(".mpgd-robust-downscale-factor", node).value),
+          srmpgd_robust_brightness_weight: Number($(".mpgd-robust-brightness-weight", node).value),
+          srmpgd_robust_brightness_low: Number($(".mpgd-robust-brightness-low", node).value),
+          srmpgd_robust_brightness_high: Number($(".mpgd-robust-brightness-high", node).value),
+          srmpgd_robust_contrast_weight: Number($(".mpgd-robust-contrast-weight", node).value),
+          srmpgd_robust_contrast_factor: Number($(".mpgd-robust-contrast-factor", node).value),
         } : {}),
       };
       $(".method-label", node).textContent = item.name || "Sans nom";
@@ -408,6 +426,39 @@ function metric(label, value) {
   return `<article><span>${label}</span><b>${value}</b></article>`;
 }
 
+async function renderSrmpgdTrace(run) {
+  const panel = $("#srmpgd-trace-panel");
+  const host = $("#srmpgd-trace");
+  panel.hidden = true;
+  host.innerHTML = "";
+  if (run.selected_variant !== "srmpgd") return;
+  try {
+    const trace = await api(`/v1/generations/${run.id}/metadata/srmpgd_trace`);
+    panel.hidden = false;
+    host.innerHTML = `<p class="muted">Loss robuste : ${trace.robust_loss_enabled ? "active" : "témoin officiel"} · état retenu : ${trace.selected_iteration} · arrêt : ${trace.stop_reason}</p>
+      <div class="table-scroll"><table>
+        <thead><tr><th>It.</th><th>Retenu</th><th>SSR</th><th>MER</th><th>SRL</th><th>Base</th><th>Flou</th><th>Réduction</th><th>Lum.</th><th>Contraste</th><th>LPIPS</th><th>Δ latent</th><th>Pas</th><th>Garde</th><th>Gain QR</th><th>Éligible</th></tr></thead>
+        <tbody>${trace.steps.map(step => `<tr class="${step.iteration === trace.selected_iteration ? "selected" : ""}">
+          <td>${step.iteration}</td><td>${step.iteration === trace.selected_iteration ? "Oui" : ""}</td>
+          <td>${pct(step.pass_rate)}</td><td>${pct(step.actual_module_error_rate)}</td>
+          <td>${fmt(step.scanning_robust_loss, 6)}</td><td>${fmt(step.base_scanning_loss, 6)}</td>
+          <td>${fmt(step.blur_scanning_loss, 6)}</td><td>${fmt(step.downscale_scanning_loss, 6)}</td>
+          <td>${fmt(step.brightness_scanning_loss, 6)}</td><td>${fmt(step.contrast_scanning_loss, 6)}</td>
+          <td>${fmt(step.lpips_loss, 5)}</td><td>${fmt(step.latent_delta_rms, 5)}</td>
+          <td>${fmt(step.applied_step_rms, 5)}</td>
+          <td>${step.aesthetic_guard_passed ? "OK" : "NON"}</td>
+          <td>${step.qr_gain_sufficient ? "Oui" : "Non"}</td>
+          <td>${step.eligible_for_selection ? "Oui" : "Non"}</td>
+        </tr>`).join("")}</tbody>
+      </table></div>`;
+  } catch (error) {
+    if (!String(error.message).startsWith("404")) {
+      panel.hidden = false;
+      host.textContent = `Trace indisponible : ${error.message}`;
+    }
+  }
+}
+
 async function openTrial(index) {
   state.selectedIndex = index;
   const trial = state.visibleTrials[index];
@@ -457,6 +508,7 @@ async function openTrial(index) {
     metric("Sélection automatique", Number(quality.selection_auto_mode || 0) === 1 ? "Oui" : "Non"),
     metric("Repli Stage 1", Number(quality.selection_preserved_stage1 || 0) === 1 ? "Oui — Stage 2 écarté" : "Non"),
     metric("SR-MPGD gamma", fmt(quality.diffqrcoder_srmpgd_gamma, 3)),
+    metric("Loss SR-MPGD", Number(quality.diffqrcoder_srmpgd_robust_loss_enabled || 0) === 1 ? "Robuste E020" : "Officielle"),
     metric("SR-MPGD LPIPS lambda", fmt(quality.diffqrcoder_srmpgd_lpips_weight, 3)),
     metric("Itération retenue", fmt(quality.diffqrcoder_srmpgd_selected_iteration, 0)),
     metric("Pas latent RMS max", fmt(quality.diffqrcoder_srmpgd_max_applied_step_rms, 4)),
@@ -465,6 +517,11 @@ async function openTrial(index) {
     metric("Changement retenu", pct(quality.diffqrcoder_srmpgd_selected_mean_absolute_change)),
     metric("Garde esthétique", Number(quality.diffqrcoder_srmpgd_selected_aesthetic_guard || 0) === 1 ? "Respectée" : "Échec / non exécutée"),
     metric("Gain QR suffisant", Number(quality.diffqrcoder_srmpgd_selected_qr_gain_sufficient || 0) === 1 ? "Oui" : "Non"),
+    metric("Meilleur essai — itération", fmt(quality.diffqrcoder_srmpgd_attempted_best_iteration, 0)),
+    metric("Meilleur essai — SSR", pct(quality.diffqrcoder_srmpgd_attempted_best_pass_rate)),
+    metric("Meilleur essai — MER", pct(quality.diffqrcoder_srmpgd_attempted_best_mer)),
+    metric("Meilleur essai — SRL", fmt(quality.diffqrcoder_srmpgd_attempted_best_srl, 6)),
+    metric("Meilleur essai — éligible", Number(quality.diffqrcoder_srmpgd_attempted_best_eligible || 0) === 1 ? "Oui" : "Non"),
     metric("Arrêt SR-MPGD", run.provenance?.srmpgd_stop_reason || "—"),
     metric("Génération", `${fmt((run.generation_ms || 0) / 1000, 1)} s`),
     metric("Validation", `${fmt((run.validation_ms || 0) / 1000, 1)} s`),
@@ -476,6 +533,7 @@ async function openTrial(index) {
   const artifacts = await api(`/v1/generations/${run.id}/artifacts`);
   $("#artifacts").innerHTML = artifacts.map(item => `
     <figure><img src="${item.url}" loading="lazy"><figcaption>${item.name}</figcaption></figure>`).join("");
+  await renderSrmpgdTrace(run);
   $("#validations").innerHTML = `<table>
     <thead><tr><th>Décodeur</th><th>Scénario</th><th>Prétraitement</th><th>${qartContract ? "URL canonique" : "Payload exact"}</th><th>Latence</th></tr></thead>
     <tbody>${(run.validations || []).map(item => `<tr>

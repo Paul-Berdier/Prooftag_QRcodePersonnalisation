@@ -6,7 +6,7 @@ import threading
 import time
 from collections.abc import Iterable
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from types import MethodType
 
 import numpy as np
@@ -157,6 +157,7 @@ class UpstreamDiffQRCoderBackend:
         self.settings = settings
         self._pipeline = None
         self._debug_artifacts: dict[str, Image.Image] = {}
+        self._debug_metadata: dict[str, object] = {}
         self._diagnostics: dict[str, float] = {}
         self._stage2_control: _Stage2Control | None = None
         self._stage2_override: dict | None = None
@@ -637,6 +638,27 @@ class UpstreamDiffQRCoderBackend:
                 max_rgb_clipped_channel_ratio_increase=(
                     self.settings.srmpgd_max_rgb_clipped_channel_ratio_increase
                 ),
+                robust_blur_weight=self.settings.srmpgd_robust_blur_weight,
+                robust_blur_kernel=self.settings.srmpgd_robust_blur_kernel,
+                robust_downscale_weight=(
+                    self.settings.srmpgd_robust_downscale_weight
+                ),
+                robust_downscale_factor=(
+                    self.settings.srmpgd_robust_downscale_factor
+                ),
+                robust_brightness_weight=(
+                    self.settings.srmpgd_robust_brightness_weight
+                ),
+                robust_brightness_low=self.settings.srmpgd_robust_brightness_low,
+                robust_brightness_high=(
+                    self.settings.srmpgd_robust_brightness_high
+                ),
+                robust_contrast_weight=(
+                    self.settings.srmpgd_robust_contrast_weight
+                ),
+                robust_contrast_factor=(
+                    self.settings.srmpgd_robust_contrast_factor
+                ),
                 quiet_zone_mode="none",
                 functional_pattern_tone_factor=0.0,
             ),
@@ -646,6 +668,32 @@ class UpstreamDiffQRCoderBackend:
         )
         image = srmpgd.image
         self._srmpgd_stop_reason = srmpgd.stop_reason
+        attempted_steps = list(srmpgd.steps[1:]) or [srmpgd.steps[0]]
+        best_attempted = max(
+            attempted_steps,
+            key=lambda step: (
+                step.strict_all,
+                step.pass_rate,
+                step.worst_decoder_pass_rate,
+                step.worst_scenario_pass_rate,
+                -step.actual_module_error_rate,
+                -step.scanning_robust_loss,
+            ),
+        )
+        self._debug_metadata["srmpgd_trace"] = {
+            "selected_iteration": srmpgd.selected_iteration,
+            "stop_reason": srmpgd.stop_reason,
+            "robust_loss_enabled": any(
+                value > 0
+                for value in (
+                    self.settings.srmpgd_robust_blur_weight,
+                    self.settings.srmpgd_robust_downscale_weight,
+                    self.settings.srmpgd_robust_brightness_weight,
+                    self.settings.srmpgd_robust_contrast_weight,
+                )
+            ),
+            "steps": [asdict(step) for step in srmpgd.steps],
+        }
         self._diagnostics.update(
             {
                 "diffqrcoder_srmpgd_iterations": float(len(srmpgd.steps) - 1),
@@ -701,6 +749,45 @@ class UpstreamDiffQRCoderBackend:
                         default=0.0,
                     )
                 ),
+                "diffqrcoder_srmpgd_robust_loss_enabled": float(
+                    self._debug_metadata["srmpgd_trace"]["robust_loss_enabled"]
+                ),
+                "diffqrcoder_srmpgd_attempted_best_iteration": float(
+                    best_attempted.iteration
+                ),
+                "diffqrcoder_srmpgd_attempted_best_pass_rate": float(
+                    best_attempted.pass_rate
+                ),
+                "diffqrcoder_srmpgd_attempted_best_mer": float(
+                    best_attempted.actual_module_error_rate
+                ),
+                "diffqrcoder_srmpgd_attempted_best_srl": float(
+                    best_attempted.scanning_robust_loss
+                ),
+                "diffqrcoder_srmpgd_attempted_best_lpips": float(
+                    best_attempted.lpips_loss
+                ),
+                "diffqrcoder_srmpgd_attempted_best_change": float(
+                    best_attempted.mean_absolute_change
+                ),
+                "diffqrcoder_srmpgd_attempted_best_guard": float(
+                    best_attempted.aesthetic_guard_passed
+                ),
+                "diffqrcoder_srmpgd_attempted_best_qr_gain": float(
+                    best_attempted.qr_gain_sufficient
+                ),
+                "diffqrcoder_srmpgd_attempted_best_eligible": float(
+                    best_attempted.eligible_for_selection
+                ),
+                "diffqrcoder_srmpgd_min_attempted_srl": float(
+                    min(step.scanning_robust_loss for step in attempted_steps)
+                ),
+                "diffqrcoder_srmpgd_min_attempted_mer": float(
+                    min(step.actual_module_error_rate for step in attempted_steps)
+                ),
+                "diffqrcoder_srmpgd_eligible_attempts": float(
+                    sum(step.eligible_for_selection for step in attempted_steps)
+                ),
             }
         )
         self._debug_artifacts["srmpgd_selected"] = image.copy()
@@ -719,6 +806,7 @@ class UpstreamDiffQRCoderBackend:
 
         pipe = self._load()
         self._debug_artifacts.clear()
+        self._debug_metadata.clear()
         self._stage2_source_run_id = None
         self._stage2_source_method_id = None
         self._stage2_pairing_status = "generated_source"
@@ -923,6 +1011,9 @@ class UpstreamDiffQRCoderBackend:
 
     def debug_artifacts(self) -> dict[str, Image.Image]:
         return self._debug_artifacts.copy()
+
+    def debug_metadata(self) -> dict[str, object]:
+        return self._debug_metadata.copy()
 
     def diagnostics(self) -> dict[str, float]:
         return self._diagnostics.copy()

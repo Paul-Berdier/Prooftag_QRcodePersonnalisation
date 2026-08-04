@@ -446,6 +446,13 @@ class GenerationService:
                                 f"attempt_{attempt + 1}_{artifact_name}",
                                 artifact_image,
                             )
+                        if hasattr(backend, "debug_metadata"):
+                            for metadata_name, payload in backend.debug_metadata().items():
+                                self.artifact_store.save_metadata(
+                                    run.id,
+                                    metadata_name,
+                                    payload,
+                                )
 
                     if (
                         attempt_accepted

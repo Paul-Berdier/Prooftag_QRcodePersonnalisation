@@ -122,10 +122,12 @@ dialog::backdrop { background: #000b; backdrop-filter: blur(3px); }
 .artifact-grid figcaption { color: var(--muted); font-size: 10px; margin-top: 4px; }
 .validation-details { margin: 14px 0; padding: 12px; border: 1px solid var(--line); border-radius: 11px; }
 .validation-details summary { margin-bottom: 10px; }
+.table-scroll { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 11px; }
 th, td { padding: 7px 8px; border-bottom: 1px solid var(--line); text-align: left; }
 th { color: var(--muted); font-weight: 600; }
 td.pass { color: var(--green); } td.fail { color: var(--red); }
+tr.selected td { color: var(--green); background: #12261f; }
 .human { margin-top: 15px; background: var(--card2); }
 .verdict-row { display: grid; grid-template-columns: 1.2fr 1.7fr .8fr; gap: 14px; align-items: end; margin-bottom: 13px; }
 fieldset { display: flex; gap: 7px; min-height: 69px; margin: 0; border: 1px solid var(--line); border-radius: 10px; }

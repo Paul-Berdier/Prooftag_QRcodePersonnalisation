@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Prooftag — DiffQRCoder Lab</title>
-  <link rel="stylesheet" href="/lab-assets/styles.css?v=20260803-output-guard-2">
+  <link rel="stylesheet" href="/lab-assets/styles.css?v=20260804-e020-trace-robust-1">
 </head>
 <body>
   <header class="topbar">
@@ -137,6 +137,10 @@ botanical | Delicate botanical engraving with white flowers, cyan leaves and dar
       </header>
       <section id="dialog-metrics" class="metrics"></section>
       <section id="artifacts" class="artifact-grid"></section>
+      <details id="srmpgd-trace-panel" class="validation-details" open hidden>
+        <summary>Trajectoire SR-MPGD — chaque état réellement évalué</summary>
+        <div id="srmpgd-trace"></div>
+      </details>
       <details class="validation-details" open>
         <summary>Tests automatiques de scannabilité</summary>
         <div id="validations"></div>
@@ -219,6 +223,15 @@ botanical | Delicate botanical engraving with white flowers, cyan leaves and dar
         <label>Saturation Δ maximale<input class="mpgd-max-saturation" type="number" min="0" max="1" step="0.01"></label>
         <label>Pixels saturés Δ maximal<input class="mpgd-max-high-saturation" type="number" min="0" max="1" step="0.01"></label>
         <label>Écrêtage RGB Δ maximal<input class="mpgd-max-rgb-clipping" type="number" min="0" max="1" step="0.005"></label>
+        <label>Loss flou — poids<input class="mpgd-robust-blur-weight" type="number" min="0" max="10" step="0.25"></label>
+        <label>Loss flou — noyau<input class="mpgd-robust-blur-kernel" type="number" min="1" max="15" step="2"></label>
+        <label>Loss réduction — poids<input class="mpgd-robust-downscale-weight" type="number" min="0" max="10" step="0.25"></label>
+        <label>Loss réduction — facteur<input class="mpgd-robust-downscale-factor" type="number" min="0.1" max="1" step="0.05"></label>
+        <label>Loss luminosité — poids<input class="mpgd-robust-brightness-weight" type="number" min="0" max="10" step="0.25"></label>
+        <label>Luminosité basse<input class="mpgd-robust-brightness-low" type="number" min="0.1" max="1" step="0.05"></label>
+        <label>Luminosité haute<input class="mpgd-robust-brightness-high" type="number" min="1" max="2" step="0.05"></label>
+        <label>Loss contraste — poids<input class="mpgd-robust-contrast-weight" type="number" min="0" max="10" step="0.25"></label>
+        <label>Contraste simulé<input class="mpgd-robust-contrast-factor" type="number" min="0.1" max="1" step="0.05"></label>
       </div>
       <details>
         <summary>Modèles et géométrie épinglés</summary>
@@ -227,6 +240,6 @@ botanical | Delicate botanical engraving with white flowers, cyan leaves and dar
     </article>
   </template>
 
-  <script src="/lab-assets/app.js?v=20260804-e019-safe-srmpgd-1" defer></script>
+  <script src="/lab-assets/app.js?v=20260804-e020-trace-robust-1" defer></script>
 </body>
 </html>

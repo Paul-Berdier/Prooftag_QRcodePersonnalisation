@@ -48,6 +48,15 @@ class SRMPGDConfig:
     max_saturation_mean_increase: float = 0.04
     max_high_saturation_ratio_increase: float = 0.05
     max_rgb_clipped_channel_ratio_increase: float = 0.01
+    robust_blur_weight: float = 0.0
+    robust_blur_kernel: int = 3
+    robust_downscale_weight: float = 0.0
+    robust_downscale_factor: float = 0.75
+    robust_brightness_weight: float = 0.0
+    robust_brightness_low: float = 0.80
+    robust_brightness_high: float = 1.20
+    robust_contrast_weight: float = 0.0
+    robust_contrast_factor: float = 0.75
     quiet_zone_mode: str = "adaptive_light"
     quiet_zone_minimum_luminance: float = 0.90
     functional_pattern_tone_factor: float = 0.0
@@ -81,6 +90,11 @@ class SRMPGDStep:
     aesthetic_guard_passed: bool
     qr_gain_sufficient: bool
     eligible_for_selection: bool
+    base_scanning_loss: float
+    blur_scanning_loss: float | None
+    downscale_scanning_loss: float | None
+    brightness_scanning_loss: float | None
+    contrast_scanning_loss: float | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,6 +149,24 @@ def _validate_config(config: SRMPGDConfig) -> None:
     ):
         if not 0 <= getattr(config, name) <= 1:
             raise ValueError(f"{name} must be between 0 and 1")
+    for name in (
+        "robust_blur_weight",
+        "robust_downscale_weight",
+        "robust_brightness_weight",
+        "robust_contrast_weight",
+    ):
+        if getattr(config, name) < 0:
+            raise ValueError(f"{name} cannot be negative")
+    if config.robust_blur_kernel < 1 or config.robust_blur_kernel % 2 == 0:
+        raise ValueError("robust_blur_kernel must be a positive odd integer")
+    if not 0 < config.robust_downscale_factor <= 1:
+        raise ValueError("robust_downscale_factor must be between 0 and 1")
+    if not 0 < config.robust_brightness_low <= 1:
+        raise ValueError("robust_brightness_low must be between 0 and 1")
+    if not 1 <= config.robust_brightness_high <= 2:
+        raise ValueError("robust_brightness_high must be between 1 and 2")
+    if not 0 < config.robust_contrast_factor <= 1:
+        raise ValueError("robust_contrast_factor must be between 0 and 1")
     if config.quiet_zone_mode not in {"none", "white", "adaptive_light"}:
         raise ValueError("quiet_zone_mode must be none, white or adaptive_light")
     if not 0.0 < config.quiet_zone_minimum_luminance <= 1.0:
@@ -289,6 +321,88 @@ def _rank_step(step: SRMPGDStep) -> tuple[Any, ...]:
     )
 
 
+def _robust_scanning_loss(
+    images: Any,
+    target: Any,
+    scanning_loss: ScanningLoss,
+    config: SRMPGDConfig,
+) -> tuple[Any, dict[str, Any | None]]:
+    """Average the public DiffQRCoder SRL over differentiable scan degradations."""
+    import torch.nn.functional as functional
+
+    base = scanning_loss(images, target)
+    if base.ndim != 0:
+        base = base.mean()
+    total = base
+    total_weight = 1.0
+    components: dict[str, Any | None] = {
+        "base": base,
+        "blur": None,
+        "downscale": None,
+        "brightness": None,
+        "contrast": None,
+    }
+
+    if config.robust_blur_weight:
+        blurred = functional.avg_pool2d(
+            images,
+            kernel_size=config.robust_blur_kernel,
+            stride=1,
+            padding=config.robust_blur_kernel // 2,
+        )
+        blur = scanning_loss(blurred, target)
+        if blur.ndim != 0:
+            blur = blur.mean()
+        components["blur"] = blur
+        total = total + config.robust_blur_weight * blur
+        total_weight += config.robust_blur_weight
+
+    if config.robust_downscale_weight:
+        reduced = functional.interpolate(
+            images,
+            scale_factor=config.robust_downscale_factor,
+            mode="bilinear",
+            align_corners=False,
+            recompute_scale_factor=False,
+        )
+        restored = functional.interpolate(
+            reduced,
+            size=images.shape[-2:],
+            mode="bilinear",
+            align_corners=False,
+        )
+        downscale = scanning_loss(restored, target)
+        if downscale.ndim != 0:
+            downscale = downscale.mean()
+        components["downscale"] = downscale
+        total = total + config.robust_downscale_weight * downscale
+        total_weight += config.robust_downscale_weight
+
+    if config.robust_brightness_weight:
+        brightness = images.new_tensor(0.0)
+        for factor in (config.robust_brightness_low, config.robust_brightness_high):
+            value = scanning_loss((images * factor).clamp(0, 1), target)
+            if value.ndim != 0:
+                value = value.mean()
+            brightness = brightness + value / 2
+        components["brightness"] = brightness
+        total = total + config.robust_brightness_weight * brightness
+        total_weight += config.robust_brightness_weight
+
+    if config.robust_contrast_weight:
+        contrasted = (
+            (images - 0.5) * config.robust_contrast_factor + 0.5
+        ).clamp(0, 1)
+        contrast = scanning_loss(contrasted, target)
+        if contrast.ndim != 0:
+            contrast = contrast.mean()
+        components["contrast"] = contrast
+        total = total + config.robust_contrast_weight * contrast
+        total_weight += config.robust_contrast_weight
+
+    return total / total_weight, components
+
+
 def run_srmpgd(
     pipeline: Any,
     initial_latent: Any,
@@ -408,13 +522,22 @@ def run_srmpgd(
                 light_threshold=config.light_threshold,
                 layout=layout,
             )
-            srl = (
-                scanning_loss(decoded_unit, target_core)
-                if scanning_loss is not None
-                else diagnostic_srl
-            )
-            if srl.ndim != 0:
-                srl = srl.mean()
+            if scanning_loss is not None:
+                srl, robust_components = _robust_scanning_loss(
+                    decoded_unit,
+                    target_core,
+                    scanning_loss,
+                    config,
+                )
+            else:
+                srl = diagnostic_srl
+                robust_components = {
+                    "base": diagnostic_srl,
+                    "blur": None,
+                    "downscale": None,
+                    "brightness": None,
+                    "contrast": None,
+                }
             lpips_parameter = next(iter(lpips_model.parameters()), None)
             lpips_dtype = (
                 lpips_parameter.dtype if lpips_parameter is not None else decoded_core.dtype
@@ -535,6 +658,29 @@ def run_srmpgd(
                 aesthetic_guard_passed=aesthetic_guard_passed,
                 qr_gain_sufficient=qr_gain_sufficient,
                 eligible_for_selection=eligible_for_selection,
+                base_scanning_loss=float(
+                    robust_components["base"].detach().cpu()
+                ),
+                blur_scanning_loss=(
+                    float(robust_components["blur"].detach().cpu())
+                    if robust_components["blur"] is not None
+                    else None
+                ),
+                downscale_scanning_loss=(
+                    float(robust_components["downscale"].detach().cpu())
+                    if robust_components["downscale"] is not None
+                    else None
+                ),
+                brightness_scanning_loss=(
+                    float(robust_components["brightness"].detach().cpu())
+                    if robust_components["brightness"] is not None
+                    else None
+                ),
+                contrast_scanning_loss=(
+                    float(robust_components["contrast"].detach().cpu())
+                    if robust_components["contrast"] is not None
+                    else None
+                ),
                 **validation,
             )
             states.append((step, working.detach().clone(), image.copy()))

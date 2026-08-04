@@ -117,6 +117,27 @@ def runtime_info(settings: Settings | None = None) -> dict:
             "srmpgd_max_rgb_clipped_channel_ratio_increase": (
                 settings.srmpgd_max_rgb_clipped_channel_ratio_increase
             ),
+            "srmpgd_robust_blur_weight": settings.srmpgd_robust_blur_weight,
+            "srmpgd_robust_blur_kernel": settings.srmpgd_robust_blur_kernel,
+            "srmpgd_robust_downscale_weight": (
+                settings.srmpgd_robust_downscale_weight
+            ),
+            "srmpgd_robust_downscale_factor": (
+                settings.srmpgd_robust_downscale_factor
+            ),
+            "srmpgd_robust_brightness_weight": (
+                settings.srmpgd_robust_brightness_weight
+            ),
+            "srmpgd_robust_brightness_low": settings.srmpgd_robust_brightness_low,
+            "srmpgd_robust_brightness_high": (
+                settings.srmpgd_robust_brightness_high
+            ),
+            "srmpgd_robust_contrast_weight": (
+                settings.srmpgd_robust_contrast_weight
+            ),
+            "srmpgd_robust_contrast_factor": (
+                settings.srmpgd_robust_contrast_factor
+            ),
             "latent_refinement_enabled": settings.latent_refinement_enabled,
             "latent_refinement_iterations": settings.latent_refinement_iterations,
             "latent_refinement_learning_rate": settings.latent_refinement_learning_rate,
