@@ -168,8 +168,8 @@ humaine ; seule une divergence forte rejette automatiquement l'image.
 - sélection automatique : mode de livraison optionnel qui conserve d'abord une
   sortie acceptée, puis la moins altérée. Il est désactivé dans les campagnes
   visuelles pour ne pas afficher une copie supplémentaire de la sortie retenue ;
-- SR-MPGD : désactivé par défaut et lancé seulement si le MER Stage 2 est au
-  plus `12 %` ;
+- SR-MPGD : activé dans E018, lancé seulement si le MER Stage 2 est au plus
+  `12 %` et uniquement sur le latent SHA-256 exact du SRPG correspondant ;
 - QArt public : expérimental et désactivé, car les quatre sorties testées ont
   échoué au téléphone malgré une cible valide avant diffusion ;
 - ablation de force disponible : `0,35 / 0,50 / 0,65 / 0,80`.
@@ -202,7 +202,7 @@ Le script refuse un dépôt sale, construit une image taguée avec le commit Git
 vérifie le commit DiffQRCoder, importe l’image dans containerd K3s, applique la
 migration `0005_e017_phone_calibration`, attend le rollout puis contrôle dans le pod les
 profils de production et d'ablation, l’import DiffQRCoder et la version
-`20260803-e017-phone-proxy-1` des assets Web, l’initialisation Stage 1 bruitée,
+`20260804-e018-stage2-pairing-1` des assets Web, l’initialisation Stage 1 bruitée,
 la cible binaire exacte, la force `0,65`, le repli automatique et le seuil
 SR-MPGD.
 
@@ -215,3 +215,8 @@ Phone Proxy affiché dans les cartes est une métrique de calibration et non une
 porte d'acceptation. Les évaluations téléphone doivent maintenant enregistrer
 les essais, les réussites et l'appareil pour rendre la comparaison statistique
 exploitable.
+
+La phase E018 est décrite dans
+[`e018-strict-stage2-pairing.md`](e018-strict-stage2-pairing.md). Dans le détail
+d'un résultat SR-MPGD, vérifier **Appariement Stage 2 = Exact — SHA identique**
+avant de noter ou d'utiliser l'image dans une comparaison.

@@ -424,6 +424,8 @@ async function openTrial(index) {
     metric("Init. papier", Number(quality.diffqrcoder_stage2_paper_initialization || 0) === 1 ? "Oui" : "Non"),
     metric("Pas Stage 2 effectifs", fmt(quality.diffqrcoder_stage2_effective_steps, 0)),
     metric("Stage 2 réutilisé", Number(quality.diffqrcoder_stage2_reused || 0) === 1 ? "Oui — aucun recalcul" : "Non"),
+    metric("Appariement Stage 2", run.provenance?.stage2_pairing_status === "exact_reuse" ? "Exact — SHA identique" : (run.provenance?.stage2_pairing_status === "generated_source" ? "Source SRPG" : "—")),
+    metric("Source Stage 2", run.provenance?.stage2_source_method_id || "—"),
     metric("Cible Stage 2", Number(quality.diffqrcoder_stage2_control_target_qart || 0) === 1 ? "QArt réel — URL canonique" : "QR binaire exact"),
     metric("Contrat payload", Number(quality.diffqrcoder_stage2_control_target_qart || 0) === 1 ? "URL identique avant #" : "Byte-à-byte exact"),
     metric("Erreur centres cible", pct(quality.diffqrcoder_stage2_control_target_center_error_rate)),
@@ -446,6 +448,7 @@ async function openTrial(index) {
     metric("SHA image finale", run.provenance?.final_image_sha256?.slice(0, 16) || "—"),
     metric("SHA Stage 1", run.provenance?.stage1_image_sha256?.slice(0, 16) || "—"),
     metric("SHA latent Stage 2", run.provenance?.stage2_latent_sha256?.slice(0, 16) || "—"),
+    metric("SHA latent source", run.provenance?.stage2_source_latent_sha256?.slice(0, 16) || "—"),
   ].join("");
   const artifacts = await api(`/v1/generations/${run.id}/artifacts`);
   $("#artifacts").innerHTML = artifacts.map(item => `

@@ -1242,3 +1242,26 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   pourra être réintroduit qu’après validation exacte du payload avant diffusion.
   Les campagnes produites avec la cible hybride restent historiques et ne
   doivent pas être comparées aux nouvelles campagnes.
+
+## E018 — appariement strict SRPG → SR-MPGD — 4 août 2026
+
+- **Déclencheur :** l'audit de la campagne `831e74cb` montre des SHA de latent
+  Stage 2 différents entre SRPG et SR-MPGD sur les dix prompts. Les bons scores
+  SR-MPGD (9/10 scans téléphone) ne prouvaient donc pas l'effet du
+  post-traitement sur une même image SRPG.
+- **Correction :** la clé de partage est reconstruite avec les seuls paramètres
+  qui modifient mathématiquement le Stage 2. Les options d'aperçu, les gardes de
+  sélection et tous les paramètres SR-MPGD n'en font pas partie.
+- **Contrat dur :** SR-MPGD ne peut plus recalculer silencieusement un Stage 2.
+  Il doit trouver une source SRPG antérieure dans la campagne, importer son
+  latent et réussir deux contrôles SHA-256. Sinon l'essai passe en erreur avec
+  la cause exacte.
+- **Traçabilité :** `run_id`, méthode source, SHA source, SHA utilisé et statut
+  d'appariement sont enregistrés dans la provenance, exportés en CSV et affichés
+  dans le Web Lab.
+- **Protocole suivant :** QR témoin, Stage 1, SRPG 0,65 puis le SR-MPGD strict
+  sont activés. La campagne suivante doit utiliser au moins trois seeds et trois
+  essais téléphone documentés par image.
+- **Validation locale :** suite pytest complète réussie, tests d'intégration de
+  l'absence de source et de la propagation exacte `run_id`/SHA réussis, Ruff
+  réussi et interface vérifiée dans le navigateur local.

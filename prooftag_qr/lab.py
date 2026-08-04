@@ -648,7 +648,7 @@ def laboratory_profiles() -> list[dict[str, Any]]:
             "id": "diffqrcoder_srmpgd",
             "name": "DiffQRCoder — Stage 2 + SR-MPGD",
             "backend": "controlnet",
-            "enabled": False,
+            "enabled": True,
             "output_variant": "srmpgd",
             "reuse_stage1": True,
             "generation": generation.copy(),
@@ -670,8 +670,8 @@ def laboratory_profiles() -> list[dict[str, Any]]:
                 },
             },
             "description": (
-                "Reprend exactement le latent du Stage 2 binaire à 65 %, puis "
-                "Eq. 13-14. Arrêt si le MER initial dépasse 12 %."
+                "E018 : reprend obligatoirement le latent SHA-256 exact du SRPG "
+                "binaire à 65 %, puis Eq. 13-14. Aucun recalcul Stage 2 silencieux."
             ),
         },
         {
@@ -897,11 +897,20 @@ class LabService:
                         )
                         cached_stage2 = shared_stage2.get(stage2_key)
                         backend = generation_service.backends.get("controlnet")
+                        if method.tools.srmpgd_enabled and cached_stage2 is None:
+                            raise RuntimeError(
+                                "SR-MPGD requires the exact matching SRPG Stage 2 "
+                                "source to run earlier in the same campaign"
+                            )
                         if (
                             cached_stage2 is not None
                             and hasattr(backend, "import_stage2_state")
                         ):
                             backend.import_stage2_state(cached_stage2)
+                        elif cached_stage2 is not None:
+                            raise RuntimeError(
+                                "the selected backend cannot import the paired Stage 2 state"
+                            )
                     run = generation_service.generate(
                         generation_request,
                         raw_candidate_override=stage1_override,
@@ -917,7 +926,42 @@ class LabService:
                         if hasattr(backend, "export_stage2_state"):
                             stage2_state = backend.export_stage2_state()
                             if stage2_state is not None:
+                                stage2_state["source_run_id"] = run.id
+                                stage2_state["source_method_id"] = method.id
                                 shared_stage2[stage2_key] = stage2_state
+                                run.provenance.update(
+                                    {
+                                        "stage2_source_run_id": run.id,
+                                        "stage2_source_method_id": method.id,
+                                        "stage2_source_latent_sha256": stage2_state[
+                                            "latent_sha256"
+                                        ],
+                                        "stage2_pairing_status": "generated_source",
+                                    }
+                                )
+                    if stage2_key is not None and cached_stage2 is not None:
+                        expected_sha256 = cached_stage2["latent_sha256"]
+                        actual_sha256 = run.provenance.get("stage2_latent_sha256")
+                        if actual_sha256 != expected_sha256:
+                            raise RuntimeError(
+                                "paired Stage 2 latent mismatch after generation: "
+                                f"expected {expected_sha256}, got {actual_sha256}"
+                            )
+                        run.provenance.update(
+                            {
+                                "stage2_source_run_id": cached_stage2[
+                                    "source_run_id"
+                                ],
+                                "stage2_source_method_id": cached_stage2[
+                                    "source_method_id"
+                                ],
+                                "stage2_source_latent_sha256": expected_sha256,
+                                "stage2_pairing_status": "exact_reuse",
+                            }
+                        )
+                        run.quality_metrics[
+                            "diffqrcoder_stage2_pairing_exact"
+                        ] = 1.0
                     self._record_method_diagnostics(run, method)
                     self._score_quality(run, prompt.text)
                     status = (
@@ -1176,11 +1220,42 @@ class LabService:
         payload: str,
     ) -> str:
         settings = self._settings_for_method(method)
+        generation = GenerationRequest.model_validate(
+            {
+                "payload": payload,
+                "prompt": prompt,
+                "negative_prompt": negative_prompt,
+                "backend": method.backend,
+                "error_correction": error_correction,
+                "seed": seed,
+                **method.generation,
+            }
+        )
+        # Only values that mathematically alter the public DiffQRCoder Stage 2
+        # belong here. Debug previews, selection guards and every SR-MPGD
+        # setting are deliberately excluded: they operate after the clean
+        # Stage 2 latent and must not prevent an exact reuse.
         stage2_settings = {
-            key: value
-            for key, value in method.tools.settings.items()
-            if not key.startswith("srmpgd_")
+            "guidance_scale": generation.guidance_scale,
+            "srpg_steps": settings.srpg_steps,
+            "stage2_strength": settings.diffqrcoder_stage2_strength,
+            "stage2_initialization": settings.diffqrcoder_stage2_initialization,
+            "controlnet_scale": settings.srpg_controlnet_scale,
+            "scanning_guidance": settings.srpg_qr_weight,
+            "perceptual_guidance": settings.srpg_perceptual_weight,
+            "eta": settings.srpg_eta,
+            "seed_offset": settings.srpg_seed_offset,
+            "control_guidance_start": settings.diffqrcoder_control_guidance_start,
+            "control_guidance_end": settings.diffqrcoder_control_guidance_end,
+            "target_mode": settings.diffqrcoder_stage2_target_mode,
         }
+        if settings.diffqrcoder_stage2_target_mode == "qart_url_fragment":
+            stage2_settings.update(
+                {
+                    "qart_thresholds": settings.diffqrcoder_qart_thresholds,
+                    "qart_executable": settings.diffqrcoder_qart_executable,
+                }
+            )
         specification = {
             "stage1": self._stage1_cache_key(
                 method,
@@ -1190,9 +1265,7 @@ class LabService:
                 error_correction,
             ),
             "payload_hash": hashlib.sha256(payload.encode()).hexdigest(),
-            "guidance_scale": method.generation.get("guidance_scale"),
             "stage2_settings": stage2_settings,
-            "target_mode": settings.diffqrcoder_stage2_target_mode,
         }
         return hashlib.sha256(
             json.dumps(

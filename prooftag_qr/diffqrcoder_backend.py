@@ -162,26 +162,43 @@ class UpstreamDiffQRCoderBackend:
         self._stage2_override: dict | None = None
         self._last_stage2_state: dict | None = None
         self._stage2_latent_sha256: str | None = None
+        self._stage2_source_run_id: str | None = None
+        self._stage2_source_method_id: str | None = None
+        self._stage2_pairing_status: str | None = None
 
     def import_stage2_state(self, state: dict) -> None:
+        actual_sha256 = _tensor_sha256(state["latent"])
+        expected_sha256 = state.get("latent_sha256", actual_sha256)
+        if actual_sha256 != expected_sha256:
+            raise RuntimeError(
+                "cached DiffQRCoder Stage 2 latent hash mismatch: "
+                f"expected {expected_sha256}, got {actual_sha256}"
+            )
         self._stage2_override = {
             "latent": state["latent"].clone(),
             "image": state["image"].copy(),
             "reference": state["reference"].copy(),
             "control": state["control"],
             "diagnostics": dict(state["diagnostics"]),
+            "latent_sha256": actual_sha256,
+            "source_run_id": state.get("source_run_id"),
+            "source_method_id": state.get("source_method_id"),
         }
 
     def export_stage2_state(self) -> dict | None:
         if self._last_stage2_state is None:
             return None
         state = self._last_stage2_state
+        latent = state["latent"].clone()
         return {
-            "latent": state["latent"].clone(),
+            "latent": latent,
             "image": state["image"].copy(),
             "reference": state["reference"].copy(),
             "control": state["control"],
             "diagnostics": dict(state["diagnostics"]),
+            "latent_sha256": _tensor_sha256(latent),
+            "source_run_id": state.get("source_run_id"),
+            "source_method_id": state.get("source_method_id"),
         }
 
     def _load(self):
@@ -655,6 +672,9 @@ class UpstreamDiffQRCoderBackend:
 
         pipe = self._load()
         self._debug_artifacts.clear()
+        self._stage2_source_run_id = None
+        self._stage2_source_method_id = None
+        self._stage2_pairing_status = "generated_source"
         if self._stage2_override is not None:
             cached = self._stage2_override
             self._stage2_override = None
@@ -665,9 +685,17 @@ class UpstreamDiffQRCoderBackend:
                 dtype=pipe.unet.dtype,
             )
             self._stage2_latent_sha256 = _tensor_sha256(latent)
+            if self._stage2_latent_sha256 != cached["latent_sha256"]:
+                raise RuntimeError(
+                    "imported DiffQRCoder Stage 2 latent changed while moving to GPU"
+                )
+            self._stage2_source_run_id = cached["source_run_id"]
+            self._stage2_source_method_id = cached["source_method_id"]
+            self._stage2_pairing_status = "exact_reuse"
             image = cached["image"].copy()
             self._diagnostics = dict(cached["diagnostics"])
             self._diagnostics["diffqrcoder_stage2_reused"] = 1.0
+            self._diagnostics["diffqrcoder_stage2_pairing_exact"] = 1.0
             self._debug_artifacts["stage2_reference"] = cached[
                 "reference"
             ].copy()
@@ -802,6 +830,7 @@ class UpstreamDiffQRCoderBackend:
             }
         )
         self._diagnostics["diffqrcoder_stage2_reused"] = 0.0
+        self._diagnostics["diffqrcoder_stage2_pairing_exact"] = 0.0
         self._last_stage2_state = {
             "latent": latent.detach().cpu().clone(),
             "image": image.copy(),
@@ -860,4 +889,10 @@ class UpstreamDiffQRCoderBackend:
         }
         if self._stage2_latent_sha256:
             values["stage2_latent_sha256"] = self._stage2_latent_sha256
+        if self._stage2_source_run_id:
+            values["stage2_source_run_id"] = self._stage2_source_run_id
+        if self._stage2_source_method_id:
+            values["stage2_source_method_id"] = self._stage2_source_method_id
+        if self._stage2_pairing_status:
+            values["stage2_pairing_status"] = self._stage2_pairing_status
         return values

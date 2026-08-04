@@ -87,12 +87,16 @@ def test_web_lab_exposes_only_the_pinned_diffqrcoder_chain():
     automatic = next(
         profile for profile in profiles if profile["id"] == "diffqrcoder_auto"
     )
+    srmpgd = next(
+        profile for profile in profiles if profile["id"] == "diffqrcoder_srmpgd"
+    )
     assert (
         qart["tools"]["settings"]["diffqrcoder_stage2_target_mode"]
         == "qart_url_fragment"
     )
     assert qart["enabled"] is False
     assert automatic["enabled"] is False
+    assert srmpgd["enabled"] is True
 
 
 def test_srmpgd_reuses_the_matching_srpg_stage2_cache_key(tmp_path):
@@ -145,6 +149,246 @@ def test_srmpgd_reuses_the_matching_srpg_stage2_cache_key(tmp_path):
 
     assert srpg_key == srmpgd_key
     assert srpg_key == automatic_key
+
+
+def test_stage2_cache_key_uses_effective_math_not_debug_settings(tmp_path):
+    settings = Settings(data_dir=tmp_path, device="cpu")
+    run_repository = RunRepository(tmp_path / "runs.sqlite3")
+    service = LabService(
+        base_settings=settings,
+        run_repository=run_repository,
+        lab_repository=LabRepository(run_repository.engine),
+        artifact_store=LocalArtifactStore(tmp_path / "artifacts"),
+        validator=object(),
+    )
+    profile = next(
+        item for item in laboratory_profiles() if item["id"] == "diffqrcoder_srpg"
+    )
+
+    def cache_key(overrides):
+        candidate = {
+            **profile,
+            "tools": {
+                **profile["tools"],
+                "settings": {**profile["tools"]["settings"], **overrides},
+            },
+        }
+        method = LabMethod.model_validate(candidate)
+        return service._stage2_cache_key(
+            method,
+            "blue courtyard",
+            "easynegative",
+            51001,
+            "M",
+            "https://ptag.io/t/cache",
+        )
+
+    try:
+        baseline = cache_key({})
+        debug_only = cache_key(
+            {"srpg_save_step_previews": True, "srpg_preview_interval": 1}
+        )
+        changed_math = cache_key({"srpg_qr_weight": 501.0})
+    finally:
+        service.shutdown()
+
+    assert debug_only == baseline
+    assert changed_math != baseline
+
+
+def test_srmpgd_campaign_fails_without_an_earlier_matching_srpg_source(
+    tmp_path,
+    monkeypatch,
+):
+    settings = Settings(
+        data_dir=tmp_path,
+        lab_clip_scoring_enabled=False,
+        device="cpu",
+    )
+    run_repository = RunRepository(tmp_path / "runs.sqlite3")
+    service = LabService(
+        base_settings=settings,
+        run_repository=run_repository,
+        lab_repository=LabRepository(run_repository.engine),
+        artifact_store=LocalArtifactStore(tmp_path / "artifacts"),
+        validator=object(),
+    )
+
+    class ImportCapableBackend:
+        def import_stage2_state(self, state):
+            raise AssertionError("no state should exist")
+
+    class FakeGenerationService:
+        backends = {"controlnet": ImportCapableBackend()}
+
+    monkeypatch.setattr(service, "_generation_service", lambda method: FakeGenerationService())
+    srmpgd = LabMethod.model_validate(
+        next(
+            item
+            for item in laboratory_profiles()
+            if item["id"] == "diffqrcoder_srmpgd"
+        )
+    )
+    request = LabCampaignCreate(
+        name="invalid unpaired SR-MPGD",
+        payload="https://example.test/t/unpaired",
+        prompts=[{"id": "p1", "text": "blue courtyard"}],
+        seeds=[51001],
+        methods=[srmpgd],
+    )
+    campaign = service.create_campaign(request)
+    try:
+        for _ in range(100):
+            stored = service.lab_repository.get_campaign(campaign["id"])
+            if stored["status"] not in {"queued", "running"}:
+                break
+            time.sleep(0.01)
+        trials = service.lab_repository.list_trials(campaign["id"])
+    finally:
+        service.shutdown()
+
+    assert stored["status"] == "completed_with_errors"
+    assert trials[0]["status"] == "error"
+    assert "exact matching SRPG Stage 2 source" in trials[0]["error"]
+
+
+def test_srmpgd_campaign_records_the_exact_srpg_source_run_and_hash(
+    tmp_path,
+    monkeypatch,
+):
+    settings = Settings(
+        data_dir=tmp_path,
+        lab_clip_scoring_enabled=False,
+        device="cpu",
+    )
+    run_repository = RunRepository(tmp_path / "runs.sqlite3")
+    artifact_store = LocalArtifactStore(tmp_path / "artifacts")
+    service = LabService(
+        base_settings=settings,
+        run_repository=run_repository,
+        lab_repository=LabRepository(run_repository.engine),
+        artifact_store=artifact_store,
+        validator=object(),
+    )
+    latent_sha256 = "c" * 64
+
+    class PairingBackend:
+        def __init__(self):
+            self.imported = None
+            self.generated = None
+
+        def import_stage2_state(self, state):
+            self.imported = state
+
+        def export_stage2_state(self):
+            return self.generated
+
+    class FakeGenerationService:
+        def __init__(self, method):
+            self.method = method
+            self.backend = PairingBackend()
+            self.backends = {"controlnet": self.backend}
+            self.last_raw_candidate = None
+
+        def generate(
+            self,
+            request,
+            *,
+            raw_candidate_override=None,
+            target_variant=None,
+            stage1_source_run_id=None,
+        ):
+            raw = raw_candidate_override or Image.new("RGB", (32, 32), "navy")
+            self.last_raw_candidate = raw.copy()
+            run = RunRecord(
+                id=str(uuid.uuid4()),
+                created_at=datetime.now(UTC),
+                completed_at=datetime.now(UTC),
+                status="rejected",
+                backend="controlnet",
+                prompt=request.prompt,
+                payload_hash="d" * 64,
+                seed=request.seed,
+                selected_variant=target_variant,
+                selection_mode="forced",
+                stage1_reused=raw_candidate_override is not None,
+                stage1_source_run_id=stage1_source_run_id,
+                attempts=1,
+                scan_pass_rate=0.0,
+                exact_payload_match=False,
+                module_error_rate=0.1,
+                generation_ms=1.0,
+                validation_ms=1.0,
+                total_ms=2.0,
+                provenance={"stage2_latent_sha256": latent_sha256},
+            )
+            if self.method.tools.srmpgd_enabled:
+                assert self.backend.imported is not None
+                run.provenance.update(
+                    {
+                        "stage2_source_run_id": self.backend.imported[
+                            "source_run_id"
+                        ],
+                        "stage2_source_method_id": self.backend.imported[
+                            "source_method_id"
+                        ],
+                        "stage2_pairing_status": "exact_reuse",
+                    }
+                )
+            else:
+                self.backend.generated = {
+                    "latent_sha256": latent_sha256,
+                    "source_run_id": None,
+                    "source_method_id": None,
+                }
+            run.image_path = artifact_store.save_image(run.id, raw)
+            run_repository.save(run)
+            return run
+
+    monkeypatch.setattr(
+        service,
+        "_generation_service",
+        lambda method: FakeGenerationService(method),
+    )
+    profiles = laboratory_profiles()
+    srpg = LabMethod.model_validate(
+        next(item for item in profiles if item["id"] == "diffqrcoder_srpg")
+    )
+    srmpgd = LabMethod.model_validate(
+        next(item for item in profiles if item["id"] == "diffqrcoder_srmpgd")
+    )
+    request = LabCampaignCreate(
+        name="strict paired Stage 2",
+        payload="https://example.test/t/paired-stage2",
+        prompts=[{"id": "p1", "text": "blue courtyard"}],
+        seeds=[51001],
+        methods=[srpg, srmpgd],
+    )
+    campaign = service.create_campaign(request)
+    try:
+        for _ in range(100):
+            stored = service.lab_repository.get_campaign(campaign["id"])
+            if stored["status"] not in {"queued", "running"}:
+                break
+            time.sleep(0.01)
+        trials = service.lab_repository.list_trials(campaign["id"])
+        runs = {
+            trial["method_id"]: run_repository.get(trial["generation_run_id"])
+            for trial in trials
+        }
+    finally:
+        service.shutdown()
+
+    assert stored["status"] == "completed"
+    srpg_run = runs[srpg.id]
+    srmpgd_run = runs[srmpgd.id]
+    assert srpg_run.provenance["stage2_source_run_id"] == srpg_run.id
+    assert srmpgd_run.provenance["stage2_source_run_id"] == srpg_run.id
+    assert srmpgd_run.provenance["stage2_source_method_id"] == srpg.id
+    assert srmpgd_run.provenance["stage2_source_latent_sha256"] == latent_sha256
+    assert srmpgd_run.provenance["stage2_latent_sha256"] == latent_sha256
+    assert srmpgd_run.provenance["stage2_pairing_status"] == "exact_reuse"
+    assert srmpgd_run.quality_metrics["diffqrcoder_stage2_pairing_exact"] == 1.0
 
 
 def test_lab_limits_cartesian_campaign_size():

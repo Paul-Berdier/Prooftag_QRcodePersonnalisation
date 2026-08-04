@@ -48,7 +48,7 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     lab_page = client.get("/lab")
     assert lab_page.status_code == 200
     assert "PROOFTAG × DIFFQRCODER" in lab_page.text
-    assert "20260803-e017-phone-proxy-1" in lab_page.text
+    assert "20260804-e018-stage2-pairing-1" in lab_page.text
     lab_javascript = client.get("/lab-assets/app.js")
     assert lab_javascript.status_code == 200
     assert "human_scan_result" in lab_javascript.text
@@ -108,7 +108,7 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     assert srmpgd_profile["tools"]["settings"]["srmpgd_crop_padding_px"] == 78
     assert srmpgd_profile["model"]["controlnet_conditioning_profile"] == "binary"
     assert srmpgd_profile["model"]["diffqrcoder_upstream_enabled"] is True
-    assert srmpgd_profile["enabled"] is False
+    assert srmpgd_profile["enabled"] is True
 
     campaign_response = client.post(
         "/v1/lab/campaigns",

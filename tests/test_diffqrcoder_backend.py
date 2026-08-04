@@ -21,6 +21,34 @@ def _reference_artwork(size: int = 736) -> Image.Image:
     return Image.fromarray(np.stack((red, green, blue), axis=2), mode="RGB")
 
 
+def test_stage2_state_export_and_import_are_hash_verified():
+    torch = pytest.importorskip("torch")
+    latent = torch.arange(16, dtype=torch.float16).reshape(1, 1, 4, 4)
+    image = Image.new("RGB", (16, 16), "navy")
+    source = UpstreamDiffQRCoderBackend(Settings(device="cpu"))
+    source._last_stage2_state = {
+        "latent": latent,
+        "image": image,
+        "reference": image,
+        "control": object(),
+        "diagnostics": {"diffqrcoder_stage2_reused": 0.0},
+    }
+
+    state = source.export_stage2_state()
+    assert state is not None
+    state["source_run_id"] = "run-srpg"
+    state["source_method_id"] = "diffqrcoder_srpg"
+
+    target = UpstreamDiffQRCoderBackend(Settings(device="cpu"))
+    target.import_stage2_state(state)
+    assert target._stage2_override["latent_sha256"] == state["latent_sha256"]
+    assert target._stage2_override["source_run_id"] == "run-srpg"
+
+    corrupted = {**state, "latent": state["latent"] + 1}
+    with pytest.raises(RuntimeError, match="latent hash mismatch"):
+        target.import_stage2_state(corrupted)
+
+
 def test_stage2_target_is_the_exact_binary_qr_not_a_visual_proxy():
     blueprint = generate_diffqrcoder_qr(
         "https://pt.ag/t/1",
