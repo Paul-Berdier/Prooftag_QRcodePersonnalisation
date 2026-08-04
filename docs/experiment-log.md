@@ -1293,3 +1293,15 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
 - **Ablation :** `diffqrcoder_srmpgd_robust` partage strictement le latent SRPG
   du témoin et moyenne la loss publique sur flou, réduction, luminosité et
   contraste. La sortie sûre conserve toujours l’état zéro comme candidat.
+# E021 — prompts atypiques hors distribution
+
+- **Date** : 4 août 2026.
+- **But** : tester la dépendance au prompt sur douze sujets jamais employés dans les
+  campagnes historiques.
+- **Contrôle** : quatre sorties appariées par prompt, avec le même Stage 1 et le même
+  latent Stage 2 pour SRPG, SR-MPGD officiel et SR-MPGD robuste.
+- **Lots** : six prompts de diversité puis six prompts de stress visuel ; un seed avant
+  toute réplication.
+- **Décision attendue** : mesurer séparément généralisation esthétique, SSR et réponse
+  des deux losses, sans présenter une baisse de loss comme une réussite de scan.
+- **Protocole** : `docs/e021-atypical-prompt-generalization.md`.
