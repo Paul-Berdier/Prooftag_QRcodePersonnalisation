@@ -165,6 +165,7 @@ class UpstreamDiffQRCoderBackend:
         self._stage2_source_run_id: str | None = None
         self._stage2_source_method_id: str | None = None
         self._stage2_pairing_status: str | None = None
+        self._srmpgd_stop_reason: str | None = None
 
     def import_stage2_state(self, state: dict) -> None:
         actual_sha256 = _tensor_sha256(state["latent"])
@@ -618,6 +619,24 @@ class UpstreamDiffQRCoderBackend:
                 max_initial_module_error_rate=(
                     self.settings.srmpgd_max_initial_module_error_rate
                 ),
+                max_step_rms=self.settings.srmpgd_max_step_rms,
+                max_total_delta_rms=self.settings.srmpgd_max_total_delta_rms,
+                min_relative_module_improvement=(
+                    self.settings.srmpgd_min_relative_module_improvement
+                ),
+                max_lpips_loss=self.settings.srmpgd_max_lpips_loss,
+                max_mean_absolute_change=(
+                    self.settings.srmpgd_max_mean_absolute_change
+                ),
+                max_saturation_mean_increase=(
+                    self.settings.srmpgd_max_saturation_mean_increase
+                ),
+                max_high_saturation_ratio_increase=(
+                    self.settings.srmpgd_max_high_saturation_ratio_increase
+                ),
+                max_rgb_clipped_channel_ratio_increase=(
+                    self.settings.srmpgd_max_rgb_clipped_channel_ratio_increase
+                ),
                 quiet_zone_mode="none",
                 functional_pattern_tone_factor=0.0,
             ),
@@ -626,6 +645,7 @@ class UpstreamDiffQRCoderBackend:
             preview_callback=preview_srmpgd,
         )
         image = srmpgd.image
+        self._srmpgd_stop_reason = srmpgd.stop_reason
         self._diagnostics.update(
             {
                 "diffqrcoder_srmpgd_iterations": float(len(srmpgd.steps) - 1),
@@ -653,6 +673,33 @@ class UpstreamDiffQRCoderBackend:
                 ),
                 "diffqrcoder_srmpgd_stopped_non_finite": float(
                     srmpgd.stop_reason.startswith("non_finite_")
+                ),
+                "diffqrcoder_srmpgd_stopped_aesthetic_guard": float(
+                    srmpgd.stop_reason.startswith("aesthetic_guard_failed_")
+                ),
+                "diffqrcoder_srmpgd_selected_aesthetic_guard": float(
+                    srmpgd.steps[srmpgd.selected_iteration].aesthetic_guard_passed
+                ),
+                "diffqrcoder_srmpgd_selected_qr_gain_sufficient": float(
+                    srmpgd.steps[srmpgd.selected_iteration].qr_gain_sufficient
+                ),
+                "diffqrcoder_srmpgd_selected_lpips": float(
+                    srmpgd.steps[srmpgd.selected_iteration].lpips_loss
+                ),
+                "diffqrcoder_srmpgd_selected_mean_absolute_change": float(
+                    srmpgd.steps[srmpgd.selected_iteration].mean_absolute_change
+                ),
+                "diffqrcoder_srmpgd_selected_latent_delta_rms": float(
+                    srmpgd.steps[srmpgd.selected_iteration].latent_delta_rms
+                ),
+                "diffqrcoder_srmpgd_max_applied_step_rms": float(
+                    max(
+                        (
+                            step.applied_step_rms or 0.0
+                            for step in srmpgd.steps
+                        ),
+                        default=0.0,
+                    )
                 ),
             }
         )
@@ -895,4 +942,6 @@ class UpstreamDiffQRCoderBackend:
             values["stage2_source_method_id"] = self._stage2_source_method_id
         if self._stage2_pairing_status:
             values["stage2_pairing_status"] = self._stage2_pairing_status
+        if self._srmpgd_stop_reason:
+            values["srmpgd_stop_reason"] = self._srmpgd_stop_reason
         return values

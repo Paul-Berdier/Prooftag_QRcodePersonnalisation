@@ -171,7 +171,7 @@ class LabCampaignCreate(BaseModel):
     error_correction: Literal["M", "Q", "H"] = "M"
     prompts: list[LabPrompt] = Field(min_length=1, max_length=50)
     seeds: list[int] = Field(min_length=1, max_length=20)
-    methods: list[LabMethod] = Field(min_length=1, max_length=20)
+    methods: list[LabMethod] = Field(min_length=1, max_length=25)
     max_attempts: int = Field(default=1, ge=1, le=20)
 
     @model_validator(mode="after")

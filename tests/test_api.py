@@ -44,11 +44,14 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     assert runtime.json()["generation_config"]["latent_refinement_enabled"] is False
     assert runtime.json()["generation_config"]["guided_rediffusion_enabled"] is False
     assert runtime.json()["generation_config"]["srmpgd_enabled"] is False
+    assert runtime.json()["generation_config"]["srmpgd_max_step_rms"] == 0.02
+    assert runtime.json()["generation_config"]["srmpgd_max_total_delta_rms"] == 0.06
+    assert runtime.json()["generation_config"]["srmpgd_max_lpips_loss"] == 0.15
 
     lab_page = client.get("/lab")
     assert lab_page.status_code == 200
     assert "PROOFTAG × DIFFQRCODER" in lab_page.text
-    assert "20260804-e018-stage2-pairing-1" in lab_page.text
+    assert "20260804-e019-safe-srmpgd-1" in lab_page.text
     lab_javascript = client.get("/lab-assets/app.js")
     assert lab_javascript.status_code == 200
     assert "human_scan_result" in lab_javascript.text
@@ -103,8 +106,12 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     assert srmpgd_profile["output_variant"] == "srmpgd"
     assert srmpgd_profile["tools"]["srpg_enabled"] is True
     assert srmpgd_profile["tools"]["srmpgd_enabled"] is True
-    assert srmpgd_profile["tools"]["settings"]["srmpgd_step_size"] == 1000.0
-    assert srmpgd_profile["tools"]["settings"]["srmpgd_lpips_weight"] == 0.01
+    assert srmpgd_profile["tools"]["settings"]["srmpgd_max_iterations"] == 4
+    assert srmpgd_profile["tools"]["settings"]["srmpgd_step_size"] == 100.0
+    assert srmpgd_profile["tools"]["settings"]["srmpgd_lpips_weight"] == 0.10
+    assert srmpgd_profile["tools"]["settings"]["srmpgd_max_step_rms"] == 0.02
+    assert srmpgd_profile["tools"]["settings"]["srmpgd_max_total_delta_rms"] == 0.06
+    assert srmpgd_profile["tools"]["settings"]["srmpgd_max_lpips_loss"] == 0.15
     assert srmpgd_profile["tools"]["settings"]["srmpgd_crop_padding_px"] == 78
     assert srmpgd_profile["model"]["controlnet_conditioning_profile"] == "binary"
     assert srmpgd_profile["model"]["diffqrcoder_upstream_enabled"] is True

@@ -80,6 +80,8 @@ def test_srmpgd_uses_exact_latent_original_qr_and_stops_on_strict_validation(mon
     assert result.selected_iteration == 1
     assert result.stop_reason == "strict_validation_passed"
     assert result.steps[0].gradient_rms is not None
+    assert result.steps[0].applied_step_rms <= 0.02
+    assert result.steps[0].eligible_for_selection is True
     assert result.steps[0].lpips_loss == pytest.approx(0.0, abs=1e-7)
     assert result.image.size == blueprint.image.size
     assert scanning_loss_calls == [((1, 3, 128, 128), (1, 1, 128, 128))] * 2
@@ -177,6 +179,71 @@ def test_srmpgd_does_not_attempt_to_reconstruct_a_stage2_far_from_the_qr(monkeyp
     assert result.steps[0].gradient_rms is None
 
 
+def test_srmpgd_rejects_a_tainted_iteration_and_keeps_stage2_state_zero(monkeypatch):
+    torch = pytest.importorskip("torch")
+    from prooftag_qr import srmpgd
+
+    class FakeVAE(torch.nn.Module):
+        config = SimpleNamespace(scaling_factor=1.0)
+
+        def __init__(self):
+            super().__init__()
+            self.anchor = torch.nn.Parameter(torch.tensor(1.0), requires_grad=False)
+
+        def decode(self, latent, **kwargs):
+            return (latent * self.anchor,)
+
+    class FakeImageProcessor:
+        def postprocess(self, image, **kwargs):
+            array = (image[0].detach().clamp(-1, 1) / 2 + 0.5).permute(1, 2, 0)
+            return [Image.fromarray(np.uint8(array.cpu().numpy() * 255), mode="RGB")]
+
+    class ZeroLPIPS(torch.nn.Module):
+        def forward(self, image, reference):
+            return image.mean().reshape(1, 1, 1, 1) * 0
+
+    change_calls = 0
+
+    def changes(image, reference):
+        nonlocal change_calls
+        change_calls += 1
+        return {
+            "changed_pixel_ratio": 0.0,
+            "mean_absolute_change": 0.0,
+            "clipped_pixel_ratio_increase": 0.0,
+            "rgb_clipped_channel_ratio_increase": 0.0,
+            "saturation_mean_increase": 0.0 if change_calls == 1 else 0.5,
+            "high_saturation_ratio_increase": 0.0,
+        }
+
+    monkeypatch.setattr(srmpgd, "_load_lpips", lambda pipeline, device, net: ZeroLPIPS())
+    monkeypatch.setattr(srmpgd, "image_change_metrics", changes)
+    blueprint = generate_qr("https://example.test/guard", "M", size=128)
+    reference = np.asarray(blueprint.image, dtype=np.float32) / 127.5 - 1
+    latent = torch.from_numpy(reference).permute(2, 0, 1).unsqueeze(0)
+
+    result = srmpgd.run_srmpgd(
+        SimpleNamespace(vae=FakeVAE(), image_processor=FakeImageProcessor()),
+        latent,
+        blueprint,
+        SRMPGDConfig(
+            max_iterations=4,
+            step_size=1000.0,
+            max_step_rms=0.02,
+            max_saturation_mean_increase=0.04,
+            crop_padding_px=0,
+        ),
+        scanning_loss=lambda image, target: (image.mean() - target.mean()).square(),
+        validation_callback=lambda image, iteration: {"passed": 0, "total": 2},
+    )
+
+    assert len(result.steps) == 2
+    assert result.steps[1].aesthetic_guard_passed is False
+    assert result.steps[1].eligible_for_selection is False
+    assert result.selected_iteration == 0
+    assert result.stop_reason == "aesthetic_guard_failed_at_iteration_1"
+
+
 @pytest.mark.parametrize(
     ("config", "message"),
     [
@@ -189,6 +256,17 @@ def test_srmpgd_does_not_attempt_to_reconstruct_a_stage2_far_from_the_qr(monkeyp
             SRMPGDConfig(max_initial_module_error_rate=1.1),
             "max_initial_module_error_rate",
         ),
+        (SRMPGDConfig(max_step_rms=0), "max_step_rms"),
+        (SRMPGDConfig(max_total_delta_rms=0), "max_total_delta_rms"),
+        (
+            SRMPGDConfig(max_step_rms=0.07, max_total_delta_rms=0.06),
+            "max_step_rms",
+        ),
+        (
+            SRMPGDConfig(min_relative_module_improvement=1.1),
+            "min_relative_module_improvement",
+        ),
+        (SRMPGDConfig(max_mean_absolute_change=1.1), "max_mean_absolute_change"),
     ],
 )
 def test_srmpgd_rejects_invalid_configuration(config, message):

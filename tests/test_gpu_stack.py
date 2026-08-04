@@ -85,9 +85,11 @@ def _legacy_gpu_dependencies_are_pinned_to_the_torch_base_image():
     assert settings.srpg_quiet_zone_minimum_luminance == pytest.approx(0.90)
     assert settings.srpg_functional_pattern_tone_factor == 0.0
     assert settings.srmpgd_enabled is False
-    assert settings.srmpgd_max_iterations == 20
-    assert settings.srmpgd_step_size == 1000.0
-    assert settings.srmpgd_lpips_weight == 0.01
+    assert settings.srmpgd_max_iterations == 4
+    assert settings.srmpgd_step_size == 100.0
+    assert settings.srmpgd_lpips_weight == 0.10
+    assert settings.srmpgd_max_step_rms == 0.02
+    assert settings.srmpgd_max_total_delta_rms == 0.06
     assert settings.srmpgd_lpips_net == "vgg"
     assert settings.srmpgd_crop_padding_px == -1
     assert settings.srmpgd_dark_threshold == 0.5

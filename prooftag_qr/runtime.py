@@ -99,6 +99,24 @@ def runtime_info(settings: Settings | None = None) -> dict:
             "srmpgd_max_initial_module_error_rate": (
                 settings.srmpgd_max_initial_module_error_rate
             ),
+            "srmpgd_max_step_rms": settings.srmpgd_max_step_rms,
+            "srmpgd_max_total_delta_rms": settings.srmpgd_max_total_delta_rms,
+            "srmpgd_min_relative_module_improvement": (
+                settings.srmpgd_min_relative_module_improvement
+            ),
+            "srmpgd_max_lpips_loss": settings.srmpgd_max_lpips_loss,
+            "srmpgd_max_mean_absolute_change": (
+                settings.srmpgd_max_mean_absolute_change
+            ),
+            "srmpgd_max_saturation_mean_increase": (
+                settings.srmpgd_max_saturation_mean_increase
+            ),
+            "srmpgd_max_high_saturation_ratio_increase": (
+                settings.srmpgd_max_high_saturation_ratio_increase
+            ),
+            "srmpgd_max_rgb_clipped_channel_ratio_increase": (
+                settings.srmpgd_max_rgb_clipped_channel_ratio_increase
+            ),
             "latent_refinement_enabled": settings.latent_refinement_enabled,
             "latent_refinement_iterations": settings.latent_refinement_iterations,
             "latent_refinement_learning_rate": settings.latent_refinement_learning_rate,

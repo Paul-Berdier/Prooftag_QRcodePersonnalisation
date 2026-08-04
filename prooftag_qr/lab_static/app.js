@@ -115,10 +115,18 @@ function renderMethods() {
     $(".eta", node).value = settings.srpg_eta ?? 0;
     $(".seed-offset", node).value = settings.srpg_seed_offset ?? 2000003;
     $(".preview", node).value = settings.srpg_preview_interval ?? 5;
-    $(".mpgd-iterations", node).value = settings.srmpgd_max_iterations ?? 20;
-    $(".mpgd-lr", node).value = settings.srmpgd_step_size ?? 1000;
-    $(".mpgd-lpips", node).value = settings.srmpgd_lpips_weight ?? 0.01;
+    $(".mpgd-iterations", node).value = settings.srmpgd_max_iterations ?? 4;
+    $(".mpgd-lr", node).value = settings.srmpgd_step_size ?? 100;
+    $(".mpgd-lpips", node).value = settings.srmpgd_lpips_weight ?? 0.10;
     $(".mpgd-max-mer", node).value = settings.srmpgd_max_initial_module_error_rate ?? 0.12;
+    $(".mpgd-max-step-rms", node).value = settings.srmpgd_max_step_rms ?? 0.02;
+    $(".mpgd-max-total-rms", node).value = settings.srmpgd_max_total_delta_rms ?? 0.06;
+    $(".mpgd-min-improvement", node).value = settings.srmpgd_min_relative_module_improvement ?? 0.01;
+    $(".mpgd-max-lpips", node).value = settings.srmpgd_max_lpips_loss ?? 0.15;
+    $(".mpgd-max-change", node).value = settings.srmpgd_max_mean_absolute_change ?? 0.06;
+    $(".mpgd-max-saturation", node).value = settings.srmpgd_max_saturation_mean_increase ?? 0.04;
+    $(".mpgd-max-high-saturation", node).value = settings.srmpgd_max_high_saturation_ratio_increase ?? 0.05;
+    $(".mpgd-max-rgb-clipping", node).value = settings.srmpgd_max_rgb_clipped_channel_ratio_increase ?? 0.01;
     $(".warn-saturation", node).value = settings.diffqrcoder_guard_max_saturation_mean_increase ?? 0.08;
     $(".hard-saturation", node).value = settings.diffqrcoder_guard_hard_max_saturation_mean_increase ?? 0.20;
     $(".warn-rgb-clipping", node).value = settings.diffqrcoder_guard_max_rgb_clipped_channel_ratio_increase ?? 0.02;
@@ -184,6 +192,14 @@ function renderMethods() {
           srmpgd_light_threshold: 0.65,
           srmpgd_center_fraction: 1 / 3,
           srmpgd_max_initial_module_error_rate: Number($(".mpgd-max-mer", node).value),
+          srmpgd_max_step_rms: Number($(".mpgd-max-step-rms", node).value),
+          srmpgd_max_total_delta_rms: Number($(".mpgd-max-total-rms", node).value),
+          srmpgd_min_relative_module_improvement: Number($(".mpgd-min-improvement", node).value),
+          srmpgd_max_lpips_loss: Number($(".mpgd-max-lpips", node).value),
+          srmpgd_max_mean_absolute_change: Number($(".mpgd-max-change", node).value),
+          srmpgd_max_saturation_mean_increase: Number($(".mpgd-max-saturation", node).value),
+          srmpgd_max_high_saturation_ratio_increase: Number($(".mpgd-max-high-saturation", node).value),
+          srmpgd_max_rgb_clipped_channel_ratio_increase: Number($(".mpgd-max-rgb-clipping", node).value),
         } : {}),
       };
       $(".method-label", node).textContent = item.name || "Sans nom";
@@ -443,6 +459,13 @@ async function openTrial(index) {
     metric("SR-MPGD gamma", fmt(quality.diffqrcoder_srmpgd_gamma, 3)),
     metric("SR-MPGD LPIPS lambda", fmt(quality.diffqrcoder_srmpgd_lpips_weight, 3)),
     metric("Itération retenue", fmt(quality.diffqrcoder_srmpgd_selected_iteration, 0)),
+    metric("Pas latent RMS max", fmt(quality.diffqrcoder_srmpgd_max_applied_step_rms, 4)),
+    metric("Déplacement latent retenu", fmt(quality.diffqrcoder_srmpgd_selected_latent_delta_rms, 4)),
+    metric("LPIPS retenu", fmt(quality.diffqrcoder_srmpgd_selected_lpips, 4)),
+    metric("Changement retenu", pct(quality.diffqrcoder_srmpgd_selected_mean_absolute_change)),
+    metric("Garde esthétique", Number(quality.diffqrcoder_srmpgd_selected_aesthetic_guard || 0) === 1 ? "Respectée" : "Échec / non exécutée"),
+    metric("Gain QR suffisant", Number(quality.diffqrcoder_srmpgd_selected_qr_gain_sufficient || 0) === 1 ? "Oui" : "Non"),
+    metric("Arrêt SR-MPGD", run.provenance?.srmpgd_stop_reason || "—"),
     metric("Génération", `${fmt((run.generation_ms || 0) / 1000, 1)} s`),
     metric("Validation", `${fmt((run.validation_ms || 0) / 1000, 1)} s`),
     metric("SHA image finale", run.provenance?.final_image_sha256?.slice(0, 16) || "—"),

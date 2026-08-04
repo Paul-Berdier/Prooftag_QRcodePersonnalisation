@@ -1265,3 +1265,18 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
 - **Validation locale :** suite pytest complète réussie, tests d'intégration de
   l'absence de source et de la propagation exacte `run_id`/SHA réussis, Ruff
   réussi et interface vérifiée dans le navigateur local.
+
+## E019 — SR-MPGD borné — 4 août 2026
+
+- **Déclencheur :** malgré l'appariement E018, les états SR-MPGD retenus peuvent
+  encore contenir des taches. Le pas `gamma × gradient` n'était pas borné et le
+  classement acceptait la dégradation visuelle dès que le SSR progressait.
+- **Protection :** borne RMS par pas et cumulée, gardes LPIPS, changement moyen,
+  saturation et écrêtage. L'état SRPG initial reste toujours candidat.
+- **Sélection :** un état hors garde est inéligible. Parmi les états sûrs, la
+  lecture reste prioritaire puis LPIPS et le changement visuel départagent les
+  candidats avant MER/SRL.
+- **Profil prudent :** 4 itérations, gamma 100 et LPIPS 0,10. Ce n'est pas une
+  recette finale, mais le point de départ de la recherche E019.
+- **Recherche :** cinq lots appariés couvrent 100 configurations : 5 nombres
+  d'itérations × 5 gamma × 4 poids LPIPS. Un seul lot est lancé à la fois.

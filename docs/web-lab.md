@@ -202,7 +202,7 @@ Le script refuse un dépôt sale, construit une image taguée avec le commit Git
 vérifie le commit DiffQRCoder, importe l’image dans containerd K3s, applique la
 migration `0005_e017_phone_calibration`, attend le rollout puis contrôle dans le pod les
 profils de production et d'ablation, l’import DiffQRCoder et la version
-`20260804-e018-stage2-pairing-1` des assets Web, l’initialisation Stage 1 bruitée,
+`20260804-e019-safe-srmpgd-1` des assets Web, l’initialisation Stage 1 bruitée,
 la cible binaire exacte, la force `0,65`, le repli automatique et le seuil
 SR-MPGD.
 
@@ -220,3 +220,8 @@ La phase E018 est décrite dans
 [`e018-strict-stage2-pairing.md`](e018-strict-stage2-pairing.md). Dans le détail
 d'un résultat SR-MPGD, vérifier **Appariement Stage 2 = Exact — SHA identique**
 avant de noter ou d'utiliser l'image dans une comparaison.
+
+E019 ajoute les bornes de pas latent, déplacement total, LPIPS, changement
+d'image, saturation et écrêtage directement dans chaque carte SR-MPGD. Le
+protocole et la matrice factorielle sont décrits dans
+[`e019-safe-srmpgd.md`](e019-safe-srmpgd.md).

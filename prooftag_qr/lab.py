@@ -109,6 +109,14 @@ TOOL_SETTING_KEYS = {
     "srmpgd_light_threshold",
     "srmpgd_center_fraction",
     "srmpgd_max_initial_module_error_rate",
+    "srmpgd_max_step_rms",
+    "srmpgd_max_total_delta_rms",
+    "srmpgd_min_relative_module_improvement",
+    "srmpgd_max_lpips_loss",
+    "srmpgd_max_mean_absolute_change",
+    "srmpgd_max_saturation_mean_increase",
+    "srmpgd_max_high_saturation_ratio_increase",
+    "srmpgd_max_rgb_clipped_channel_ratio_increase",
     "guided_rediffusion_steps",
     "guided_rediffusion_strength",
     "guided_rediffusion_controlnet_scale",
@@ -280,9 +288,9 @@ def _legacy_laboratory_profiles() -> list[dict[str, Any]]:
                     "srpg_quiet_zone_mode": "adaptive_light",
                     "srpg_quiet_zone_minimum_luminance": 0.90,
                     "srpg_functional_pattern_tone_factor": 0.12,
-                    "srmpgd_max_iterations": 20,
-                    "srmpgd_step_size": 1000.0,
-                    "srmpgd_lpips_weight": 0.01,
+                    "srmpgd_max_iterations": 4,
+                    "srmpgd_step_size": 100.0,
+                    "srmpgd_lpips_weight": 0.10,
                     "srmpgd_lpips_net": "vgg",
                     "srmpgd_crop_padding_px": -1,
                     "srmpgd_dark_threshold": 0.5,
@@ -531,6 +539,14 @@ TOOL_SETTING_KEYS = {
     "srmpgd_light_threshold",
     "srmpgd_center_fraction",
     "srmpgd_max_initial_module_error_rate",
+    "srmpgd_max_step_rms",
+    "srmpgd_max_total_delta_rms",
+    "srmpgd_min_relative_module_improvement",
+    "srmpgd_max_lpips_loss",
+    "srmpgd_max_mean_absolute_change",
+    "srmpgd_max_saturation_mean_increase",
+    "srmpgd_max_high_saturation_ratio_increase",
+    "srmpgd_max_rgb_clipped_channel_ratio_increase",
     "diffqrcoder_control_guidance_start",
     "diffqrcoder_control_guidance_end",
     "diffqrcoder_stage2_initialization",
@@ -658,20 +674,28 @@ def laboratory_profiles() -> list[dict[str, Any]]:
                 "srmpgd_enabled": True,
                 "settings": {
                     **stage2_at(0.65),
-                    "srmpgd_max_iterations": 20,
-                    "srmpgd_step_size": 1000.0,
-                    "srmpgd_lpips_weight": 0.01,
+                    "srmpgd_max_iterations": 4,
+                    "srmpgd_step_size": 100.0,
+                    "srmpgd_lpips_weight": 0.10,
                     "srmpgd_lpips_net": "vgg",
                     "srmpgd_crop_padding_px": 78,
                     "srmpgd_dark_threshold": 0.45,
                     "srmpgd_light_threshold": 0.65,
                     "srmpgd_center_fraction": 1 / 3,
                     "srmpgd_max_initial_module_error_rate": 0.12,
+                    "srmpgd_max_step_rms": 0.02,
+                    "srmpgd_max_total_delta_rms": 0.06,
+                    "srmpgd_min_relative_module_improvement": 0.01,
+                    "srmpgd_max_lpips_loss": 0.15,
+                    "srmpgd_max_mean_absolute_change": 0.06,
+                    "srmpgd_max_saturation_mean_increase": 0.04,
+                    "srmpgd_max_high_saturation_ratio_increase": 0.05,
+                    "srmpgd_max_rgb_clipped_channel_ratio_increase": 0.01,
                 },
             },
             "description": (
-                "E018 : reprend obligatoirement le latent SHA-256 exact du SRPG "
-                "binaire à 65 %, puis Eq. 13-14. Aucun recalcul Stage 2 silencieux."
+                "E019 : latent SRPG strictement apparié, 4 itérations, gamma 100, "
+                "LPIPS 0,10, pas latent borné et rejet des états tachés ou saturés."
             ),
         },
         {
@@ -1123,6 +1147,21 @@ class LabService:
                         ),
                         "srmpgd_requested_max_initial_mer": float(
                             settings.srmpgd_max_initial_module_error_rate
+                        ),
+                        "srmpgd_requested_max_step_rms": float(
+                            settings.srmpgd_max_step_rms
+                        ),
+                        "srmpgd_requested_max_total_delta_rms": float(
+                            settings.srmpgd_max_total_delta_rms
+                        ),
+                        "srmpgd_requested_min_relative_improvement": float(
+                            settings.srmpgd_min_relative_module_improvement
+                        ),
+                        "srmpgd_requested_max_lpips": float(
+                            settings.srmpgd_max_lpips_loss
+                        ),
+                        "srmpgd_requested_max_mean_absolute_change": float(
+                            settings.srmpgd_max_mean_absolute_change
                         ),
                     }
                 )

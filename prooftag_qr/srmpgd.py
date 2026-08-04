@@ -19,6 +19,7 @@ from .qr import (
     module_error_rate,
     prepare_scan_ready_image,
 )
+from .quality import image_change_metrics
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,15 +31,23 @@ class SRMPGDConfig:
     state up to ``max_iterations`` and stops as soon as the external validation gate is strict.
     """
 
-    max_iterations: int = 20
-    step_size: float = 1000.0
-    lpips_weight: float = 0.01
+    max_iterations: int = 4
+    step_size: float = 100.0
+    lpips_weight: float = 0.10
     lpips_net: str = "vgg"
     crop_padding_px: int = -1
     dark_threshold: float = 0.5
     light_threshold: float = 0.5
     center_fraction: float = 1 / 3
     max_initial_module_error_rate: float = 0.10
+    max_step_rms: float = 0.02
+    max_total_delta_rms: float = 0.06
+    min_relative_module_improvement: float = 0.01
+    max_lpips_loss: float = 0.15
+    max_mean_absolute_change: float = 0.06
+    max_saturation_mean_increase: float = 0.04
+    max_high_saturation_ratio_increase: float = 0.05
+    max_rgb_clipped_channel_ratio_increase: float = 0.01
     quiet_zone_mode: str = "adaptive_light"
     quiet_zone_minimum_luminance: float = 0.90
     functional_pattern_tone_factor: float = 0.0
@@ -61,6 +70,17 @@ class SRMPGDStep:
     worst_scenario_pass_rate: float
     gradient_rms: float | None
     next_step_rms: float | None
+    applied_step_rms: float | None
+    step_scale: float | None
+    latent_delta_rms: float
+    relative_module_improvement: float
+    mean_absolute_change: float
+    saturation_mean_increase: float
+    high_saturation_ratio_increase: float
+    rgb_clipped_channel_ratio_increase: float
+    aesthetic_guard_passed: bool
+    qr_gain_sufficient: bool
+    eligible_for_selection: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,6 +117,24 @@ def _validate_config(config: SRMPGDConfig) -> None:
         raise ValueError("center_fraction must be between 0 (exclusive) and 1")
     if not 0 <= config.max_initial_module_error_rate <= 1:
         raise ValueError("max_initial_module_error_rate must be between 0 and 1")
+    if config.max_step_rms <= 0:
+        raise ValueError("max_step_rms must be positive")
+    if config.max_total_delta_rms <= 0:
+        raise ValueError("max_total_delta_rms must be positive")
+    if config.max_step_rms > config.max_total_delta_rms:
+        raise ValueError("max_step_rms cannot exceed max_total_delta_rms")
+    if not 0 <= config.min_relative_module_improvement <= 1:
+        raise ValueError("min_relative_module_improvement must be between 0 and 1")
+    if config.max_lpips_loss < 0:
+        raise ValueError("max_lpips_loss cannot be negative")
+    for name in (
+        "max_mean_absolute_change",
+        "max_saturation_mean_increase",
+        "max_high_saturation_ratio_increase",
+        "max_rgb_clipped_channel_ratio_increase",
+    ):
+        if not 0 <= getattr(config, name) <= 1:
+            raise ValueError(f"{name} must be between 0 and 1")
     if config.quiet_zone_mode not in {"none", "white", "adaptive_light"}:
         raise ValueError("quiet_zone_mode must be none, white or adaptive_light")
     if not 0.0 < config.quiet_zone_minimum_luminance <= 1.0:
@@ -243,9 +281,10 @@ def _rank_step(step: SRMPGDStep) -> tuple[Any, ...]:
         step.pass_rate,
         step.worst_decoder_pass_rate,
         step.worst_scenario_pass_rate,
+        -step.lpips_loss,
+        -step.mean_absolute_change,
         -step.actual_module_error_rate,
         -step.scanning_robust_loss,
-        -step.lpips_loss,
         -step.iteration,
     )
 
@@ -278,7 +317,8 @@ def run_srmpgd(
     vae = pipeline.vae
     vae.requires_grad_(False).eval()
     device = initial_latent.device
-    working = initial_latent.detach().to(dtype=torch.float32).clone()
+    initial = initial_latent.detach().to(dtype=torch.float32).clone()
+    working = initial.clone()
     lpips_model = _load_lpips(pipeline, device=device, net=config.lpips_net)
     started = time.perf_counter()
 
@@ -342,8 +382,9 @@ def run_srmpgd(
     refinement_applicable = (
         initial_module_error_rate <= config.max_initial_module_error_rate
     )
+    baseline_pass_rate = 0.0
     for iteration in range(config.max_iterations + 1):
-        numerical_stop_reason = None
+        iteration_stop_reason = None
         with torch.enable_grad():
             working = working.detach().requires_grad_(True)
             decoded, image = _decode_latent(
@@ -386,22 +427,86 @@ def run_srmpgd(
             validation = _validation_values(
                 validation_callback(image, iteration) if validation_callback else None
             )
+            if iteration == 0:
+                baseline_pass_rate = validation["pass_rate"]
+
+            actual_module_error_rate = _module_error_for_canvas(
+                image,
+                blueprint,
+                crop_padding_px=resolved_crop_padding_px,
+            )
+            relative_module_improvement = (
+                (initial_module_error_rate - actual_module_error_rate)
+                / max(initial_module_error_rate, 1e-8)
+            )
+            changes = image_change_metrics(image, reference_image)
+            latent_delta_rms = float(
+                (working.detach() - initial).square().mean().sqrt().cpu()
+            )
+            aesthetic_guard_passed = iteration == 0 or (
+                float(lpips_loss.detach().cpu()) <= config.max_lpips_loss
+                and latent_delta_rms <= config.max_total_delta_rms + 1e-8
+                and changes["mean_absolute_change"]
+                <= config.max_mean_absolute_change
+                and changes["saturation_mean_increase"]
+                <= config.max_saturation_mean_increase
+                and changes["high_saturation_ratio_increase"]
+                <= config.max_high_saturation_ratio_increase
+                and changes["rgb_clipped_channel_ratio_increase"]
+                <= config.max_rgb_clipped_channel_ratio_increase
+            )
+            qr_gain_sufficient = iteration == 0 or (
+                validation["strict_all"]
+                or validation["pass_rate"] > baseline_pass_rate
+                or relative_module_improvement
+                >= config.min_relative_module_improvement
+            )
+            eligible_for_selection = (
+                aesthetic_guard_passed and qr_gain_sufficient
+            )
 
             gradient = None
             gradient_rms = None
             next_step_rms = None
-            if not refinement_applicable:
-                numerical_stop_reason = "initial_module_error_rate_above_limit"
+            applied_step_rms = None
+            step_scale = None
+            next_working = None
+            if iteration > 0 and not aesthetic_guard_passed:
+                iteration_stop_reason = (
+                    f"aesthetic_guard_failed_at_iteration_{iteration}"
+                )
+            elif not refinement_applicable:
+                iteration_stop_reason = "initial_module_error_rate_above_limit"
             elif not validation["strict_all"] and iteration < config.max_iterations:
                 gradient = torch.autograd.grad(objective, working, only_inputs=True)[0]
                 if not torch.isfinite(gradient).all():
-                    numerical_stop_reason = (
+                    iteration_stop_reason = (
                         f"non_finite_gradient_at_iteration_{iteration}"
                     )
                     gradient = None
                 else:
                     gradient_rms = float(gradient.square().mean().sqrt().detach().cpu())
                     next_step_rms = config.step_size * gradient_rms
+                    step_scale = min(
+                        1.0,
+                        config.max_step_rms / max(next_step_rms, 1e-12),
+                    )
+                    proposed = working - config.step_size * step_scale * gradient
+                    delta = proposed.detach() - initial
+                    total_delta_rms = float(delta.square().mean().sqrt().cpu())
+                    if total_delta_rms > config.max_total_delta_rms:
+                        delta = delta * (
+                            config.max_total_delta_rms / total_delta_rms
+                        )
+                        proposed = initial + delta
+                    next_working = proposed
+                    applied_step_rms = float(
+                        (next_working.detach() - working.detach())
+                        .square()
+                        .mean()
+                        .sqrt()
+                        .cpu()
+                    )
 
             step = SRMPGDStep(
                 iteration=iteration,
@@ -412,32 +517,46 @@ def run_srmpgd(
                 surrogate_module_error_rate=float(
                     diagnostics["module_error_rate"].detach().cpu()
                 ),
-                actual_module_error_rate=_module_error_for_canvas(
-                    image,
-                    blueprint,
-                    crop_padding_px=resolved_crop_padding_px,
-                ),
+                actual_module_error_rate=actual_module_error_rate,
                 gradient_rms=gradient_rms,
                 next_step_rms=next_step_rms,
+                applied_step_rms=applied_step_rms,
+                step_scale=step_scale,
+                latent_delta_rms=latent_delta_rms,
+                relative_module_improvement=relative_module_improvement,
+                mean_absolute_change=changes["mean_absolute_change"],
+                saturation_mean_increase=changes["saturation_mean_increase"],
+                high_saturation_ratio_increase=changes[
+                    "high_saturation_ratio_increase"
+                ],
+                rgb_clipped_channel_ratio_increase=changes[
+                    "rgb_clipped_channel_ratio_increase"
+                ],
+                aesthetic_guard_passed=aesthetic_guard_passed,
+                qr_gain_sufficient=qr_gain_sufficient,
+                eligible_for_selection=eligible_for_selection,
                 **validation,
             )
             states.append((step, working.detach().clone(), image.copy()))
             if preview_callback is not None:
                 preview_callback(image, step)
-            if step.strict_all:
+            if step.strict_all and step.eligible_for_selection:
                 stop_reason = "strict_validation_passed"
                 break
-            if numerical_stop_reason is not None:
+            if iteration_stop_reason is not None:
                 # A failed refinement must not abort a multi-hour search. State i is still a
                 # valid decoded candidate and is ranked normally; the stop reason makes the
                 # numerical failure explicit instead of silently replacing NaNs with zeros.
-                stop_reason = numerical_stop_reason
+                stop_reason = iteration_stop_reason
                 break
-            if gradient is not None:
-                working = working - config.step_size * gradient
+            if next_working is not None:
+                working = next_working
 
+    eligible_states = [
+        item for item in states if item[0].eligible_for_selection
+    ]
     selected_step, selected_latent, selected_image = max(
-        states, key=lambda item: _rank_step(item[0])
+        eligible_states, key=lambda item: _rank_step(item[0])
     )
     return SRMPGDResult(
         image=selected_image,

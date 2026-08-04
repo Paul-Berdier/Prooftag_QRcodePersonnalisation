@@ -131,9 +131,9 @@ class Settings(BaseSettings):
         default=0.0, ge=0.0, le=1.0
     )
     srmpgd_enabled: bool = False
-    srmpgd_max_iterations: int = Field(default=20, ge=1, le=100)
-    srmpgd_step_size: float = Field(default=1000.0, gt=0.0, le=100_000.0)
-    srmpgd_lpips_weight: float = Field(default=0.01, ge=0.0, le=100.0)
+    srmpgd_max_iterations: int = Field(default=4, ge=1, le=100)
+    srmpgd_step_size: float = Field(default=100.0, gt=0.0, le=100_000.0)
+    srmpgd_lpips_weight: float = Field(default=0.10, ge=0.0, le=100.0)
     srmpgd_lpips_net: Literal["alex", "vgg", "squeeze"] = "vgg"
     srmpgd_crop_padding_px: int = Field(default=-1, ge=-1, le=256)
     srmpgd_dark_threshold: float = Field(default=0.5, gt=0.0, lt=1.0)
@@ -141,6 +141,22 @@ class Settings(BaseSettings):
     srmpgd_center_fraction: float = Field(default=1 / 3, gt=0.0, le=1.0)
     srmpgd_max_initial_module_error_rate: float = Field(
         default=0.10, ge=0.0, le=1.0
+    )
+    srmpgd_max_step_rms: float = Field(default=0.02, gt=0.0, le=10.0)
+    srmpgd_max_total_delta_rms: float = Field(default=0.06, gt=0.0, le=10.0)
+    srmpgd_min_relative_module_improvement: float = Field(
+        default=0.01, ge=0.0, le=1.0
+    )
+    srmpgd_max_lpips_loss: float = Field(default=0.15, ge=0.0, le=100.0)
+    srmpgd_max_mean_absolute_change: float = Field(default=0.06, ge=0.0, le=1.0)
+    srmpgd_max_saturation_mean_increase: float = Field(
+        default=0.04, ge=0.0, le=1.0
+    )
+    srmpgd_max_high_saturation_ratio_increase: float = Field(
+        default=0.05, ge=0.0, le=1.0
+    )
+    srmpgd_max_rgb_clipped_channel_ratio_increase: float = Field(
+        default=0.01, ge=0.0, le=1.0
     )
     latent_refinement_enabled: bool = False
     latent_refinement_iterations: int = Field(default=8, ge=1, le=100)
@@ -189,6 +205,10 @@ class Settings(BaseSettings):
             raise ValueError("paper SR-MPGD requires Stage 2 SRPG and its exact clean latent")
         if self.srmpgd_dark_threshold > self.srmpgd_light_threshold:
             raise ValueError("SR-MPGD dark threshold cannot exceed light threshold")
+        if self.srmpgd_max_step_rms > self.srmpgd_max_total_delta_rms:
+            raise ValueError(
+                "SR-MPGD maximum step RMS cannot exceed total latent delta RMS"
+            )
         if self.srpg_dark_threshold > self.srpg_light_threshold:
             raise ValueError("SRPG dark threshold cannot exceed light threshold")
         if self.srpg_robust_blur_kernel % 2 == 0:
