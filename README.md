@@ -122,6 +122,11 @@ restent enregistrées séparément. Une image rejetée reste dans l'historique p
 permettre l'analyse du modèle, mais ne doit pas être publiée par l'application
 appelante.
 
+E025 rétablit `clip_similarity`, `CLIPScore`, `CLIP-Aesthetic` et HPS v2.1
+comme mesures d'image secondaires. Elles ne modifient jamais le verdict
+QR-Verify. Le protocole et la commande de re-test sont dans
+[`docs/e025-quality-scoring.md`](docs/e025-quality-scoring.md).
+
 ## Déploiement
 
 Le projet ne déploie pas de second Prometheus, Grafana, Loki ou MinIO. Voir

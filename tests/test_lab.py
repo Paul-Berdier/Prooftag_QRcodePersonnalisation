@@ -399,7 +399,7 @@ def test_lab_limits_cartesian_campaign_size():
         )
 
 
-def test_lab_persists_cpu_clip_scores_without_using_the_generation_gpu(
+def test_lab_persists_cpu_quality_scores_without_using_the_generation_gpu(
     tmp_path,
     monkeypatch,
 ):
@@ -407,6 +407,7 @@ def test_lab_persists_cpu_clip_scores_without_using_the_generation_gpu(
         data_dir=tmp_path,
         model_cache_dir=tmp_path / "models",
         lab_clip_scoring_enabled=True,
+        lab_hps_scoring_enabled=True,
         device="cpu",
     )
     run_repository = RunRepository(tmp_path / "runs.sqlite3")
@@ -430,6 +431,7 @@ def test_lab_persists_cpu_clip_scores_without_using_the_generation_gpu(
     class FakeScorer:
         def __init__(self, *args, **kwargs):
             assert kwargs["device"] == "cpu"
+            assert kwargs["hps_enabled"] is True
 
         def score(self, image, prompt):
             assert image.size == (64, 64)
@@ -438,6 +440,7 @@ def test_lab_persists_cpu_clip_scores_without_using_the_generation_gpu(
                 clip_similarity=0.42,
                 clip_score=1.05,
                 clip_aesthetic=6.4,
+                hpsv2_1=0.314,
             )
 
     monkeypatch.setattr(lab_module, "CLIPQualityScorer", FakeScorer)
@@ -458,7 +461,7 @@ def test_lab_persists_cpu_clip_scores_without_using_the_generation_gpu(
     assert stored.quality_metrics["clip_similarity"] == pytest.approx(0.42)
     assert stored.quality_metrics["clip_score"] == pytest.approx(1.05)
     assert stored.quality_metrics["clip_aesthetic"] == pytest.approx(6.4)
-    assert "hpsv2_1" not in stored.quality_metrics
+    assert stored.quality_metrics["hpsv2_1"] == pytest.approx(0.314)
 
 
 def test_lab_reuses_the_exact_stage1_and_forces_each_research_output(

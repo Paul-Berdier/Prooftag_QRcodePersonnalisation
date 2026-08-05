@@ -8,8 +8,10 @@ metadata:
 data:
   PROOFTAG_QR_ENVIRONMENT: production
   PROOFTAG_QR_LOG_LEVEL: INFO
-  PROOFTAG_QR_LAB_CLIP_SCORING_ENABLED: "false"
-  PROOFTAG_QR_LAB_HPS_SCORING_ENABLED: "false"
+  # E025: QR-Verify remains the sole scan validator. These CPU-only scores
+  # measure aesthetics/prompt alignment and never change QR acceptance.
+  PROOFTAG_QR_LAB_CLIP_SCORING_ENABLED: "true"
+  PROOFTAG_QR_LAB_HPS_SCORING_ENABLED: "true"
   PROOFTAG_QR_DATA_DIR: /data
   PROOFTAG_QR_MODEL_CACHE_DIR: /cache
   PROOFTAG_QR_DEFAULT_BACKEND: controlnet

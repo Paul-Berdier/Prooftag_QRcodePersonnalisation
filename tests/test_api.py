@@ -61,12 +61,14 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     lab_page = client.get("/lab")
     assert lab_page.status_code == 200
     assert "PROOFTAG × DIFFQRCODER" in lab_page.text
-    assert "20260805-e024-qr-verify-3" in lab_page.text
+    assert "20260805-e025-quality-scores-1" in lab_page.text
     lab_javascript = client.get("/lab-assets/app.js")
     assert lab_javascript.status_code == 200
     assert "human_scan_result" in lab_javascript.text
     assert "Score QR-Verify" in lab_javascript.text
-    assert "CLIP-AES" not in lab_javascript.text
+    assert "CLIP-AES" in lab_javascript.text
+    assert "CLIPScore" in lab_javascript.text
+    assert "HPS v2.1" in lab_javascript.text
     schema = client.get("/v1/lab/schema")
     assert schema.status_code == 200
     assert schema.json()["validation"] == {
@@ -78,6 +80,17 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
         "acceptance": "at_least_one_exact_preset",
         "physical_probability": False,
     }
+    scoring = schema.json()["quality_scoring"]
+    assert scoring["acceptance_effect"] == "none"
+    assert set(scoring["metrics"]) == {
+        "clip_similarity",
+        "clip_score",
+        "clip_aesthetic",
+        "hpsv2_1",
+    }
+    assert scoring["metrics"]["clip_score"]["formula"] == (
+        "2.5 * max(clip_similarity, 0)"
+    )
     assert {item["id"] for item in schema.json()["profiles"]} == {
         "qr_reference",
         "diffqrcoder_stage1",

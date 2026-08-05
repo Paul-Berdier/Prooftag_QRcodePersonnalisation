@@ -1336,10 +1336,25 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
 - **Affichage :** le score est la fraction de presets exacts ; l'acceptation exige
   au moins un preset exact. Lecture directe, nombre de presets et verdict humain
   sont affichés séparément.
-- **Esthétique :** CLIP-AES, CLIPScore et HPS ne sont plus calculés en production.
-  L'esthétique est notée manuellement dans le Web Lab.
+- **Esthétique à l'étape E024 :** CLIP-AES, CLIPScore et HPS étaient retirés de
+  la production. E025 annule ce point sans modifier l'autorité QR-Verify.
 - **Limite :** QR-Verify reste un test logiciel WASM, pas une probabilité de scan
   téléphone. Le scan humain demeure la vérité terrain.
 - **Sécurité :** Sharp est forcé en `0.35.3`, le lockfile est commité et l'audit
   npm ne signale aucune vulnérabilité connue.
 - **Protocole :** `docs/e024-qr-verify.md`.
+
+## E025 — scores d'image séparés de QR-Verify — 5 août 2026
+
+- **Décision :** rétablir CLIP-Aesthetic, similarité CLIP brute, CLIPScore et
+  HPS v2.1 sans réintroduire d'ancien décodeur ni modifier l'acceptation.
+- **Comparabilité papier :** `clip_similarity` conserve l'échelle proche de
+  0,30 utilisée dans le tableau DiffQRCoder ; `clip_score` expose séparément la
+  formule rescalée `2,5 × max(cosinus, 0)`.
+- **Ressources :** scoring sur CPU après la génération, modèles chargés une
+  seule fois et cache persistant `/cache` ; la RTX reste réservée à DiffQRCoder.
+- **Préférence moderne :** HPS v2.1 est retenu dans le pod actuel. HPSv3 est
+  plus récent, mais son Qwen2-VL 7B nécessite un service de scoring GPU séparé.
+- **Re-test :** `scripts/e025-quality-retest.py` reprend les dix prompts et les
+  deux recettes appariées d'E024.
+- **Protocole :** `docs/e025-quality-scoring.md`.

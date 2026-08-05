@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Prooftag — DiffQRCoder Lab</title>
-  <link rel="stylesheet" href="/lab-assets/styles.css?v=20260805-e024-qr-verify-3">
+  <link rel="stylesheet" href="/lab-assets/styles.css?v=20260805-e025-quality-scores-1">
 </head>
 <body>
   <header class="topbar">
@@ -33,7 +33,7 @@
           <li><b>Stage 1</b><span>Cetus-Mix + QR Monster v2</span></li>
           <li><b>Stage 2</b><span>Stage 1 partiellement bruité + QR binaire + SRPG</span></li>
           <li><b>Option</b><span>SR-MPGD Eq. 13–14</span></li>
-          <li><b>Validation</b><span>antfu/qr-verify · WeChat WASM · 37 variantes déterministes</span></li>
+          <li><b>Mesures</b><span>QR‑Verify · CLIP‑AES · CLIPScore · HPS v2.1</span></li>
         </ol>
       </section>
 
@@ -118,6 +118,9 @@ botanical | Delicate botanical engraving with white flowers, cyan leaves and dar
                 <select id="sort">
                   <option value="chain">Prompt / seed / méthode</option>
                   <option value="qrverify">Score QR-Verify décroissant</option>
+                  <option value="aesthetic">CLIP-Aesthetic décroissant</option>
+                  <option value="clip">Similarité CLIP décroissante</option>
+                  <option value="hps">HPS v2.1 décroissant</option>
                   <option value="time">Temps croissant</option>
                 </select>
               </label>
@@ -240,6 +243,6 @@ botanical | Delicate botanical engraving with white flowers, cyan leaves and dar
     </article>
   </template>
 
-  <script src="/lab-assets/app.js?v=20260805-e024-qr-verify-3" defer></script>
+  <script src="/lab-assets/app.js?v=20260805-e025-quality-scores-1" defer></script>
 </body>
 </html>

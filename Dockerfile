@@ -43,8 +43,8 @@ COPY pyproject.toml README.md alembic.ini ./
 COPY prooftag_qr ./prooftag_qr
 COPY migrations ./migrations
 RUN pip install --upgrade pip \
-    && pip install '.[gpu]' \
-    && python -c "import lpips, torch, torchvision; from diffusers import ControlNetModel, DDIMScheduler; lpips.LPIPS(net='vgg', verbose=False); print('GPU stack and LPIPS weights OK:', torch.__version__, torchvision.__version__)"
+    && pip install '.[gpu,quality]' \
+    && python -c "import hpsv2, lpips, torch, torchvision; from diffusers import ControlNetModel, DDIMScheduler; lpips.LPIPS(net='vgg', verbose=False); print('GPU, LPIPS and quality-scoring stack OK:', torch.__version__, torchvision.__version__)"
 
 RUN git clone https://github.com/jwliao1209/DiffQRCoder.git /opt/DiffQRCoder \
     && git -C /opt/DiffQRCoder checkout "$DIFFQRCODER_COMMIT" \

@@ -80,11 +80,10 @@ dimensions, iPhone, Pixel et lecteurs industriels.
 | `prooftag_qr_lab_trial_duration_seconds` | histogramme | durée de bout en bout par méthode |
 | `prooftag_qr_lab_ratings_total` | compteur | évaluations humaines enregistrées |
 | `prooftag_qr_lab_quality_scores_total` | compteur | calculs CLIP/esthétique réussis ou en erreur |
-| `prooftag_qr_lab_quality_score_duration_seconds` | histogramme | durée CPU de CLIPScore et CLIP-aesthetic |
+| `prooftag_qr_lab_quality_score_duration_seconds` | histogramme | durée CPU de CLIPScore, CLIP-aesthetic et HPS v2.1 |
 
-Depuis E024, les deux métriques de qualité automatique ci-dessus restent dans
-le schéma Prometheus pour la compatibilité historique, mais leur calcul est
-désactivé en production. Le verdict QR provient uniquement de
+Depuis E025, les métriques de qualité automatique sont de nouveau calculées en
+production sur CPU. Le verdict QR provient néanmoins uniquement de
 `antfu/qr-verify@0.2.0` : `scan_pass_rate` représente la fraction de ses 37
 presets restituant exactement le payload attendu. Cette valeur est un score
 logiciel, pas un taux de réussite téléphone.

@@ -321,8 +321,32 @@ def get_lab_schema() -> dict:
     }
     schema["quality_scoring"] = {
         "clip_enabled": settings.lab_clip_scoring_enabled,
+        "hpsv2_1_enabled": settings.lab_hps_scoring_enabled,
         "device": "cpu",
         "failure_policy": "non_blocking",
+        "acceptance_effect": "none",
+        "metrics": {
+            "clip_similarity": {
+                "label": "CLIP similarity (DiffQRCoder paper scale)",
+                "model": "openai/clip-vit-base-patch32",
+                "range": "cosine_-1_to_1",
+            },
+            "clip_score": {
+                "label": "CLIPScore",
+                "model": "openai/clip-vit-base-patch32",
+                "formula": "2.5 * max(clip_similarity, 0)",
+            },
+            "clip_aesthetic": {
+                "label": "LAION CLIP-Aesthetic",
+                "model": "LAION-AI/aesthetic-predictor ViT-B/32 linear",
+                "range": "approximately_0_to_10",
+            },
+            "hpsv2_1": {
+                "label": "Human Preference Score v2.1",
+                "model": "tgxs002/HPSv2 official v2.1 checkpoint",
+                "comparison": "same_prompt_only",
+            },
+        },
     }
     return schema
 

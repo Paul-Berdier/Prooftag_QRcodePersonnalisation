@@ -182,8 +182,10 @@ Cliquer une vignette, puis enregistrer :
 
 Le bouton **Enregistrer et suivant** ouvre immédiatement l’image suivante. La
 campagne agrège les validations QR-Verify, leur score moyen, les lectures sans
-filtre, les scans humains, les esthétiques positives et les images évaluées.
-L’export CSV contient les paramètres, métriques et verdicts humains.
+filtre, CLIP-Aesthetic, la similarité CLIP brute, CLIPScore, HPS v2.1, les scans
+humains, les esthétiques positives et les images évaluées. L’export CSV contient
+les paramètres, métriques et verdicts humains. HPS v2.1 doit être comparé entre
+images issues du même prompt ; sa moyenne globale est seulement indicative.
 
 ## Déploiement sans ambiguïté de version
 
@@ -199,8 +201,8 @@ Le script refuse un dépôt sale, construit une image taguée avec le commit Git
 vérifie le commit DiffQRCoder, importe l’image dans containerd K3s, applique la
 migration `0005_e017_phone_calibration`, attend le rollout puis contrôle dans le pod les
 profils de production et d'ablation, l’import DiffQRCoder, la version
-`20260805-e024-qr-verify-3` des assets Web et un vrai décodage WASM 37/37 du QR
-témoin.
+`20260805-e025-quality-scores-1` des assets Web, l'activation CLIP/HPS et un vrai
+décodage WASM 37/37 du QR témoin.
 
 Le taux publiable sera calculé sur les sorties artistiques réellement générées,
 jamais sur le QR témoin ni sur une réparation cachée.

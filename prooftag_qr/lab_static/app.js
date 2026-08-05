@@ -312,7 +312,15 @@ function aggregate(trials) {
   const phoneAttempts = generated.reduce((sum, t) => sum + Number(t.rating?.human_scan_attempts || 0), 0);
   const phoneSuccesses = generated.reduce((sum, t) => sum + Number(t.rating?.human_scan_successes || 0), 0);
   const aesthetic = generated.filter(t => t.rating?.aesthetic_ok === true);
-  const mean = (items, getter) => items.length ? items.reduce((sum, item) => sum + Number(getter(item) || 0), 0) / items.length : null;
+  const scored = (name) => generated.filter(t => {
+    const value = t.generation.quality_metrics?.[name];
+    return value != null && Number.isFinite(Number(value));
+  });
+  const mean = (items, getter) => items.length ? items.reduce((sum, item) => sum + Number(getter(item)), 0) / items.length : null;
+  const clipAesthetic = scored("clip_aesthetic");
+  const clipSimilarity = scored("clip_similarity");
+  const clipScore = scored("clip_score");
+  const hps = scored("hpsv2_1");
   return {
     generated: generated.length,
     qrVerified: qrVerified.length,
@@ -324,6 +332,11 @@ function aggregate(trials) {
     aesthetic: aesthetic.length,
     meanQrVerify: mean(qrVerified, t => t.generation.scan_pass_rate),
     directQrVerify: qrVerified.filter(t => Number(t.generation.quality_metrics?.qr_verify_direct_exact || 0) === 1).length,
+    meanClipAesthetic: mean(clipAesthetic, t => t.generation.quality_metrics.clip_aesthetic),
+    meanClipSimilarity: mean(clipSimilarity, t => t.generation.quality_metrics.clip_similarity),
+    meanClipScore: mean(clipScore, t => t.generation.quality_metrics.clip_score),
+    meanHps: mean(hps, t => t.generation.quality_metrics.hpsv2_1),
+    qualityScored: clipAesthetic.length,
   };
 }
 
@@ -333,6 +346,10 @@ function renderScores() {
     ["QR-Verify valides", `${a.strict}/${a.qrVerified}`],
     ["Score QR-Verify moyen", pct(a.meanQrVerify)],
     ["Lecture sans filtre", `${a.directQrVerify}/${a.qrVerified}`],
+    ["CLIP-Aesthetic moyen", a.meanClipAesthetic == null ? "N/A" : fmt(a.meanClipAesthetic, 3)],
+    ["CLIP sim. moyenne", a.meanClipSimilarity == null ? "N/A" : fmt(a.meanClipSimilarity, 4)],
+    ["CLIPScore moyen", a.meanClipScore == null ? "N/A" : fmt(a.meanClipScore, 4)],
+    ["HPS v2.1 moyen (indicatif)", a.meanHps == null ? "N/A" : fmt(a.meanHps, 4)],
     ["Tes scans positifs", `${a.humanScan}/${a.rated}`],
     ["Lectures téléphone", `${a.phoneSuccesses}/${a.phoneAttempts}`],
     ["Tes esthétiques positives", `${a.aesthetic}/${a.rated}`],
@@ -348,6 +365,9 @@ function orderedTrials() {
   if (filter === "auto_pass") trials = trials.filter(t => t.generation.exact_payload_match);
   const sort = $("#sort").value;
   if (sort === "qrverify") trials.sort((a, b) => (b.generation.scan_pass_rate ?? -1) - (a.generation.scan_pass_rate ?? -1));
+  if (sort === "aesthetic") trials.sort((a, b) => (b.generation.quality_metrics?.clip_aesthetic ?? -Infinity) - (a.generation.quality_metrics?.clip_aesthetic ?? -Infinity));
+  if (sort === "clip") trials.sort((a, b) => (b.generation.quality_metrics?.clip_similarity ?? -Infinity) - (a.generation.quality_metrics?.clip_similarity ?? -Infinity));
+  if (sort === "hps") trials.sort((a, b) => (b.generation.quality_metrics?.hpsv2_1 ?? -Infinity) - (a.generation.quality_metrics?.hpsv2_1 ?? -Infinity));
   if (sort === "time") trials.sort((a, b) => (a.generation.total_ms ?? Infinity) - (b.generation.total_ms ?? Infinity));
   return trials;
 }
@@ -361,6 +381,9 @@ function renderTrials() {
     const diverged = Number(run.quality_metrics?.diffqrcoder_guard_diverged || 0) === 1;
     const warning = Number(run.quality_metrics?.diffqrcoder_guard_warning || 0) === 1;
     const fallback = Number(run.quality_metrics?.selection_preserved_stage1 || 0) === 1;
+    const clipAesthetic = run.quality_metrics?.clip_aesthetic;
+    const clipSimilarity = run.quality_metrics?.clip_similarity;
+    const hps = run.quality_metrics?.hpsv2_1;
     return `<button class="trial" data-index="${index}">
       <div class="image">${run.image_url
         ? `<img src="${run.image_url}" loading="lazy" alt="${trial.prompt_id}">`
@@ -374,6 +397,9 @@ function renderTrials() {
           <span>Sans filtre<b>${qrVerified ? (Number(run.quality_metrics?.qr_verify_direct_exact || 0) === 1 ? "OUI" : "NON") : "N/A"}</b></span>
           <span>Presets exacts<b>${qrVerified ? `${fmt(run.quality_metrics?.qr_verify_exact_presets, 0)}/${fmt(run.quality_metrics?.qr_verify_supported_presets, 0)}` : "N/A"}</b></span>
           <span>MER<b>${pct(run.module_error_rate)}</b></span>
+          <span>CLIP-AES<b>${clipAesthetic == null ? "N/A" : fmt(clipAesthetic, 3)}</b></span>
+          <span>CLIP sim.<b>${clipSimilarity == null ? "N/A" : fmt(clipSimilarity, 4)}</b></span>
+          <span>HPS v2.1<b>${hps == null ? "N/A" : fmt(hps, 4)}</b></span>
         </div>
         <div class="badges">
           ${diverged ? "<i class='bad'>Divergence Stage 2</i>" : ""}
@@ -461,6 +487,11 @@ async function openTrial(index) {
     metric("Lecture sans filtre", qrVerified ? (Number(quality.qr_verify_direct_exact || 0) === 1 ? "Payload exact" : "Échec") : "N/A"),
     metric("Moteur", qrVerified ? "antfu/qr-verify 0.2.0 · WeChat WASM" : "Résultat historique — relancer E024"),
     metric("Nature de la mesure", "Test logiciel — pas une probabilité téléphone"),
+    metric("CLIP-Aesthetic LAION", quality.clip_aesthetic == null ? "N/A" : fmt(quality.clip_aesthetic, 4)),
+    metric("CLIP similarité (échelle papier)", quality.clip_similarity == null ? "N/A" : fmt(quality.clip_similarity, 5)),
+    metric("CLIPScore (×2,5)", quality.clip_score == null ? "N/A" : fmt(quality.clip_score, 5)),
+    metric("HPS v2.1", quality.hpsv2_1 == null ? "N/A" : fmt(quality.hpsv2_1, 5)),
+    metric("Effet des scores esthétiques", "Aucun sur le verdict QR-Verify"),
     metric("Contrat payload", qartContract ? "URL canonique sans fragment" : "Byte-à-byte exact"),
     metric("MER", pct(run.module_error_rate)),
     metric("Erreur centres", pct(quality.structure_module_center_error_rate)),

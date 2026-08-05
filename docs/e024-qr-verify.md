@@ -8,9 +8,9 @@ uniquement sur [`antfu/qr-verify`](https://github.com/antfu/qr-verify), version
 l'implémentation WeChat QR exécutée en WebAssembly.
 
 OpenCV, ZBar, ZXing, l'ancien SSR et le phone proxy ne participent plus au
-verdict automatique. CLIP-AES, CLIPScore et HPS ne sont plus calculés dans
-l'image Docker de production. L'appréciation esthétique reste une note humaine
-dans le Web Lab.
+verdict automatique. Depuis E025, CLIP-AES, CLIPScore et HPS sont de nouveau
+calculés, mais restent strictement séparés de l'acceptation QR. L'appréciation
+esthétique humaine reste enregistrée dans le Web Lab.
 
 ## Adaptation Prooftag
 
