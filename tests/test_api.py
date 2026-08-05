@@ -1,4 +1,4 @@
-import time
+﻿import time
 
 
 def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatch):
@@ -61,14 +61,23 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     lab_page = client.get("/lab")
     assert lab_page.status_code == 200
     assert "PROOFTAG × DIFFQRCODER" in lab_page.text
-    assert "20260805-e023-honest-metrics-1" in lab_page.text
+    assert "20260805-e024-qr-verify-3" in lab_page.text
     lab_javascript = client.get("/lab-assets/app.js")
     assert lab_javascript.status_code == 200
     assert "human_scan_result" in lab_javascript.text
-    assert "Indice synthétique" in lab_javascript.text
-    assert "HPS v2.1" in lab_javascript.text
+    assert "Score QR-Verify" in lab_javascript.text
+    assert "CLIP-AES" not in lab_javascript.text
     schema = client.get("/v1/lab/schema")
     assert schema.status_code == 200
+    assert schema.json()["validation"] == {
+        "engine": "antfu/qr-verify@0.2.0",
+        "scanner": "qr-scanner-wechat@0.1.3 (WeChat WASM)",
+        "resize_px": 300,
+        "tolerance_presets": 37,
+        "payload_policy": "exact_or_canonical_url_without_fragment",
+        "acceptance": "at_least_one_exact_preset",
+        "physical_probability": False,
+    }
     assert {item["id"] for item in schema.json()["profiles"]} == {
         "qr_reference",
         "diffqrcoder_stage1",
@@ -160,11 +169,13 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     assert campaign_response.status_code == 200
     campaign_id = campaign_response.json()["id"]
     campaign = None
-    for _ in range(100):
+    # The real qr-verify WASM bridge executes all 37 upstream presets. On a
+    # Windows CI runner this can take several seconds even for a binary QR.
+    for _ in range(600):
         campaign = client.get(f"/v1/lab/campaigns/{campaign_id}").json()
         if campaign["status"] not in {"queued", "running"}:
             break
-        time.sleep(0.02)
+        time.sleep(0.05)
     assert campaign is not None
     assert campaign["status"] == "completed"
     assert campaign["accepted_trials"] == 1

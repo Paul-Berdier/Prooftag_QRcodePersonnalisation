@@ -1,4 +1,7 @@
+from pathlib import Path
+
 import numpy as np
+import pytest
 from PIL import Image
 
 from prooftag_qr.qr import (
@@ -18,7 +21,9 @@ from prooftag_qr.validation import (
     Decoder,
     OpenCVDecoder,
     QRValidator,
+    QRVerifyDecoder,
     WeChatQRCodeDecoder,
+    compare_validation_to_reference,
 )
 
 
@@ -59,6 +64,57 @@ def test_reference_qr_passes_original_scenario():
 
     assert original
     assert all(record.exact_payload_match for record in original)
+
+
+def test_qr_verify_bridge_runs_all_presets_and_enforces_exact_payload():
+    node_modules = Path("qr_verify_bridge/node_modules/qr-scanner-wechat")
+    if not node_modules.is_dir():
+        pytest.skip("run npm ci in qr_verify_bridge to enable the WASM integration test")
+    payload = "https://ptag.io/t/qr-verify-test"
+    image = generate_diffqrcoder_qr(payload, "M").image
+    decoder = QRVerifyDecoder()
+    try:
+        records = QRValidator(decoders=[decoder]).validate(image, payload)
+    finally:
+        decoder.close()
+
+    summary = compare_validation_to_reference(records, records)
+    assert len(records) == 37
+    assert records[0].scenario == "original"
+    assert all(record.decoder == "qr_verify" for record in records)
+    assert all(record.exact_payload_match for record in records)
+    assert summary["qr_verify_any_exact"] is True
+    assert summary["qr_verify_direct_exact"] is True
+    assert summary["qr_verify_exact_presets"] == 37
+    assert summary["qr_verify_tolerance_score"] == 1.0
+
+
+class _WrongPayloadQRVerifyDecoder(QRVerifyDecoder):
+    def __init__(self) -> None:
+        pass
+
+    def decode_presets(self, image: Image.Image):
+        del image
+        return [
+            {
+                "preset": "original" if index == 0 else f"preset_{index}",
+                "text": "https://ptag.io/t/wrong",
+                "latency_ms": 0.1,
+            }
+            for index in range(37)
+        ]
+
+
+def test_qr_verify_rejects_a_decoded_but_wrong_payload():
+    decoder = _WrongPayloadQRVerifyDecoder()
+    records = QRValidator(decoders=[decoder]).validate(
+        Image.new("RGB", (64, 64), "white"),
+        "https://ptag.io/t/expected",
+    )
+
+    assert len(records) == 37
+    assert all(record.success for record in records)
+    assert not any(record.exact_payload_match for record in records)
 
 
 def test_diffqrcoder_reference_uses_the_public_integer_geometry():

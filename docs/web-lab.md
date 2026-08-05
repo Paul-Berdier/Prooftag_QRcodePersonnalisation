@@ -1,4 +1,4 @@
-# Laboratoire Web DiffQRCoder
+﻿# Laboratoire Web DiffQRCoder
 
 ## Périmètre de la reprise
 
@@ -25,12 +25,12 @@ flowchart LR
     N --> S2["Stage 2\nDDIM + SRPG"]
     TARGET --> S2
     S2 --> M["SR-MPGD Eq. 13–14\noptionnel"]
-    Q --> R["Capacité du QR témoin\npar décodeur/scénario"]
-    R --> V["Validation automatique normalisée"]
+    Q --> R["QR témoin\n37 presets QR-Verify"]
+    R --> V["antfu/qr-verify\nWeChat WASM"]
     S1 --> V
     S2 --> V
     M --> V
-    V --> A["SSR normalisé, payload, MER exact,\nCLIP-aesthetic, CLIPScore"]
+    V --> A["Payload exact, score QR-Verify,\nlecture directe et MER"]
     A --> H["Verdict humain\nesthétique + scan téléphone"]
 ```
 
@@ -128,37 +128,34 @@ et ETA 0. Le profil SR-MPGD sécurisé démarre à 4 itérations, `gamma=100` et
 `LPIPS=0,10`. Les valeurs du papier (`gamma=1000`, `LPIPS=0,01`) restent des
 paramètres expérimentaux, pas une garantie de lecture.
 
-## Scores automatiques par image
+## Validation automatique par image
 
-Chaque image finale est testée avec les décodeurs installés et les scénarios de
-dégradation du projet. L’interface affiche :
+Depuis E024, chaque image finale est testée uniquement avec
+`antfu/qr-verify@0.2.0`. L’interface affiche :
 
-- **SSR normalisé** : proportion des cas relisant le payload parmi ceux que le
-  QR témoin sait lui-même passer ;
-- **SSR brut et capacité du témoin** : valeurs d'audit non masquées ;
-- **Payload original** : réussite sans dégradation ;
-- **MER** : taux de modules incorrects ;
-- **CLIP-aesthetic**, **CLIPScore** et similarité CLIP ;
+- **QR-Verify valide** : au moins un preset restitue le payload attendu ;
+- **score QR-Verify** : proportion des 37 presets exacts, normalisée par ceux
+  que le QR témoin sait passer ;
+- **lecture sans filtre** : résultat du preset original ;
+- **presets exacts** : numérateur et dénominateur du score ;
+- **MER** : taux de modules incorrects, conservé comme diagnostic ;
 - temps de génération, validation et total ;
 - initialisation réellement employée, pas effectifs et erreur des centres QArt ;
 - variation par rapport au Stage 1 et détection de divergence/saturation ;
 - paramètres SR-MPGD réellement appliqués et itération retenue ;
-- tableau `décodeur × scénario × résultat × latence`.
+- tableau `preset × paramètres × résultat exact × latence`.
 
-Le SSR de décision est normalisé par le QR témoin. Un couple
-`décodeur × dégradation` que le QR binaire propre ne sait pas relire est exclu
-de la porte de livraison, mais reste conservé dans le SSR brut. Cela corrige le
-cas observé où le témoin obtenait 38/39 et était lui-même rejeté par une porte
-39/39 impossible.
+Le scanner est `qr-scanner-wechat@0.1.3` en WebAssembly. Le pont Prooftag garde
+la réduction à 300 px et les 37 prétraitements amont, les rend déterministes et
+vérifie le payload exact au lieu d'accepter n'importe quel texte décodé.
 
 Le MER Stage 2/SR-MPGD est mesuré sur la géométrie réellement optimisée par
 DiffQRCoder : crop 78 px, cœur 580×580 et modules entiers de 20 px. Il n'est
 plus calculé en découpant naïvement le canvas 736 px en 37 cellules.
 
-Une sortie est `accepted` seulement si tous les décodeurs originaux supportés
-par le témoin relisent le payload et si le SSR normalisé atteint le seuil
-configuré, actuellement 100 %. Une alerte couleur demande une inspection
-humaine ; seule une divergence forte rejette automatiquement l'image.
+Une sortie est `accepted` si au moins un preset QR-Verify restitue le payload et
+si la garde de divergence du générateur est respectée. Le score QR-Verify classe
+la tolérance logicielle, mais n'est pas une probabilité de scan téléphone.
 
 ### Recette par défaut après la campagne fc403349
 
@@ -184,8 +181,8 @@ Cliquer une vignette, puis enregistrer :
 - notes libres.
 
 Le bouton **Enregistrer et suivant** ouvre immédiatement l’image suivante. La
-campagne agrège le taux automatique strict, SSR, CLIP-aesthetic, CLIPScore,
-scans humains positifs, esthétiques positives et nombre d’images évaluées.
+campagne agrège les validations QR-Verify, leur score moyen, les lectures sans
+filtre, les scans humains, les esthétiques positives et les images évaluées.
 L’export CSV contient les paramètres, métriques et verdicts humains.
 
 ## Déploiement sans ambiguïté de version
@@ -201,10 +198,9 @@ bash scripts/deploy-app-image.sh
 Le script refuse un dépôt sale, construit une image taguée avec le commit Git,
 vérifie le commit DiffQRCoder, importe l’image dans containerd K3s, applique la
 migration `0005_e017_phone_calibration`, attend le rollout puis contrôle dans le pod les
-profils de production et d'ablation, l’import DiffQRCoder et la version
-`20260804-e020-trace-robust-1` des assets Web, l’initialisation Stage 1 bruitée,
-la cible binaire exacte, la force `0,65`, le repli automatique et le seuil
-SR-MPGD.
+profils de production et d'ablation, l’import DiffQRCoder, la version
+`20260805-e024-qr-verify-3` des assets Web et un vrai décodage WASM 37/37 du QR
+témoin.
 
 Le taux publiable sera calculé sur les sorties artistiques réellement générées,
 jamais sur le QR témoin ni sur une réparation cachée.

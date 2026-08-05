@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+import atexit
+import base64
 import hashlib
 import io
+import json
 import os
+import shutil
+import subprocess
+import threading
 import time
+import uuid
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable
@@ -69,6 +76,14 @@ def compare_validation_to_reference(
     normalized_total = len(supported_values)
     original_passed = sum(original_values)
     original_total = len(original_values)
+    qr_verify_supported = [
+        record for record in supported if record.decoder == "qr_verify"
+    ]
+    qr_verify_values = [
+        bool(candidate_by_key.get((record.decoder, record.scenario), False))
+        for record in qr_verify_supported
+    ]
+    qr_verify_direct = candidate_by_key.get(("qr_verify", "original"))
     return {
         "raw_passed": raw_passed,
         "raw_total": len(records),
@@ -98,6 +113,18 @@ def compare_validation_to_reference(
         "worst_decoder_pass_rate": min(decoder_pass_rates.values(), default=0.0),
         "worst_scenario_pass_rate": min(
             scenario_pass_rates.values(), default=0.0
+        ),
+        "qr_verify_mode": bool(qr_verify_supported),
+        "qr_verify_any_exact": any(qr_verify_values),
+        "qr_verify_direct_exact": (
+            bool(qr_verify_direct) if qr_verify_direct is not None else None
+        ),
+        "qr_verify_exact_presets": sum(qr_verify_values),
+        "qr_verify_supported_presets": len(qr_verify_values),
+        "qr_verify_tolerance_score": (
+            sum(qr_verify_values) / len(qr_verify_values)
+            if qr_verify_values
+            else 0.0
         ),
     }
 
@@ -226,21 +253,127 @@ class WeChatQRCodeDecoder(Decoder):
         return next((str(value) for value in values if value), "")
 
 
+class QRVerifyDecoder(Decoder):
+    """Deterministic adapter for antfu/qr-verify's WeChat WASM scanner.
+
+    The upstream CLI is intended for interactive file sorting, accepts any
+    decoded text and shuffles its high-tolerance presets.  The bridge keeps its
+    300 px input geometry and all 37 presets, but returns every decoded value so
+    the Python validator can enforce the exact Prooftag payload deterministically.
+    """
+
+    name = "qr_verify"
+
+    def __init__(
+        self,
+        bridge_path: str | Path | None = None,
+        node_executable: str | None = None,
+    ) -> None:
+        default_bridge = Path(__file__).resolve().parent.parent / "qr_verify_bridge" / "bridge.mjs"
+        self.bridge_path = Path(
+            bridge_path
+            or os.environ.get("PROOFTAG_QR_QR_VERIFY_BRIDGE", default_bridge)
+        )
+        self.node_executable = (
+            node_executable
+            or os.environ.get("PROOFTAG_QR_NODE_EXECUTABLE")
+            or shutil.which("node")
+        )
+        if not self.node_executable:
+            raise FileNotFoundError("Node.js is required by qr-verify")
+        if not self.bridge_path.is_file():
+            raise FileNotFoundError(f"qr-verify bridge is missing: {self.bridge_path}")
+        self.timeout_seconds = float(
+            os.environ.get("PROOFTAG_QR_QR_VERIFY_TIMEOUT_SECONDS", "120")
+        )
+        self._process: subprocess.Popen[str] | None = None
+        self._lock = threading.Lock()
+        self._registered_at_exit = False
+
+    def _start(self) -> subprocess.Popen[str]:
+        if self._process is not None and self._process.poll() is None:
+            return self._process
+        self._process = subprocess.Popen(
+            [self.node_executable, str(self.bridge_path)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            bufsize=1,
+        )
+        if not self._registered_at_exit:
+            atexit.register(self.close)
+            self._registered_at_exit = True
+        return self._process
+
+    def decode_presets(self, image: Image.Image) -> list[dict[str, Any]]:
+        stream = io.BytesIO()
+        image.convert("RGB").save(stream, format="PNG", optimize=False)
+        request_id = str(uuid.uuid4())
+        request = {
+            "id": request_id,
+            "image_base64": base64.b64encode(stream.getvalue()).decode("ascii"),
+        }
+        with self._lock:
+            process = self._start()
+            if process.stdin is None or process.stdout is None:
+                raise RuntimeError("qr-verify bridge has no standard streams")
+            process.stdin.write(json.dumps(request, separators=(",", ":")) + "\n")
+            process.stdin.flush()
+            response_lines: list[str] = []
+            reader = threading.Thread(
+                target=lambda: response_lines.append(process.stdout.readline()),
+                daemon=True,
+            )
+            reader.start()
+            reader.join(timeout=self.timeout_seconds)
+            if reader.is_alive():
+                self.close()
+                reader.join(timeout=2)
+                raise TimeoutError(
+                    "qr-verify bridge exceeded "
+                    f"{self.timeout_seconds:.0f} seconds"
+                )
+            line = response_lines[0] if response_lines else ""
+            if not line:
+                error = process.stderr.read() if process.stderr else ""
+                self.close()
+                raise RuntimeError(f"qr-verify bridge stopped unexpectedly: {error[-1000:]}")
+        response = json.loads(line)
+        if response.get("id") != request_id:
+            raise RuntimeError("qr-verify bridge response id mismatch")
+        if not response.get("ok"):
+            raise RuntimeError(f"qr-verify bridge failed: {response.get('error')}")
+        attempts = response.get("attempts")
+        if response.get("engine") != "qr-verify@0.2.0" or not isinstance(attempts, list):
+            raise RuntimeError("qr-verify bridge returned an invalid protocol response")
+        if len(attempts) != 37:
+            raise RuntimeError(f"qr-verify returned {len(attempts)} presets instead of 37")
+        return attempts
+
+    def decode(self, image: Image.Image) -> str:
+        attempts = self.decode_presets(image)
+        return next((str(item.get("text") or "") for item in attempts if item.get("text")), "")
+
+    def close(self) -> None:
+        process = self._process
+        self._process = None
+        if process is None or process.poll() is not None:
+            return
+        try:
+            if process.stdin:
+                process.stdin.close()
+            process.terminate()
+            process.wait(timeout=2)
+        except Exception:
+            process.kill()
+
+
 def available_decoders() -> list[Decoder]:
-    decoders: list[Decoder] = [OpenCVDecoder()]
-    try:
-        decoders.append(PyzbarDecoder())
-    except (ImportError, OSError):
-        pass
-    try:
-        decoders.append(ZXingCPPDecoder())
-    except (ImportError, OSError):
-        pass
-    try:
-        decoders.append(WeChatQRCodeDecoder())
-    except (ImportError, OSError, cv2.error):
-        pass
-    return decoders
+    # E024 deliberately has one validation authority. There is no silent
+    # fallback to another decoder when qr-verify is unavailable.
+    return [QRVerifyDecoder()]
 
 
 @dataclass(frozen=True, slots=True)
@@ -340,6 +473,9 @@ DEFAULT_SCENARIOS = [
 class QRValidator:
     def __init__(self, decoders: list[Decoder] | None = None):
         self.decoders = decoders or available_decoders()
+        self.qr_verify_only = bool(self.decoders) and all(
+            isinstance(decoder, QRVerifyDecoder) for decoder in self.decoders
+        )
 
     def validate(
         self,
@@ -351,6 +487,38 @@ class QRValidator:
     ) -> list[ValidationRecord]:
         expected_hash = hashlib.sha256(expected_payload.encode()).hexdigest()
         comparator = matcher or (lambda decoded, expected: decoded == expected)
+        if self.qr_verify_only:
+            decoder = self.decoders[0]
+            if not isinstance(decoder, QRVerifyDecoder):
+                raise AssertionError("qr_verify_only requires QRVerifyDecoder")
+            records = []
+            for attempt in decoder.decode_presets(image):
+                decoded = str(attempt.get("text") or "")
+                exact = comparator(decoded, expected_payload)
+                preset = str(attempt.get("preset") or "unknown")
+                records.append(
+                    ValidationRecord(
+                        decoder=decoder.name,
+                        scenario=("original" if preset == "original" else f"qr_verify_{preset}"),
+                        success=bool(decoded),
+                        exact_payload_match=exact,
+                        latency_ms=float(attempt.get("latency_ms") or 0.0),
+                        decoded_hash=(
+                            hashlib.sha256(decoded.encode()).hexdigest() if decoded else None
+                        ),
+                        parameters={
+                            "engine": "qr-verify@0.2.0",
+                            "preset": preset,
+                            "contrast": attempt.get("contrast"),
+                            "brightness": attempt.get("brightness"),
+                            "blur": attempt.get("blur"),
+                            "expected_hash": expected_hash,
+                            "match_mode": match_mode,
+                            "decoder_error": attempt.get("error"),
+                        },
+                    )
+                )
+            return records
         records: list[ValidationRecord] = []
         for scenario in DEFAULT_SCENARIOS:
             transformed = scenario.apply(image)

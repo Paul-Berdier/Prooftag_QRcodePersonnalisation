@@ -21,8 +21,8 @@ DiffQRCoder et sur l’algorithme décrit dans son papier :
 - une géométrie entière QR v3/M/masque 4 conforme aux exemples publics ;
 - aucune réparation déterministe ou superposition du QR témoin dans les profils du Web Lab ;
 - des garde-fous de divergence et de saturation sans réparation cachée de l’image ;
-- une validation exacte du payload par OpenCV, ZBar et ZXing-cpp ;
-- treize scénarios de dégradation ;
+- une validation automatique unique par `antfu/qr-verify@0.2.0` et son scanner
+  WeChat WASM, avec contrôle exact du payload sur 37 presets déterministes ;
 - PostgreSQL en production, avec migrations Alembic et sauvegardes quotidiennes ;
 - SQLite pour les tests et le développement local ;
 - une base relationnelle contenant runs, tentatives, validations et qualité ;
@@ -45,9 +45,9 @@ Le laboratoire est servi par la même API à l'adresse `/lab`. Il exécute
 séquentiellement chaque combinaison recette × prompt × seed, conserve les
 configurations et mesures dans PostgreSQL, puis permet de valider à la chaîne
 chaque image : esthétique bonne/mauvaise, scan téléphone positif/négatif, note
-et commentaire. SSR, payload exact, MER, CLIPScore et CLIP-aesthetic restent
-séparés des verdicts humains. CLIP est calculé sur CPU pour réserver la VRAM à
-la diffusion.
+et commentaire. Le score QR-Verify, sa lecture directe et la MER restent séparés
+des verdicts humains. Les scores esthétiques automatiques historiques sont
+désactivés : l'esthétique est évaluée par l'utilisateur dans le laboratoire.
 
 Depuis le PC Windows, lorsque le Deployment est prêt sur le serveur :
 
@@ -110,16 +110,17 @@ Endpoints principaux :
 
 ## Principe d'acceptation
 
-Une image est `accepted` uniquement lorsque :
+Une image est `accepted` lorsque `antfu/qr-verify` restitue le payload attendu
+sur au moins un de ses 37 presets. Le preset original sans filtre est affiché
+séparément. Le score QR-Verify correspond à la fraction de presets exacts parmi
+ceux que le QR témoin supporte ; il sert au classement, pas de probabilité de
+scan téléphone. Aucune substitution de payload n'est tolérée.
 
-1. tous les décodeurs disponibles lisent exactement le payload original ;
-2. le taux de réussite sur l'ensemble des dégradations atteint
-   `PROOFTAG_QR_VALIDATION_MIN_PASS_RATE` ;
-3. aucune substitution de payload n'est tolérée.
-
-Avec la configuration de production (`1.0`), toutes les combinaisons
-décodeur/scénario doivent réussir. Une image rejetée reste dans l'historique pour permettre
-l'analyse du modèle, mais ne doit pas être publiée par l'application appelante.
+Le protocole, les versions épinglées et les limites sont documentés dans
+[`docs/e024-qr-verify.md`](docs/e024-qr-verify.md). Les validations téléphone
+restent enregistrées séparément. Une image rejetée reste dans l'historique pour
+permettre l'analyse du modèle, mais ne doit pas être publiée par l'application
+appelante.
 
 ## Déploiement
 

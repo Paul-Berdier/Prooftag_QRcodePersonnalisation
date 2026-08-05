@@ -300,25 +300,14 @@ async function loadCampaigns() {
   $$(".campaign-item", host).forEach(button => button.addEventListener("click", () => selectCampaign(button.dataset.id)));
 }
 
-function autoOriginal(trial) {
-  return (trial.generation?.validations || []).filter(v => v.scenario === "original");
-}
-
-function normalizedOriginal(run, records) {
-  const quality = run.quality_metrics || {};
-  return {
-    passed: quality.validation_original_passed ?? records.filter(v => v.exact_payload_match).length,
-    total: quality.validation_original_total ?? records.length,
-  };
-}
-
 function aggregate(trials) {
   const allGenerated = trials.filter(t => t.generation);
   const generated = allGenerated.filter(t => t.method_id !== "qr_reference");
+  const qrVerified = generated.filter(t => Number(t.generation.quality_metrics?.qr_verify_available || 0) === 1);
   const rated = generated.filter(t => t.rating && (
     t.rating.aesthetic_ok != null || t.rating.human_scan_result !== "not_tested"
   ));
-  const strict = generated.filter(t => t.generation.exact_payload_match && t.generation.scan_pass_rate === 1);
+  const strict = qrVerified.filter(t => t.generation.exact_payload_match);
   const humanScan = generated.filter(t => t.rating?.human_scan_result === "scannable");
   const phoneAttempts = generated.reduce((sum, t) => sum + Number(t.rating?.human_scan_attempts || 0), 0);
   const phoneSuccesses = generated.reduce((sum, t) => sum + Number(t.rating?.human_scan_successes || 0), 0);
@@ -326,27 +315,24 @@ function aggregate(trials) {
   const mean = (items, getter) => items.length ? items.reduce((sum, item) => sum + Number(getter(item) || 0), 0) / items.length : null;
   return {
     generated: generated.length,
+    qrVerified: qrVerified.length,
     rated: rated.length,
     strict: strict.length,
     humanScan: humanScan.length,
     phoneAttempts,
     phoneSuccesses,
     aesthetic: aesthetic.length,
-    meanSsr: mean(generated, t => t.generation.scan_pass_rate),
-    hpsCount: generated.filter(t => t.generation.quality_metrics?.hpsv2_1 != null).length,
-    meanAes: mean(generated.filter(t => t.generation.quality_metrics?.clip_aesthetic != null), t => t.generation.quality_metrics.clip_aesthetic),
-    meanClip: mean(generated.filter(t => t.generation.quality_metrics?.clip_score != null), t => t.generation.quality_metrics.clip_score),
+    meanQrVerify: mean(qrVerified, t => t.generation.scan_pass_rate),
+    directQrVerify: qrVerified.filter(t => Number(t.generation.quality_metrics?.qr_verify_direct_exact || 0) === 1).length,
   };
 }
 
 function renderScores() {
   const a = aggregate(state.campaign.trials);
   $("#final-scores").innerHTML = [
-    ["Strict logiciel", `${a.strict}/${a.generated}`],
-    ["Indice synthétique moyen", pct(a.meanSsr)],
-    ["HPS v2.1 renseignés", `${a.hpsCount}/${a.generated}`],
-    ["CLIP-AES historique", fmt(a.meanAes, 2)],
-    ["CLIPScore moyen", fmt(a.meanClip, 2)],
+    ["QR-Verify valides", `${a.strict}/${a.qrVerified}`],
+    ["Score QR-Verify moyen", pct(a.meanQrVerify)],
+    ["Lecture sans filtre", `${a.directQrVerify}/${a.qrVerified}`],
     ["Tes scans positifs", `${a.humanScan}/${a.rated}`],
     ["Lectures téléphone", `${a.phoneSuccesses}/${a.phoneAttempts}`],
     ["Tes esthétiques positives", `${a.aesthetic}/${a.rated}`],
@@ -359,10 +345,9 @@ function orderedTrials() {
   const filter = $("#filter").value;
   if (filter === "unrated") trials = trials.filter(t => !t.rating || (t.rating.aesthetic_ok == null && t.rating.human_scan_result === "not_tested"));
   if (filter === "scannable" || filter === "not_scannable") trials = trials.filter(t => t.rating?.human_scan_result === filter);
-  if (filter === "auto_pass") trials = trials.filter(t => t.generation.exact_payload_match && t.generation.scan_pass_rate === 1);
+  if (filter === "auto_pass") trials = trials.filter(t => t.generation.exact_payload_match);
   const sort = $("#sort").value;
-  if (sort === "ssr") trials.sort((a, b) => (b.generation.scan_pass_rate ?? -1) - (a.generation.scan_pass_rate ?? -1));
-  if (sort === "aesthetic") trials.sort((a, b) => (b.generation.quality_metrics?.clip_aesthetic ?? -1) - (a.generation.quality_metrics?.clip_aesthetic ?? -1));
+  if (sort === "qrverify") trials.sort((a, b) => (b.generation.scan_pass_rate ?? -1) - (a.generation.scan_pass_rate ?? -1));
   if (sort === "time") trials.sort((a, b) => (a.generation.total_ms ?? Infinity) - (b.generation.total_ms ?? Infinity));
   return trials;
 }
@@ -372,9 +357,7 @@ function renderTrials() {
   $("#trials").innerHTML = state.visibleTrials.map((trial, index) => {
     const run = trial.generation;
     const rating = trial.rating;
-    const original = autoOriginal(trial);
-    const originalScore = normalizedOriginal(run, original);
-    const qartContract = Number(run.quality_metrics?.diffqrcoder_stage2_control_target_qart || 0) === 1;
+    const qrVerified = Number(run.quality_metrics?.qr_verify_available || 0) === 1;
     const diverged = Number(run.quality_metrics?.diffqrcoder_guard_diverged || 0) === 1;
     const warning = Number(run.quality_metrics?.diffqrcoder_guard_warning || 0) === 1;
     const fallback = Number(run.quality_metrics?.selection_preserved_stage1 || 0) === 1;
@@ -386,12 +369,11 @@ function renderTrials() {
         <div class="trial-title"><b>${trial.prompt_id} / ${trial.method_id}</b><span class="status ${trial.status}">${trial.status}</span></div>
         <p class="${run.error ? "run-error" : ""}">${run.error || `seed ${trial.seed} · ${run.selected_variant}`}</p>
         <div class="trial-stats">
-          <span>Indice synth.<b>${pct(run.scan_pass_rate)}</b></span>
-          <span>${qartContract ? "URL canon." : "Original norm."}<b>${fmt(originalScore.passed, 0)}/${fmt(originalScore.total, 0)}</b></span>
+          <span>QR-Verify<b>${qrVerified ? pct(run.scan_pass_rate) : "N/A historique"}</b></span>
+          <span>Au moins un exact<b>${qrVerified ? (run.exact_payload_match ? "OUI" : "NON") : "N/A"}</b></span>
+          <span>Sans filtre<b>${qrVerified ? (Number(run.quality_metrics?.qr_verify_direct_exact || 0) === 1 ? "OUI" : "NON") : "N/A"}</b></span>
+          <span>Presets exacts<b>${qrVerified ? `${fmt(run.quality_metrics?.qr_verify_exact_presets, 0)}/${fmt(run.quality_metrics?.qr_verify_supported_presets, 0)}` : "N/A"}</b></span>
           <span>MER<b>${pct(run.module_error_rate)}</b></span>
-          <span>Proxy logiciel<b>${pct(run.quality_metrics?.phone_proxy_normalized_pass_rate)}</b></span>
-          <span>WeChat original<b>${Number(run.quality_metrics?.wechat_qrcode_available || 0) === 1 ? (Number(run.quality_metrics?.wechat_qrcode_original_exact || 0) === 1 ? "OK" : "Échec") : "N/A"}</b></span>
-          <span>HPS v2.1<b>${fmt(run.quality_metrics?.hpsv2_1, 3)}</b></span>
         </div>
         <div class="badges">
           ${diverged ? "<i class='bad'>Divergence Stage 2</i>" : ""}
@@ -440,7 +422,7 @@ async function renderSrmpgdTrace(run) {
     panel.hidden = false;
     host.innerHTML = `<p class="muted">Loss robuste : ${trace.robust_loss_enabled ? "active" : "témoin officiel"} · état retenu : ${trace.selected_iteration} · arrêt : ${trace.stop_reason}</p>
       <div class="table-scroll"><table>
-        <thead><tr><th>It.</th><th>Retenu</th><th>Indice synth.</th><th>MER</th><th>SRL</th><th>Base</th><th>Flou</th><th>Réduction</th><th>Lum.</th><th>Contraste</th><th>LPIPS</th><th>Δ latent</th><th>Pas</th><th>Garde</th><th>Gain QR</th><th>Éligible</th></tr></thead>
+        <thead><tr><th>It.</th><th>Retenu</th><th>Score QR-Verify</th><th>MER</th><th>SRL</th><th>Base</th><th>Flou</th><th>Réduction</th><th>Lum.</th><th>Contraste</th><th>LPIPS</th><th>Δ latent</th><th>Pas</th><th>Garde</th><th>Gain QR</th><th>Éligible</th></tr></thead>
         <tbody>${trace.steps.map(step => `<tr class="${step.iteration === trace.selected_iteration ? "selected" : ""}">
           <td>${step.iteration}</td><td>${step.iteration === trace.selected_iteration ? "Oui" : ""}</td>
           <td>${pct(step.pass_rate)}</td><td>${pct(step.actual_module_error_rate)}</td>
@@ -467,35 +449,26 @@ async function openTrial(index) {
   const trial = state.visibleTrials[index];
   const run = trial.generation;
   const quality = run.quality_metrics || {};
+  const qrVerified = Number(quality.qr_verify_available || 0) === 1;
   const qartContract = Number(quality.diffqrcoder_stage2_control_target_qart || 0) === 1;
   $("#dialog-kicker").textContent = `${trial.status} · seed ${trial.seed}`;
   $("#dialog-title").textContent = `${trial.prompt_id} / ${trial.method_id}`;
-  const original = autoOriginal(trial);
-  const originalScore = normalizedOriginal(run, original);
   $("#dialog-metrics").innerHTML = [
     metric("Sortie", run.selected_variant),
-    metric("Indice synthétique normalisé", pct(run.scan_pass_rate)),
-    metric("Indice synthétique brut", pct(quality.validation_raw_pass_rate)),
-    metric("Nature de la mesure", "Logicielle — pas un taux téléphone"),
-    metric("Capacité du QR témoin", pct(quality.validation_reference_pass_rate)),
-    metric("Tests normalisés", `${fmt(quality.validation_normalized_passed, 0)}/${fmt(quality.validation_normalized_total, 0)}`),
-    metric(qartContract ? "URL canonique" : "Payload original normalisé", `${fmt(originalScore.passed, 0)}/${fmt(originalScore.total, 0)}`),
+    metric("QR-Verify — au moins un exact", qrVerified ? (run.exact_payload_match ? "OUI" : "NON") : "N/A historique"),
+    metric("Score QR-Verify", qrVerified ? pct(run.scan_pass_rate) : "N/A historique"),
+    metric("Presets exacts", qrVerified ? `${fmt(quality.qr_verify_exact_presets, 0)}/${fmt(quality.qr_verify_supported_presets, 0)}` : "N/A"),
+    metric("Lecture sans filtre", qrVerified ? (Number(quality.qr_verify_direct_exact || 0) === 1 ? "Payload exact" : "Échec") : "N/A"),
+    metric("Moteur", qrVerified ? "antfu/qr-verify 0.2.0 · WeChat WASM" : "Résultat historique — relancer E024"),
+    metric("Nature de la mesure", "Test logiciel — pas une probabilité téléphone"),
+    metric("Contrat payload", qartContract ? "URL canonique sans fragment" : "Byte-à-byte exact"),
     metric("MER", pct(run.module_error_rate)),
-    metric("Proxy prétraitement normalisé", pct(quality.phone_proxy_normalized_pass_rate)),
-    metric("Proxy prétraitement brut", pct(quality.phone_proxy_raw_pass_rate)),
-    metric("Proxy prétraitement", Number(quality.phone_proxy_calibration_only || 0) === 1 ? "Serveur uniquement — non mobile" : "Indisponible"),
-    metric("Décodeurs logiciels", fmt(quality.synthetic_decoder_count, 0)),
-    metric("WeChat QR disponible", Number(quality.wechat_qrcode_available || 0) === 1 ? "Oui" : "Non"),
-    metric("WeChat QR original", Number(quality.wechat_qrcode_available || 0) === 1 ? (Number(quality.wechat_qrcode_original_exact || 0) === 1 ? "Payload exact" : "Échec") : "Indisponible"),
     metric("Erreur centres", pct(quality.structure_module_center_error_rate)),
     metric("Erreur centres fonctionnels", pct(quality.structure_functional_center_error_rate)),
     metric("Centres ambigus", pct(quality.structure_center_ambiguous_ratio)),
     metric("Confiance centres P10", fmt(quality.structure_center_confidence_p10, 3)),
     metric("Texture intra-module P95", fmt(quality.structure_intra_module_std_p95, 3)),
     metric("Quiet zone sombre", pct(quality.structure_quiet_zone_dark_pixel_ratio)),
-    metric("HPS v2.1 — même prompt seulement", fmt(run.quality_metrics?.hpsv2_1, 4)),
-    metric("CLIP-AES historique ViT-B/32", fmt(run.quality_metrics?.clip_aesthetic, 3)),
-    metric("CLIPScore historique", fmt(run.quality_metrics?.clip_score, 3)),
     metric("Init. papier", Number(quality.diffqrcoder_stage2_paper_initialization || 0) === 1 ? "Oui" : "Non"),
     metric("Pas Stage 2 effectifs", fmt(quality.diffqrcoder_stage2_effective_steps, 0)),
     metric("Stage 2 réutilisé", Number(quality.diffqrcoder_stage2_reused || 0) === 1 ? "Oui — aucun recalcul" : "Non"),
@@ -504,7 +477,7 @@ async function openTrial(index) {
     metric("Cible Stage 2", Number(quality.diffqrcoder_stage2_control_target_qart || 0) === 1 ? "QArt réel — URL canonique" : "QR binaire exact"),
     metric("Contrat payload", Number(quality.diffqrcoder_stage2_control_target_qart || 0) === 1 ? "URL identique avant #" : "Byte-à-byte exact"),
     metric("Erreur centres cible", pct(quality.diffqrcoder_stage2_control_target_center_error_rate)),
-    metric("QArt cible — indice synth.", pct(quality.diffqrcoder_qart_target_scan_pass_rate)),
+    metric("QArt cible — ancien diagnostic", pct(quality.diffqrcoder_qart_target_scan_pass_rate)),
     metric("QArt seuil", fmt(quality.diffqrcoder_qart_threshold, 0)),
     metric("Changement Stage 1", pct(quality.diffqrcoder_stage2_changed_pixel_ratio)),
     metric("Saturation moyenne Δ", pct(quality.diffqrcoder_stage2_saturation_mean_increase)),
@@ -526,7 +499,7 @@ async function openTrial(index) {
     metric("Garde esthétique", Number(quality.diffqrcoder_srmpgd_selected_aesthetic_guard || 0) === 1 ? "Respectée" : "Échec / non exécutée"),
     metric("Gain QR suffisant", Number(quality.diffqrcoder_srmpgd_selected_qr_gain_sufficient || 0) === 1 ? "Oui" : "Non"),
     metric("Meilleur essai — itération", fmt(quality.diffqrcoder_srmpgd_attempted_best_iteration, 0)),
-    metric("Meilleur essai — SSR", pct(quality.diffqrcoder_srmpgd_attempted_best_pass_rate)),
+    metric("Meilleur essai — score QR", pct(quality.diffqrcoder_srmpgd_attempted_best_pass_rate)),
     metric("Meilleur essai — MER", pct(quality.diffqrcoder_srmpgd_attempted_best_mer)),
     metric("Meilleur essai — SRL", fmt(quality.diffqrcoder_srmpgd_attempted_best_srl, 6)),
     metric("Meilleur essai — éligible", Number(quality.diffqrcoder_srmpgd_attempted_best_eligible || 0) === 1 ? "Oui" : "Non"),
@@ -543,9 +516,9 @@ async function openTrial(index) {
     <figure><img src="${item.url}" loading="lazy"><figcaption>${item.name}</figcaption></figure>`).join("");
   await renderSrmpgdTrace(run);
   $("#validations").innerHTML = `<table>
-    <thead><tr><th>Décodeur</th><th>Scénario</th><th>Prétraitement</th><th>${qartContract ? "URL canonique" : "Payload exact"}</th><th>Latence</th></tr></thead>
+    <thead><tr><th>Moteur</th><th>Test</th><th>Preset</th><th>${qartContract ? "URL canonique" : "Payload exact"}</th><th>Latence</th></tr></thead>
     <tbody>${(run.validations || []).map(item => `<tr>
-      <td>${item.decoder}</td><td>${item.scenario}</td><td>${item.parameters?.selected_preprocessor || "—"}</td>
+      <td>${item.decoder}</td><td>${item.scenario}</td><td>${item.parameters?.preset || "—"}</td>
       <td class="${item.exact_payload_match ? "pass" : "fail"}">${item.exact_payload_match ? "Oui" : "Non"}</td>
       <td>${fmt(item.latency_ms, 1)} ms</td>
     </tr>`).join("")}</tbody>

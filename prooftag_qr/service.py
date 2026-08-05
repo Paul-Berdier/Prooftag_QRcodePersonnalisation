@@ -213,7 +213,11 @@ class GenerationService:
                             "passed": summary["normalized_passed"],
                             "total": summary["normalized_total"],
                             "pass_rate": summary["normalized_pass_rate"],
-                            "strict_all": summary["normalized_strict_all"],
+                            "strict_all": (
+                                summary["qr_verify_any_exact"]
+                                if summary.get("qr_verify_mode")
+                                else summary["normalized_strict_all"]
+                            ),
                             "decoder_pass_rates": summary["decoder_pass_rates"],
                             "scenario_pass_rates": summary["scenario_pass_rates"],
                             "worst_decoder_pass_rate": summary[
@@ -289,12 +293,22 @@ class GenerationService:
                             metrics.VALIDATION_DURATION.labels(item.decoder).observe(
                                 item.latency_ms / 1000
                             )
+                        qr_verify_mode = bool(
+                            validation_summary.get("qr_verify_mode", False)
+                        )
                         original_ok = bool(
-                            validation_summary["original_strict_all"]
+                            validation_summary.get("qr_verify_any_exact", False)
+                            if qr_verify_mode
+                            else validation_summary["original_strict_all"]
+                        )
+                        robustness_ok = bool(
+                            validation_summary.get("qr_verify_any_exact", False)
+                            if qr_verify_mode
+                            else pass_rate >= self.settings.validation_min_pass_rate
                         )
                         accepted = (
                             original_ok
-                            and pass_rate >= self.settings.validation_min_pass_rate
+                            and robustness_ok
                             and (
                                 backend.candidate_guard_ok(variant_name)
                                 if hasattr(backend, "candidate_guard_ok")
@@ -508,20 +522,11 @@ class GenerationService:
             run.validations = best_records
             run.scan_pass_rate = best_pass_rate
             run.exact_payload_match = bool(
-                best_validation_summary.get("original_strict_all", False)
+                best_validation_summary.get("qr_verify_any_exact", False)
+                if best_validation_summary.get("qr_verify_mode", False)
+                else best_validation_summary.get("original_strict_all", False)
             )
             run.module_error_rate = best_module_error_rate
-            original_decoder_records = [
-                record for record in best_records if record.scenario == "original"
-            ]
-            wechat_original = next(
-                (
-                    record
-                    for record in original_decoder_records
-                    if record.decoder == "wechat_qrcode"
-                ),
-                None,
-            )
             run.quality_metrics = {
                 **image_quality_metrics(best),
                 "validation_raw_pass_rate": float(
@@ -545,26 +550,30 @@ class GenerationService:
                 "validation_original_total": float(
                     best_validation_summary.get("original_total", 0)
                 ),
-                # Stable aliases with honest semantics. Historical validation_*
-                # fields and RunRecord.scan_pass_rate remain for compatibility.
-                "synthetic_robustness_raw_pass_rate": float(
-                    best_validation_summary.get("raw_pass_rate", 0.0)
+                "qr_verify_available": float(
+                    bool(best_validation_summary.get("qr_verify_mode", False))
                 ),
-                "synthetic_robustness_normalized_pass_rate": float(
-                    best_validation_summary.get("normalized_pass_rate", 0.0)
+                "qr_verify_any_exact": float(
+                    bool(best_validation_summary.get("qr_verify_any_exact", False))
                 ),
-                "synthetic_original_decoder_pass_rate": float(
-                    best_validation_summary.get("original_passed", 0)
-                )
-                / max(float(best_validation_summary.get("original_total", 0)), 1.0),
-                "synthetic_decoder_count": float(len(original_decoder_records)),
-                "synthetic_metric_is_physical": 0.0,
-                "wechat_qrcode_available": float(wechat_original is not None),
-                "wechat_qrcode_original_exact": float(
-                    bool(wechat_original and wechat_original.exact_payload_match)
+                "qr_verify_direct_exact": float(
+                    bool(best_validation_summary.get("qr_verify_direct_exact", False))
                 ),
+                "qr_verify_exact_presets": float(
+                    best_validation_summary.get("qr_verify_exact_presets", 0)
+                ),
+                "qr_verify_supported_presets": float(
+                    best_validation_summary.get("qr_verify_supported_presets", 0)
+                ),
+                "qr_verify_tolerance_score": float(
+                    best_validation_summary.get("qr_verify_tolerance_score", 0.0)
+                ),
+                "qr_verify_metric_is_physical": 0.0,
             }
-            if hasattr(self.validator, "validate_phone_proxy"):
+            if (
+                not getattr(self.validator, "qr_verify_only", False)
+                and hasattr(self.validator, "validate_phone_proxy")
+            ):
                 phone_started = time.perf_counter()
                 validation_kwargs = (
                     backend.validation_kwargs(best_variant)

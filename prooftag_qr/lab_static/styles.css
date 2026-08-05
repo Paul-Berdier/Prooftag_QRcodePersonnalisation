@@ -28,7 +28,7 @@ main { padding: 26px clamp(18px,4vw,60px) 70px; }
 .panel.active { display: block; }
 .card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); padding: 18px; margin-bottom: 16px; }
 .intro { display: grid; grid-template-columns: .8fr 2fr; align-items: center; gap: 30px; }
-.pipeline { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; list-style: none; padding: 0; margin: 0; counter-reset: stage; }
+.pipeline { display: grid; grid-template-columns: repeat(5,1fr); gap: 8px; list-style: none; padding: 0; margin: 0; counter-reset: stage; }
 .pipeline li { position: relative; padding: 13px; border: 1px solid var(--line); border-radius: 11px; background: var(--card2); }
 .pipeline li::after { content: "→"; position: absolute; right: -11px; top: 18px; color: var(--green); z-index: 1; }
 .pipeline li:last-child::after { display: none; }

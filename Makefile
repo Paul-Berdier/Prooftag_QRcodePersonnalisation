@@ -2,6 +2,7 @@
 
 install:
 	python -m pip install -e '.[dev]'
+	cd qr_verify_bridge && npm ci --omit=dev --audit=false
 
 test:
 	pytest --cov=prooftag_qr --cov-report=term-missing

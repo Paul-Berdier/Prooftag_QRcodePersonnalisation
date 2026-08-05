@@ -1,6 +1,7 @@
 .git
 .idea
 .venv
+node_modules
 __pycache__
 .pytest_cache
 .ruff_cache
@@ -8,4 +9,3 @@ data
 artifacts
 tests
 *.pyc
-

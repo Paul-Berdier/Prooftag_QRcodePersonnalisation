@@ -82,6 +82,13 @@ dimensions, iPhone, Pixel et lecteurs industriels.
 | `prooftag_qr_lab_quality_scores_total` | compteur | calculs CLIP/esthétique réussis ou en erreur |
 | `prooftag_qr_lab_quality_score_duration_seconds` | histogramme | durée CPU de CLIPScore et CLIP-aesthetic |
 
+Depuis E024, les deux métriques de qualité automatique ci-dessus restent dans
+le schéma Prometheus pour la compatibilité historique, mais leur calcul est
+désactivé en production. Le verdict QR provient uniquement de
+`antfu/qr-verify@0.2.0` : `scan_pass_rate` représente la fraction de ses 37
+presets restituant exactement le payload attendu. Cette valeur est un score
+logiciel, pas un taux de réussite téléphone.
+
 Les journaux `repair_variant_validated` contiennent aussi la tentative, la seed, toutes les
 métriques visuelles et la liste exacte des scénarios en échec. Le benchmark les exporte dans
 `variants.csv` et `variant-failures.csv`.

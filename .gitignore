@@ -4,6 +4,7 @@
 .pytest-tmp/
 .ruff_cache/
 .venv/
+node_modules/
 .notebook-cache/
 .ipynb_checkpoints/
 __pycache__/

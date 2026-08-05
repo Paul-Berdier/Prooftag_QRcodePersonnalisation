@@ -310,6 +310,15 @@ def list_physical_validations(run_id: str) -> list[PhysicalValidationResponse]:
 @app.get("/v1/lab/schema", tags=["laboratory"])
 def get_lab_schema() -> dict:
     schema = method_schema(settings)
+    schema["validation"] = {
+        "engine": "antfu/qr-verify@0.2.0",
+        "scanner": "qr-scanner-wechat@0.1.3 (WeChat WASM)",
+        "resize_px": 300,
+        "tolerance_presets": 37,
+        "payload_policy": "exact_or_canonical_url_without_fragment",
+        "acceptance": "at_least_one_exact_preset",
+        "physical_probability": False,
+    }
     schema["quality_scoring"] = {
         "clip_enabled": settings.lab_clip_scoring_enabled,
         "device": "cpu",

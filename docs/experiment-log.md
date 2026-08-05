@@ -1325,3 +1325,21 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
 - **Limite :** en l'absence de banc caméra, WeChat et le consensus des
   décodeurs servent de filtre conservateur, pas de vérité terrain physique.
 - **Protocole :** `docs/e023-honest-software-metrics.md`.
+
+## E024 — QR-Verify comme autorité unique — 5 août 2026
+
+- **Décision :** `antfu/qr-verify@0.2.0` devient le seul validateur logiciel du
+  Web Lab. Les anciens SSR, proxies et consensus de décodeurs sortent du verdict.
+- **Adaptation :** les 37 presets amont sont déterministes et chacun est exécuté
+  depuis une image Sharp fraîche. Un succès exige le payload Prooftag attendu,
+  pas simplement un texte quelconque.
+- **Affichage :** le score est la fraction de presets exacts ; l'acceptation exige
+  au moins un preset exact. Lecture directe, nombre de presets et verdict humain
+  sont affichés séparément.
+- **Esthétique :** CLIP-AES, CLIPScore et HPS ne sont plus calculés en production.
+  L'esthétique est notée manuellement dans le Web Lab.
+- **Limite :** QR-Verify reste un test logiciel WASM, pas une probabilité de scan
+  téléphone. Le scan humain demeure la vérité terrain.
+- **Sécurité :** Sharp est forcé en `0.35.3`, le lockfile est commité et l'audit
+  npm ne signale aucune vulnérabilité connue.
+- **Protocole :** `docs/e024-qr-verify.md`.
