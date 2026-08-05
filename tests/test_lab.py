@@ -60,6 +60,7 @@ def test_web_lab_exposes_only_the_pinned_diffqrcoder_chain():
         "qr_reference",
         "diffqrcoder_stage1",
         "diffqrcoder_srpg",
+        "diffqrcoder_paper_srpg",
         "diffqrcoder_srmpgd",
         "diffqrcoder_srmpgd_robust",
         "diffqrcoder_auto",
@@ -69,37 +70,25 @@ def test_web_lab_exposes_only_the_pinned_diffqrcoder_chain():
         "diffqrcoder_qart_srpg",
     ]
     generated = [profile for profile in profiles if profile["backend"] == "controlnet"]
-    assert all(
-        profile["model"]["diffqrcoder_upstream_enabled"] is True
-        for profile in generated
-    )
+    assert all(profile["model"]["diffqrcoder_upstream_enabled"] is True for profile in generated)
     assert {profile["model"]["controlnet_model_id"] for profile in generated} == {
         "monster-labs/control_v1p_sd15_qrcode_monster"
     }
     srpg = next(profile for profile in profiles if profile["id"] == "diffqrcoder_srpg")
-    assert (
-        srpg["tools"]["settings"]["diffqrcoder_stage2_target_mode"]
-        == "binary_exact"
-    )
+    paper_srpg = next(profile for profile in profiles if profile["id"] == "diffqrcoder_paper_srpg")
+    assert srpg["tools"]["settings"]["diffqrcoder_stage2_target_mode"] == "binary_exact"
     assert srpg["tools"]["settings"]["diffqrcoder_stage2_strength"] == 0.65
-    qart = next(
-        profile for profile in profiles if profile["id"] == "diffqrcoder_qart_srpg"
-    )
-    automatic = next(
-        profile for profile in profiles if profile["id"] == "diffqrcoder_auto"
-    )
-    srmpgd = next(
-        profile for profile in profiles if profile["id"] == "diffqrcoder_srmpgd"
-    )
+    assert paper_srpg["enabled"] is False
+    assert paper_srpg["tools"]["settings"]["diffqrcoder_stage2_target_mode"] == "qart_url_fragment"
+    assert paper_srpg["tools"]["settings"]["diffqrcoder_stage2_strength"] == 1.0
+    assert paper_srpg["tools"]["settings"]["srpg_perceptual_weight"] == 3.0
+    qart = next(profile for profile in profiles if profile["id"] == "diffqrcoder_qart_srpg")
+    automatic = next(profile for profile in profiles if profile["id"] == "diffqrcoder_auto")
+    srmpgd = next(profile for profile in profiles if profile["id"] == "diffqrcoder_srmpgd")
     robust_srmpgd = next(
-        profile
-        for profile in profiles
-        if profile["id"] == "diffqrcoder_srmpgd_robust"
+        profile for profile in profiles if profile["id"] == "diffqrcoder_srmpgd_robust"
     )
-    assert (
-        qart["tools"]["settings"]["diffqrcoder_stage2_target_mode"]
-        == "qart_url_fragment"
-    )
+    assert qart["tools"]["settings"]["diffqrcoder_stage2_target_mode"] == "qart_url_fragment"
     assert qart["enabled"] is False
     assert automatic["enabled"] is False
     assert srmpgd["enabled"] is True
@@ -128,11 +117,7 @@ def test_srmpgd_reuses_the_matching_srpg_stage2_cache_key(tmp_path):
         next(item for item in profiles if item["id"] == "diffqrcoder_auto")
     )
     robust_srmpgd = LabMethod.model_validate(
-        next(
-            item
-            for item in profiles
-            if item["id"] == "diffqrcoder_srmpgd_robust"
-        )
+        next(item for item in profiles if item["id"] == "diffqrcoder_srmpgd_robust")
     )
     try:
         srpg_key = service._stage2_cache_key(
@@ -185,9 +170,7 @@ def test_stage2_cache_key_uses_effective_math_not_debug_settings(tmp_path):
         artifact_store=LocalArtifactStore(tmp_path / "artifacts"),
         validator=object(),
     )
-    profile = next(
-        item for item in laboratory_profiles() if item["id"] == "diffqrcoder_srpg"
-    )
+    profile = next(item for item in laboratory_profiles() if item["id"] == "diffqrcoder_srpg")
 
     def cache_key(overrides):
         candidate = {
@@ -209,9 +192,7 @@ def test_stage2_cache_key_uses_effective_math_not_debug_settings(tmp_path):
 
     try:
         baseline = cache_key({})
-        debug_only = cache_key(
-            {"srpg_save_step_previews": True, "srpg_preview_interval": 1}
-        )
+        debug_only = cache_key({"srpg_save_step_previews": True, "srpg_preview_interval": 1})
         changed_math = cache_key({"srpg_qr_weight": 501.0})
     finally:
         service.shutdown()
@@ -247,11 +228,7 @@ def test_srmpgd_campaign_fails_without_an_earlier_matching_srpg_source(
 
     monkeypatch.setattr(service, "_generation_service", lambda method: FakeGenerationService())
     srmpgd = LabMethod.model_validate(
-        next(
-            item
-            for item in laboratory_profiles()
-            if item["id"] == "diffqrcoder_srmpgd"
-        )
+        next(item for item in laboratory_profiles() if item["id"] == "diffqrcoder_srmpgd")
     )
     request = LabCampaignCreate(
         name="invalid unpaired SR-MPGD",
@@ -350,12 +327,8 @@ def test_srmpgd_campaign_records_the_exact_srpg_source_run_and_hash(
                 assert self.backend.imported is not None
                 run.provenance.update(
                     {
-                        "stage2_source_run_id": self.backend.imported[
-                            "source_run_id"
-                        ],
-                        "stage2_source_method_id": self.backend.imported[
-                            "source_method_id"
-                        ],
+                        "stage2_source_run_id": self.backend.imported["source_run_id"],
+                        "stage2_source_method_id": self.backend.imported["source_method_id"],
                         "stage2_pairing_status": "exact_reuse",
                     }
                 )
@@ -397,8 +370,7 @@ def test_srmpgd_campaign_records_the_exact_srpg_source_run_and_hash(
             time.sleep(0.01)
         trials = service.lab_repository.list_trials(campaign["id"])
         runs = {
-            trial["method_id"]: run_repository.get(trial["generation_run_id"])
-            for trial in trials
+            trial["method_id"]: run_repository.get(trial["generation_run_id"]) for trial in trials
         }
     finally:
         service.shutdown()
@@ -416,16 +388,12 @@ def test_srmpgd_campaign_records_the_exact_srpg_source_run_and_hash(
 
 
 def test_lab_limits_cartesian_campaign_size():
-    methods = [
-        LabMethod(id=f"m{index}", name=f"Method {index}") for index in range(11)
-    ]
+    methods = [LabMethod(id=f"m{index}", name=f"Method {index}") for index in range(11)]
     with pytest.raises(ValidationError, match="limited to 500"):
         LabCampaignCreate(
             name="too large",
             payload="https://example.test",
-            prompts=[
-                {"id": f"p{index}", "text": f"Prompt {index}"} for index in range(50)
-            ],
+            prompts=[{"id": f"p{index}", "text": f"Prompt {index}"} for index in range(50)],
             seeds=[1],
             methods=methods,
         )
@@ -532,11 +500,7 @@ def test_lab_reuses_the_exact_stage1_and_forces_each_research_output(
                 else Image.new("RGB", (512, 512), "red")
             )
             self.last_raw_candidate = raw.copy()
-            image = (
-                raw
-                if target_variant == "raw"
-                else Image.new("RGB", (512, 512), "green")
-            )
+            image = raw if target_variant == "raw" else Image.new("RGB", (512, 512), "green")
             run = RunRecord(
                 id=str(uuid.uuid4()),
                 created_at=datetime.now(UTC),

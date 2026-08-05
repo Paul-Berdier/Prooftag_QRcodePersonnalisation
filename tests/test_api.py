@@ -71,6 +71,7 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
         "qr_reference",
         "diffqrcoder_stage1",
         "diffqrcoder_srpg",
+        "diffqrcoder_paper_srpg",
         "diffqrcoder_srmpgd",
         "diffqrcoder_srmpgd_robust",
         "diffqrcoder_auto",
@@ -86,14 +87,10 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
         item for item in schema.json()["profiles"] if item["id"] == "diffqrcoder_srpg"
     )
     srmpgd_profile = next(
-        item
-        for item in schema.json()["profiles"]
-        if item["id"] == "diffqrcoder_srmpgd"
+        item for item in schema.json()["profiles"] if item["id"] == "diffqrcoder_srmpgd"
     )
     robust_srmpgd_profile = next(
-        item
-        for item in schema.json()["profiles"]
-        if item["id"] == "diffqrcoder_srmpgd_robust"
+        item for item in schema.json()["profiles"] if item["id"] == "diffqrcoder_srmpgd_robust"
     )
     assert controlnet_profile["model"]["base_model_id"]
     assert controlnet_profile["model"]["controlnet_model_id"]
@@ -114,10 +111,7 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
         srpg_profile["tools"]["settings"]["diffqrcoder_stage2_initialization"]
         == "paper_stage1_noise"
     )
-    assert (
-        srpg_profile["tools"]["settings"]["diffqrcoder_stage2_target_mode"]
-        == "binary_exact"
-    )
+    assert srpg_profile["tools"]["settings"]["diffqrcoder_stage2_target_mode"] == "binary_exact"
     assert srpg_profile["tools"]["settings"]["diffqrcoder_stage2_strength"] == 0.65
     assert srmpgd_profile["output_variant"] == "srmpgd"
     assert srmpgd_profile["tools"]["srpg_enabled"] is True
@@ -133,15 +127,8 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     assert srmpgd_profile["model"]["diffqrcoder_upstream_enabled"] is True
     assert srmpgd_profile["enabled"] is True
     assert robust_srmpgd_profile["enabled"] is True
-    assert (
-        robust_srmpgd_profile["tools"]["settings"]["srmpgd_robust_blur_weight"]
-        == 1.0
-    )
-    assert (
-        robust_srmpgd_profile["tools"]["settings"]
-        ["srmpgd_robust_downscale_weight"]
-        == 1.0
-    )
+    assert robust_srmpgd_profile["tools"]["settings"]["srmpgd_robust_blur_weight"] == 1.0
+    assert robust_srmpgd_profile["tools"]["settings"]["srmpgd_robust_downscale_weight"] == 1.0
 
     campaign_response = client.post(
         "/v1/lab/campaigns",
@@ -211,8 +198,6 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     assert "human_scan_attempts" in campaign_csv.text.splitlines()[0]
     assert "human_scan_device" in campaign_csv.text.splitlines()[0]
     assert "provenance_final_image_sha256" in campaign_csv.text.splitlines()[0]
-    artifacts = client.get(
-        f"/v1/generations/{trial['generation_run_id']}/artifacts"
-    ).json()
+    artifacts = client.get(f"/v1/generations/{trial['generation_run_id']}/artifacts").json()
     assert artifacts[0]["name"] == "final"
     assert len(artifacts) == 1

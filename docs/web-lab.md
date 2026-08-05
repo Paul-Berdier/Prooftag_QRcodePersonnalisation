@@ -124,9 +124,9 @@ charger plusieurs pipelines en VRAM.
 - avancé : modèles, commit et géométrie QR.
 
 Les valeurs initiales sont 40 pas, CFG 7,5, ControlNet 1,35, SRG 500, PG 2
-et ETA 0. SR-MPGD démarre à 20 itérations, `gamma=1000` et
-`LPIPS=0,01`, valeurs annoncées par le papier. Ce sont des points de
-départ, pas une garantie de lecture.
+et ETA 0. Le profil SR-MPGD sécurisé démarre à 4 itérations, `gamma=100` et
+`LPIPS=0,10`. Les valeurs du papier (`gamma=1000`, `LPIPS=0,01`) restent des
+paramètres expérimentaux, pas une garantie de lecture.
 
 ## Scores automatiques par image
 

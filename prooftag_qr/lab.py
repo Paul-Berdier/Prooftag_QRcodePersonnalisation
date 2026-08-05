@@ -679,6 +679,29 @@ def laboratory_profiles() -> list[dict[str, Any]]:
             ),
         },
         {
+            "id": "diffqrcoder_paper_srpg",
+            "name": "DiffQRCoder — Stage 2 protocole PDF",
+            "backend": "controlnet",
+            "enabled": False,
+            "output_variant": "srpg",
+            "reuse_stage1": True,
+            "generation": generation.copy(),
+            "model": DIFFQRCODER_MODEL_SETTINGS.copy(),
+            "tools": {
+                "srpg_enabled": True,
+                "settings": {
+                    **stage2_at(1.0, target="qart_url_fragment"),
+                    "srpg_perceptual_weight": 3.0,
+                },
+            },
+            "description": (
+                "E022 : approximation publique du protocole PDF. Le même Stage 1 "
+                "est entièrement rebruité, les 40 pas Stage 2 sont exécutés, "
+                "PG λ2=3 et la cible vient du QArt public à fragment d'URL. "
+                "Ce QArt n'est pas le constructeur privé des auteurs."
+            ),
+        },
+        {
             "id": "diffqrcoder_srmpgd",
             "name": "DiffQRCoder — Stage 2 + SR-MPGD",
             "backend": "controlnet",
@@ -973,10 +996,7 @@ class LabService:
                         if cached is not None:
                             stage1_override, stage1_source_run_id = cached
                     stage2_key = None
-                    if (
-                        method.backend == "controlnet"
-                        and method.tools.srpg_enabled
-                    ):
+                    if method.backend == "controlnet" and method.tools.srpg_enabled:
                         stage2_key = self._stage2_cache_key(
                             method,
                             prompt.text,
@@ -992,10 +1012,7 @@ class LabService:
                                 "SR-MPGD requires the exact matching SRPG Stage 2 "
                                 "source to run earlier in the same campaign"
                             )
-                        if (
-                            cached_stage2 is not None
-                            and hasattr(backend, "import_stage2_state")
-                        ):
+                        if cached_stage2 is not None and hasattr(backend, "import_stage2_state"):
                             backend.import_stage2_state(cached_stage2)
                         elif cached_stage2 is not None:
                             raise RuntimeError(
@@ -1039,25 +1056,17 @@ class LabService:
                             )
                         run.provenance.update(
                             {
-                                "stage2_source_run_id": cached_stage2[
-                                    "source_run_id"
-                                ],
-                                "stage2_source_method_id": cached_stage2[
-                                    "source_method_id"
-                                ],
+                                "stage2_source_run_id": cached_stage2["source_run_id"],
+                                "stage2_source_method_id": cached_stage2["source_method_id"],
                                 "stage2_source_latent_sha256": expected_sha256,
                                 "stage2_pairing_status": "exact_reuse",
                             }
                         )
-                        run.quality_metrics[
-                            "diffqrcoder_stage2_pairing_exact"
-                        ] = 1.0
+                        run.quality_metrics["diffqrcoder_stage2_pairing_exact"] = 1.0
                     self._record_method_diagnostics(run, method)
                     self._score_quality(run, prompt.text)
                     status = (
-                        run.status
-                        if run.status in {"accepted", "rejected", "error"}
-                        else "error"
+                        run.status if run.status in {"accepted", "rejected", "error"} else "error"
                     )
                     self.lab_repository.update_trial(
                         trial_id,
@@ -1094,9 +1103,7 @@ class LabService:
                     )
             cancelled = self._is_cancelled(campaign_id)
             status = (
-                "cancelled"
-                if cancelled
-                else ("completed_with_errors" if errors else "completed")
+                "cancelled" if cancelled else ("completed_with_errors" if errors else "completed")
             )
             self.lab_repository.update_campaign(campaign_id, status=status)
             metrics.LAB_CAMPAIGNS.labels(status).inc()
@@ -1151,37 +1158,24 @@ class LabService:
                             settings.srpg_controlnet_scale
                         ),
                         "diffqrcoder_srg_requested": float(settings.srpg_qr_weight),
-                        "diffqrcoder_pg_requested": float(
-                            settings.srpg_perceptual_weight
-                        ),
+                        "diffqrcoder_pg_requested": float(settings.srpg_perceptual_weight),
                         "diffqrcoder_eta_requested": float(settings.srpg_eta),
                         "diffqrcoder_stage2_strength_requested": float(
                             settings.diffqrcoder_stage2_strength
                         ),
                         "diffqrcoder_stage2_paper_initialization_requested": float(
-                            settings.diffqrcoder_stage2_initialization
-                            == "paper_stage1_noise"
+                            settings.diffqrcoder_stage2_initialization == "paper_stage1_noise"
                         ),
                         "diffqrcoder_stage2_control_target_exact_requested": float(
-                            settings.diffqrcoder_stage2_target_mode
-                            == "binary_exact"
+                            settings.diffqrcoder_stage2_target_mode == "binary_exact"
                         ),
                         "diffqrcoder_stage2_control_target_qart_requested": float(
-                            settings.diffqrcoder_stage2_target_mode
-                            == "qart_url_fragment"
+                            settings.diffqrcoder_stage2_target_mode == "qart_url_fragment"
                         ),
-                        "diffqrcoder_qr_version": float(
-                            settings.diffqrcoder_qr_version
-                        ),
-                        "diffqrcoder_qr_mask_pattern": float(
-                            settings.diffqrcoder_qr_mask_pattern
-                        ),
-                        "diffqrcoder_qr_module_size": float(
-                            settings.diffqrcoder_qr_module_size
-                        ),
-                        "diffqrcoder_qr_padding_px": float(
-                            settings.diffqrcoder_qr_padding_px
-                        ),
+                        "diffqrcoder_qr_version": float(settings.diffqrcoder_qr_version),
+                        "diffqrcoder_qr_mask_pattern": float(settings.diffqrcoder_qr_mask_pattern),
+                        "diffqrcoder_qr_module_size": float(settings.diffqrcoder_qr_module_size),
+                        "diffqrcoder_qr_padding_px": float(settings.diffqrcoder_qr_padding_px),
                     }
                 )
             else:
@@ -1194,38 +1188,26 @@ class LabService:
                         "srpg_qr_weight": float(settings.srpg_qr_weight),
                         "srpg_perceptual_weight": float(settings.srpg_perceptual_weight),
                         "srpg_functional_weight": float(settings.srpg_functional_weight),
-                        "srpg_max_noise_delta_rms": float(
-                            settings.srpg_max_noise_delta_rms
-                        ),
+                        "srpg_max_noise_delta_rms": float(settings.srpg_max_noise_delta_rms),
                     }
                 )
             if method.tools.srmpgd_enabled:
                 run.quality_metrics.update(
                     {
-                        "srmpgd_requested_max_iterations": float(
-                            settings.srmpgd_max_iterations
-                        ),
-                        "srmpgd_requested_step_size": float(
-                            settings.srmpgd_step_size
-                        ),
-                        "srmpgd_requested_lpips_weight": float(
-                            settings.srmpgd_lpips_weight
-                        ),
+                        "srmpgd_requested_max_iterations": float(settings.srmpgd_max_iterations),
+                        "srmpgd_requested_step_size": float(settings.srmpgd_step_size),
+                        "srmpgd_requested_lpips_weight": float(settings.srmpgd_lpips_weight),
                         "srmpgd_requested_max_initial_mer": float(
                             settings.srmpgd_max_initial_module_error_rate
                         ),
-                        "srmpgd_requested_max_step_rms": float(
-                            settings.srmpgd_max_step_rms
-                        ),
+                        "srmpgd_requested_max_step_rms": float(settings.srmpgd_max_step_rms),
                         "srmpgd_requested_max_total_delta_rms": float(
                             settings.srmpgd_max_total_delta_rms
                         ),
                         "srmpgd_requested_min_relative_improvement": float(
                             settings.srmpgd_min_relative_module_improvement
                         ),
-                        "srmpgd_requested_max_lpips": float(
-                            settings.srmpgd_max_lpips_loss
-                        ),
+                        "srmpgd_requested_max_lpips": float(settings.srmpgd_max_lpips_loss),
                         "srmpgd_requested_max_mean_absolute_change": float(
                             settings.srmpgd_max_mean_absolute_change
                         ),
