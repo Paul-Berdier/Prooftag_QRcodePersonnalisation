@@ -458,6 +458,7 @@ def test_lab_persists_cpu_clip_scores_without_using_the_generation_gpu(
     assert stored.quality_metrics["clip_similarity"] == pytest.approx(0.42)
     assert stored.quality_metrics["clip_score"] == pytest.approx(1.05)
     assert stored.quality_metrics["clip_aesthetic"] == pytest.approx(6.4)
+    assert "hpsv2_1" not in stored.quality_metrics
 
 
 def test_lab_reuses_the_exact_stage1_and_forces_each_research_output(

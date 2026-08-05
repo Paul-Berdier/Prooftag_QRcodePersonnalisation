@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     log_level: str = "INFO"
     lab_clip_scoring_enabled: bool = False
+    lab_hps_scoring_enabled: bool = False
     data_dir: Path = Path("data")
     model_cache_dir: Path = Path("models")
     default_backend: Literal["qr", "controlnet"] = "qr"

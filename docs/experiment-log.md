@@ -1305,3 +1305,23 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
 - **Décision attendue** : mesurer séparément généralisation esthétique, SSR et réponse
   des deux losses, sans présenter une baisse de loss comme une réussite de scan.
 - **Protocole** : `docs/e021-atypical-prompt-generalization.md`.
+
+## E023 — métriques logicielles honnêtes — 5 août 2026
+
+- **Déclencheur :** sur E022, le SSR et le proxy logiciel corrèlent mal avec les
+  vingt lectures téléphone. Ils ne peuvent plus être nommés ni optimisés comme
+  une probabilité de scan physique.
+- **Comparaison contrôlée :** E023 reprend les dix prompts, la seed 61001 et les
+  deux recettes E022 sans modifier la génération. Seule la mesure change.
+- **Lecture logicielle :** ajout du décodeur WeChatQRCode d'OpenCV contrib, de
+  son détecteur CNN et de sa super-résolution. Les quatre poids officiels sont
+  épinglés et vérifiés au build.
+- **Esthétique :** ajout de HPS v2.1, plus proche des préférences humaines que
+  l'ancien régresseur CLIP-AES. Son dépôt officiel est épinglé car le wheel
+  PyPI omet un fichier BPE ; l'inférence est forcée sur CPU.
+- **Contrat d'affichage :** SSR devient « indice synthétique » et le phone
+  proxy devient « proxy de prétraitements logiciels ». Aucun des deux n'est
+  présenté comme un taux téléphone.
+- **Limite :** en l'absence de banc caméra, WeChat et le consensus des
+  décodeurs servent de filtre conservateur, pas de vérité terrain physique.
+- **Protocole :** `docs/e023-honest-software-metrics.md`.

@@ -14,7 +14,12 @@ from prooftag_qr.qr import (
     repair_qr_modules,
     restore_quiet_zone,
 )
-from prooftag_qr.validation import Decoder, OpenCVDecoder, QRValidator
+from prooftag_qr.validation import (
+    Decoder,
+    OpenCVDecoder,
+    QRValidator,
+    WeChatQRCodeDecoder,
+)
 
 
 def test_reference_qr_decodes_exact_payload():
@@ -24,6 +29,26 @@ def test_reference_qr_decodes_exact_payload():
     assert blueprint.version >= 1
     assert OpenCVDecoder().decode(blueprint.image) == payload
     assert module_error_rate(blueprint.image, blueprint) == 0.0
+
+
+def test_wechat_decoder_requires_pinned_models_and_decodes(monkeypatch, tmp_path):
+    payload = "https://ptag.io/t/wechat"
+    for name in WeChatQRCodeDecoder.model_filenames:
+        (tmp_path / name).write_bytes(b"model")
+
+    class FakeDetector:
+        def detectAndDecode(self, image):
+            assert image.shape[2] == 3
+            return (payload,), (np.zeros((4, 2)),)
+
+    monkeypatch.setattr(
+        "prooftag_qr.validation.cv2.wechat_qrcode_WeChatQRCode",
+        lambda *paths: FakeDetector(),
+        raising=False,
+    )
+    decoder = WeChatQRCodeDecoder(tmp_path)
+
+    assert decoder.decode(Image.new("RGB", (32, 32), "white")) == payload
 
 
 def test_reference_qr_passes_original_scenario():

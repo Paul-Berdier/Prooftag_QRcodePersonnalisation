@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import io
+import os
 import time
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import cv2
@@ -178,6 +180,52 @@ class ZXingCPPDecoder(Decoder):
         return results[0].text if results else ""
 
 
+class WeChatQRCodeDecoder(Decoder):
+    """CNN detector plus super-resolution decoder shipped by OpenCV contrib.
+
+    The four model files are deliberately required and pinned by the Docker
+    image.  Falling back to an unconfigured detector would make benchmark
+    revisions impossible to compare.
+    """
+
+    name = "wechat_qrcode"
+    model_filenames = (
+        "detect.prototxt",
+        "detect.caffemodel",
+        "sr.prototxt",
+        "sr.caffemodel",
+    )
+
+    def __init__(self, models_dir: str | Path | None = None) -> None:
+        root = Path(
+            models_dir
+            or os.environ.get("PROOFTAG_QR_WECHAT_MODELS_DIR", "/opt/wechat-qrcode")
+        )
+        paths = [root / name for name in self.model_filenames]
+        missing = [str(path) for path in paths if not path.is_file()]
+        if missing:
+            raise FileNotFoundError(
+                "WeChat QR model files are missing: " + ", ".join(missing)
+            )
+        constructor = getattr(cv2, "wechat_qrcode_WeChatQRCode", None)
+        if constructor is None:
+            namespace = getattr(cv2, "wechat_qrcode", None)
+            constructor = getattr(namespace, "WeChatQRCode", None)
+        if constructor is None:
+            raise ImportError(
+                "OpenCV was built without wechat_qrcode; install "
+                "opencv-contrib-python-headless"
+            )
+        self.detector = constructor(*(str(path) for path in paths))
+
+    def decode(self, image: Image.Image) -> str:
+        bgr = cv2.cvtColor(np.asarray(image.convert("RGB")), cv2.COLOR_RGB2BGR)
+        values, _ = self.detector.detectAndDecode(bgr)
+        if isinstance(values, str):
+            return values
+        return next((str(value) for value in values if value), "")
+
+
 def available_decoders() -> list[Decoder]:
     decoders: list[Decoder] = [OpenCVDecoder()]
     try:
@@ -187,6 +235,10 @@ def available_decoders() -> list[Decoder]:
     try:
         decoders.append(ZXingCPPDecoder())
     except (ImportError, OSError):
+        pass
+    try:
+        decoders.append(WeChatQRCodeDecoder())
+    except (ImportError, OSError, cv2.error):
         pass
     return decoders
 

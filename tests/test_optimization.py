@@ -1,8 +1,10 @@
+import sys
 from dataclasses import asdict
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from PIL import Image
 
 from prooftag_qr.advisor import (
     AdvisorPrediction,
@@ -18,7 +20,11 @@ from prooftag_qr.experiments import (
 )
 from prooftag_qr.optimization import E007Experiment, factorial_contexts, query_gpu_processes
 from prooftag_qr.qr import generate_qr
-from prooftag_qr.quality_scoring import clip_score_from_similarity, project_embedding
+from prooftag_qr.quality_scoring import (
+    CLIPQualityScorer,
+    clip_score_from_similarity,
+    project_embedding,
+)
 from prooftag_qr.srpg import SRPGConfig, _qr_improvement_is_acceptable, _validate_config
 
 
@@ -94,6 +100,26 @@ def test_clip_score_and_projection_are_deterministic():
     assert clip_score_from_similarity(-0.3) == 0
     assert project_embedding(embedding) == project_embedding(embedding)
     assert len(project_embedding(embedding)) == 16
+
+
+def test_hpsv21_score_is_optional_and_uses_the_official_version(tmp_path, monkeypatch):
+    calls = []
+    fake_hps = SimpleNamespace(
+        __path__=[],
+        score=lambda image, prompt, hps_version: (
+            calls.append((image.size, prompt, hps_version)) or [0.314]
+        )
+    )
+    fake_img_score = SimpleNamespace(device="cuda")
+    monkeypatch.setitem(sys.modules, "hpsv2", fake_hps)
+    monkeypatch.setitem(sys.modules, "hpsv2.img_score", fake_img_score)
+    scorer = CLIPQualityScorer(tmp_path, hps_enabled=True)
+
+    score = scorer._hps_score(Image.new("RGB", (16, 16)), "a blue vase")
+
+    assert score == pytest.approx(0.314)
+    assert calls == [((16, 16), "a blue vase", "v2.1")]
+    assert fake_img_score.device == "cpu"
 
 
 def test_delivery_never_trades_scan_for_aesthetic():

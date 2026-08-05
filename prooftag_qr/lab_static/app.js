@@ -333,6 +333,7 @@ function aggregate(trials) {
     phoneSuccesses,
     aesthetic: aesthetic.length,
     meanSsr: mean(generated, t => t.generation.scan_pass_rate),
+    hpsCount: generated.filter(t => t.generation.quality_metrics?.hpsv2_1 != null).length,
     meanAes: mean(generated.filter(t => t.generation.quality_metrics?.clip_aesthetic != null), t => t.generation.quality_metrics.clip_aesthetic),
     meanClip: mean(generated.filter(t => t.generation.quality_metrics?.clip_score != null), t => t.generation.quality_metrics.clip_score),
   };
@@ -341,9 +342,10 @@ function aggregate(trials) {
 function renderScores() {
   const a = aggregate(state.campaign.trials);
   $("#final-scores").innerHTML = [
-    ["Auto strict", `${a.strict}/${a.generated}`],
-    ["SSR robuste moyen", pct(a.meanSsr)],
-    ["CLIP-aesthetic moyen", fmt(a.meanAes, 2)],
+    ["Strict logiciel", `${a.strict}/${a.generated}`],
+    ["Indice synthétique moyen", pct(a.meanSsr)],
+    ["HPS v2.1 renseignés", `${a.hpsCount}/${a.generated}`],
+    ["CLIP-AES historique", fmt(a.meanAes, 2)],
     ["CLIPScore moyen", fmt(a.meanClip, 2)],
     ["Tes scans positifs", `${a.humanScan}/${a.rated}`],
     ["Lectures téléphone", `${a.phoneSuccesses}/${a.phoneAttempts}`],
@@ -384,11 +386,12 @@ function renderTrials() {
         <div class="trial-title"><b>${trial.prompt_id} / ${trial.method_id}</b><span class="status ${trial.status}">${trial.status}</span></div>
         <p class="${run.error ? "run-error" : ""}">${run.error || `seed ${trial.seed} · ${run.selected_variant}`}</p>
         <div class="trial-stats">
-          <span>SSR norm.<b>${pct(run.scan_pass_rate)}</b></span>
+          <span>Indice synth.<b>${pct(run.scan_pass_rate)}</b></span>
           <span>${qartContract ? "URL canon." : "Original norm."}<b>${fmt(originalScore.passed, 0)}/${fmt(originalScore.total, 0)}</b></span>
           <span>MER<b>${pct(run.module_error_rate)}</b></span>
-          <span>Phone Proxy<b>${pct(run.quality_metrics?.phone_proxy_normalized_pass_rate)}</b></span>
-          <span>CLIP-AES<b>${fmt(run.quality_metrics?.clip_aesthetic, 2)}</b></span>
+          <span>Proxy logiciel<b>${pct(run.quality_metrics?.phone_proxy_normalized_pass_rate)}</b></span>
+          <span>WeChat original<b>${Number(run.quality_metrics?.wechat_qrcode_available || 0) === 1 ? (Number(run.quality_metrics?.wechat_qrcode_original_exact || 0) === 1 ? "OK" : "Échec") : "N/A"}</b></span>
+          <span>HPS v2.1<b>${fmt(run.quality_metrics?.hpsv2_1, 3)}</b></span>
         </div>
         <div class="badges">
           ${diverged ? "<i class='bad'>Divergence Stage 2</i>" : ""}
@@ -437,7 +440,7 @@ async function renderSrmpgdTrace(run) {
     panel.hidden = false;
     host.innerHTML = `<p class="muted">Loss robuste : ${trace.robust_loss_enabled ? "active" : "témoin officiel"} · état retenu : ${trace.selected_iteration} · arrêt : ${trace.stop_reason}</p>
       <div class="table-scroll"><table>
-        <thead><tr><th>It.</th><th>Retenu</th><th>SSR</th><th>MER</th><th>SRL</th><th>Base</th><th>Flou</th><th>Réduction</th><th>Lum.</th><th>Contraste</th><th>LPIPS</th><th>Δ latent</th><th>Pas</th><th>Garde</th><th>Gain QR</th><th>Éligible</th></tr></thead>
+        <thead><tr><th>It.</th><th>Retenu</th><th>Indice synth.</th><th>MER</th><th>SRL</th><th>Base</th><th>Flou</th><th>Réduction</th><th>Lum.</th><th>Contraste</th><th>LPIPS</th><th>Δ latent</th><th>Pas</th><th>Garde</th><th>Gain QR</th><th>Éligible</th></tr></thead>
         <tbody>${trace.steps.map(step => `<tr class="${step.iteration === trace.selected_iteration ? "selected" : ""}">
           <td>${step.iteration}</td><td>${step.iteration === trace.selected_iteration ? "Oui" : ""}</td>
           <td>${pct(step.pass_rate)}</td><td>${pct(step.actual_module_error_rate)}</td>
@@ -471,23 +474,28 @@ async function openTrial(index) {
   const originalScore = normalizedOriginal(run, original);
   $("#dialog-metrics").innerHTML = [
     metric("Sortie", run.selected_variant),
-    metric("SSR normalisé", pct(run.scan_pass_rate)),
-    metric("SSR brut", pct(quality.validation_raw_pass_rate)),
+    metric("Indice synthétique normalisé", pct(run.scan_pass_rate)),
+    metric("Indice synthétique brut", pct(quality.validation_raw_pass_rate)),
+    metric("Nature de la mesure", "Logicielle — pas un taux téléphone"),
     metric("Capacité du QR témoin", pct(quality.validation_reference_pass_rate)),
     metric("Tests normalisés", `${fmt(quality.validation_normalized_passed, 0)}/${fmt(quality.validation_normalized_total, 0)}`),
     metric(qartContract ? "URL canonique" : "Payload original normalisé", `${fmt(originalScore.passed, 0)}/${fmt(originalScore.total, 0)}`),
     metric("MER", pct(run.module_error_rate)),
-    metric("Phone Proxy normalisé", pct(quality.phone_proxy_normalized_pass_rate)),
-    metric("Phone Proxy brut", pct(quality.phone_proxy_raw_pass_rate)),
-    metric("Phone Proxy", Number(quality.phone_proxy_calibration_only || 0) === 1 ? "Calibration uniquement" : "Indisponible"),
+    metric("Proxy prétraitement normalisé", pct(quality.phone_proxy_normalized_pass_rate)),
+    metric("Proxy prétraitement brut", pct(quality.phone_proxy_raw_pass_rate)),
+    metric("Proxy prétraitement", Number(quality.phone_proxy_calibration_only || 0) === 1 ? "Serveur uniquement — non mobile" : "Indisponible"),
+    metric("Décodeurs logiciels", fmt(quality.synthetic_decoder_count, 0)),
+    metric("WeChat QR disponible", Number(quality.wechat_qrcode_available || 0) === 1 ? "Oui" : "Non"),
+    metric("WeChat QR original", Number(quality.wechat_qrcode_available || 0) === 1 ? (Number(quality.wechat_qrcode_original_exact || 0) === 1 ? "Payload exact" : "Échec") : "Indisponible"),
     metric("Erreur centres", pct(quality.structure_module_center_error_rate)),
     metric("Erreur centres fonctionnels", pct(quality.structure_functional_center_error_rate)),
     metric("Centres ambigus", pct(quality.structure_center_ambiguous_ratio)),
     metric("Confiance centres P10", fmt(quality.structure_center_confidence_p10, 3)),
     metric("Texture intra-module P95", fmt(quality.structure_intra_module_std_p95, 3)),
     metric("Quiet zone sombre", pct(quality.structure_quiet_zone_dark_pixel_ratio)),
-    metric("CLIP-aesthetic", fmt(run.quality_metrics?.clip_aesthetic, 3)),
-    metric("CLIPScore", fmt(run.quality_metrics?.clip_score, 3)),
+    metric("HPS v2.1 — même prompt seulement", fmt(run.quality_metrics?.hpsv2_1, 4)),
+    metric("CLIP-AES historique ViT-B/32", fmt(run.quality_metrics?.clip_aesthetic, 3)),
+    metric("CLIPScore historique", fmt(run.quality_metrics?.clip_score, 3)),
     metric("Init. papier", Number(quality.diffqrcoder_stage2_paper_initialization || 0) === 1 ? "Oui" : "Non"),
     metric("Pas Stage 2 effectifs", fmt(quality.diffqrcoder_stage2_effective_steps, 0)),
     metric("Stage 2 réutilisé", Number(quality.diffqrcoder_stage2_reused || 0) === 1 ? "Oui — aucun recalcul" : "Non"),
@@ -496,7 +504,7 @@ async function openTrial(index) {
     metric("Cible Stage 2", Number(quality.diffqrcoder_stage2_control_target_qart || 0) === 1 ? "QArt réel — URL canonique" : "QR binaire exact"),
     metric("Contrat payload", Number(quality.diffqrcoder_stage2_control_target_qart || 0) === 1 ? "URL identique avant #" : "Byte-à-byte exact"),
     metric("Erreur centres cible", pct(quality.diffqrcoder_stage2_control_target_center_error_rate)),
-    metric("QArt cible SSR", pct(quality.diffqrcoder_qart_target_scan_pass_rate)),
+    metric("QArt cible — indice synth.", pct(quality.diffqrcoder_qart_target_scan_pass_rate)),
     metric("QArt seuil", fmt(quality.diffqrcoder_qart_threshold, 0)),
     metric("Changement Stage 1", pct(quality.diffqrcoder_stage2_changed_pixel_ratio)),
     metric("Saturation moyenne Δ", pct(quality.diffqrcoder_stage2_saturation_mean_increase)),

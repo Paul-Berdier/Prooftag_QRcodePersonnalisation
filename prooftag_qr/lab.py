@@ -1136,9 +1136,13 @@ class LabService:
                 self._quality_scorer = CLIPQualityScorer(
                     self.base_settings.model_cache_dir,
                     device="cpu",
+                    hps_enabled=self.base_settings.lab_hps_scoring_enabled,
                 )
             image = self.artifact_store.load_image(run.image_path)
-            run.quality_metrics.update(asdict(self._quality_scorer.score(image, prompt)))
+            scores = asdict(self._quality_scorer.score(image, prompt))
+            run.quality_metrics.update(
+                {name: value for name, value in scores.items() if value is not None}
+            )
             self.run_repository.save(run)
             metrics.LAB_QUALITY_SCORES.labels("success").inc()
         except Exception:

@@ -450,6 +450,9 @@ def test_reference_limited_validation_is_normalized_in_the_service(tmp_path):
     assert run.quality_metrics["validation_raw_pass_rate"] == 0.5
     assert run.quality_metrics["validation_reference_pass_rate"] == 0.5
     assert run.quality_metrics["validation_normalized_pass_rate"] == 1.0
+    assert run.quality_metrics["synthetic_robustness_raw_pass_rate"] == 0.5
+    assert run.quality_metrics["synthetic_robustness_normalized_pass_rate"] == 1.0
+    assert run.quality_metrics["synthetic_metric_is_physical"] == 0.0
 
 
 def test_auto_mode_keeps_stage1_when_stage2_loses_scannability(tmp_path):

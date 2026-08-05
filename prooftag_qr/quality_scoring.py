@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import importlib
+import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -12,6 +15,7 @@ DEFAULT_CLIP_MODEL = "openai/clip-vit-base-patch32"
 DEFAULT_AESTHETIC_WEIGHTS_URL = (
     "https://github.com/LAION-AI/aesthetic-predictor/raw/refs/heads/main/sa_0_4_vit_b_32_linear.pth"
 )
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,6 +23,7 @@ class CLIPQualityScore:
     clip_similarity: float
     clip_score: float
     clip_aesthetic: float
+    hpsv2_1: float | None = None
 
 
 def clip_score_from_similarity(similarity: float) -> float:
@@ -56,14 +61,44 @@ class CLIPQualityScorer:
         model_id: str = DEFAULT_CLIP_MODEL,
         aesthetic_weights_url: str = DEFAULT_AESTHETIC_WEIGHTS_URL,
         device: str = "cpu",
+        hps_enabled: bool = False,
     ) -> None:
         self.cache_dir = Path(cache_dir)
         self.model_id = model_id
         self.aesthetic_weights_url = aesthetic_weights_url
         self.device = device
+        self.hps_enabled = hps_enabled
         self._model: Any | None = None
         self._processor: Any | None = None
         self._aesthetic: Any | None = None
+
+    def _hps_score(self, image: Image.Image, prompt: str) -> float | None:
+        if not self.hps_enabled:
+            return None
+        try:
+            import hpsv2
+        except ImportError:
+            logger.warning("hpsv2_unavailable")
+            return None
+        os.environ.setdefault("HPS_ROOT", str(self.cache_dir / "hpsv2"))
+        try:
+            # The upstream scorer otherwise selects CUDA at import time. Keep
+            # this large preference model on CPU so it cannot contend with
+            # DiffQRCoder for the generation GPU.
+            if getattr(hpsv2, "__path__", None) is not None:
+                hps_img_score = importlib.import_module("hpsv2.img_score")
+                hps_img_score.device = "cpu"
+            result = hpsv2.score(image.convert("RGB"), prompt, hps_version="v2.1")
+            values = np.asarray(result, dtype=np.float64).reshape(-1)
+            return float(values[0]) if values.size else None
+        except Exception as exc:
+            # A preference-model download or inference failure must not erase
+            # the QR validation and legacy scores already computed.
+            logger.warning(
+                "hpsv2_scoring_failed",
+                extra={"error": f"{type(exc).__name__}: {exc}"},
+            )
+            return None
 
     def _load(self) -> tuple[Any, Any, Any]:
         if self._model is not None:
@@ -149,4 +184,5 @@ class CLIPQualityScorer:
             clip_similarity=similarity,
             clip_score=clip_score_from_similarity(similarity),
             clip_aesthetic=aesthetic_score,
+            hpsv2_1=self._hps_score(image, prompt),
         )

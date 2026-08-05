@@ -511,6 +511,17 @@ class GenerationService:
                 best_validation_summary.get("original_strict_all", False)
             )
             run.module_error_rate = best_module_error_rate
+            original_decoder_records = [
+                record for record in best_records if record.scenario == "original"
+            ]
+            wechat_original = next(
+                (
+                    record
+                    for record in original_decoder_records
+                    if record.decoder == "wechat_qrcode"
+                ),
+                None,
+            )
             run.quality_metrics = {
                 **image_quality_metrics(best),
                 "validation_raw_pass_rate": float(
@@ -533,6 +544,24 @@ class GenerationService:
                 ),
                 "validation_original_total": float(
                     best_validation_summary.get("original_total", 0)
+                ),
+                # Stable aliases with honest semantics. Historical validation_*
+                # fields and RunRecord.scan_pass_rate remain for compatibility.
+                "synthetic_robustness_raw_pass_rate": float(
+                    best_validation_summary.get("raw_pass_rate", 0.0)
+                ),
+                "synthetic_robustness_normalized_pass_rate": float(
+                    best_validation_summary.get("normalized_pass_rate", 0.0)
+                ),
+                "synthetic_original_decoder_pass_rate": float(
+                    best_validation_summary.get("original_passed", 0)
+                )
+                / max(float(best_validation_summary.get("original_total", 0)), 1.0),
+                "synthetic_decoder_count": float(len(original_decoder_records)),
+                "synthetic_metric_is_physical": 0.0,
+                "wechat_qrcode_available": float(wechat_original is not None),
+                "wechat_qrcode_original_exact": float(
+                    bool(wechat_original and wechat_original.exact_payload_match)
                 ),
             }
             if hasattr(self.validator, "validate_phone_proxy"):
@@ -581,6 +610,10 @@ class GenerationService:
                             phone_summary["normalized_total"]
                         ),
                         "phone_proxy_calibration_only": 1.0,
+                        "software_preprocessing_proxy_normalized_pass_rate": float(
+                            phone_summary["normalized_pass_rate"]
+                        ),
+                        "software_preprocessing_proxy_is_mobile_decoder": 0.0,
                     }
                 )
                 for item in phone_records:
