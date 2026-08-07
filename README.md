@@ -23,6 +23,9 @@ DiffQRCoder et sur l’algorithme décrit dans son papier :
 - des garde-fous de divergence et de saturation sans réparation cachée de l’image ;
 - une validation automatique unique par `antfu/qr-verify@0.2.0` et son scanner
   WeChat WASM, avec contrôle exact du payload sur 37 presets déterministes ;
+- CLIP-Aesthetic, CLIPScore et HPS v2.1 comme objectifs esthétiques secondaires ;
+- E026, un conseiller prompt → paramètres entraîné sur les configurations réellement observées ;
+- E026W, une collecte Kubernetes reprenable et bornée à sept jours ;
 - PostgreSQL en production, avec migrations Alembic et sauvegardes quotidiennes ;
 - SQLite pour les tests et le développement local ;
 - une base relationnelle contenant runs, tentatives, validations et qualité ;
@@ -46,8 +49,8 @@ séquentiellement chaque combinaison recette × prompt × seed, conserve les
 configurations et mesures dans PostgreSQL, puis permet de valider à la chaîne
 chaque image : esthétique bonne/mauvaise, scan téléphone positif/négatif, note
 et commentaire. Le score QR-Verify, sa lecture directe et la MER restent séparés
-des verdicts humains. Les scores esthétiques automatiques historiques sont
-désactivés : l'esthétique est évaluée par l'utilisateur dans le laboratoire.
+des verdicts humains. CLIP-Aesthetic, CLIPScore et HPS v2.1 sont conservés comme
+mesures secondaires ; l'évaluation humaine reste la référence esthétique.
 
 Depuis le PC Windows, lorsque le Deployment est prêt sur le serveur :
 
@@ -126,6 +129,10 @@ E025 rétablit `clip_similarity`, `CLIPScore`, `CLIP-Aesthetic` et HPS v2.1
 comme mesures d'image secondaires. Elles ne modifient jamais le verdict
 QR-Verify. Le protocole et la commande de re-test sont dans
 [`docs/e025-quality-scoring.md`](docs/e025-quality-scoring.md).
+
+Le conseiller E026 et sa collecte autonome d'une semaine sont documentés dans
+[`docs/e026-prompt-parameter-advisor.md`](docs/e026-prompt-parameter-advisor.md) et
+[`docs/e026-week-unattended.md`](docs/e026-week-unattended.md).
 
 ## Déploiement
 

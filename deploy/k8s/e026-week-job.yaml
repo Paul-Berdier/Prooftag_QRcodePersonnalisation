@@ -1,0 +1,56 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: prooftag-e026-week
+  namespace: qr-core
+  labels:
+    app: prooftag-e026-week
+    app.kubernetes.io/part-of: prooftag-qr
+spec:
+  activeDeadlineSeconds: 604800
+  backoffLimit: 20
+  template:
+    metadata:
+      labels:
+        app: prooftag-e026-week
+    spec:
+      restartPolicy: OnFailure
+      terminationGracePeriodSeconds: 90
+      securityContext:
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: runner
+          image: __IMAGE__
+          imagePullPolicy: IfNotPresent
+          command: [python, -m, prooftag_qr.week_campaign]
+          env:
+            - name: E026_PAYLOAD_BASE
+              valueFrom:
+                secretKeyRef:
+                  name: prooftag-e026-week
+                  key: payload
+            - name: E026_API_URL
+              value: http://prooftag-qr-svc.qr-core.svc.cluster.local:8080
+            - name: E026_OUTPUT_ROOT
+              value: /data/e026-week
+            - name: E026_DURATION_HOURS
+              value: "162"
+            - name: E026_MINIMUM_FREE_GIB
+              value: "8"
+            - name: E026_POLL_SECONDS
+              value: "30"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: prooftag-qr-data
