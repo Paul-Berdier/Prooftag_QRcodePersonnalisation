@@ -236,6 +236,28 @@ jusqu'à six tentatives adaptatives. Cette campagne est nettement plus longue qu
 essai est persisté. Voir
 [`../docs/e007-contextual-optimizer.md`](../docs/e007-contextual-optimizer.md).
 
+## Conseiller prompt → paramètres E026
+
+E026 remplace le prototype E007 par un contrat adapté au laboratoire actuel : QR-Verify est la
+cible de scan, CLIP-Aesthetic, CLIPScore et HPS v2.1 restent des objectifs secondaires, et la
+validation sépare entièrement les textes de prompts. Le notebook prépare aussi quatre campagnes
+de collecte reprenables, audite les CSV, refuse les datasets non identifiables, entraîne le
+modèle et exporte un top-K accompagné d'une incertitude :
+
+```powershell
+.\scripts\notebook-remote.ps1 -Notebook 21_e026_prompt_parameter_advisor.ipynb
+```
+
+Les CSV récents doivent être téléversés dans `/workspace/imports`. Le notebook ne remplace jamais
+la validation finale QR-Verify. Le protocole complet est décrit dans
+[`../docs/e026-prompt-parameter-advisor.md`](../docs/e026-prompt-parameter-advisor.md).
+
+Pour remplir ce dataset pendant une absence sans laisser Jupyter ouvert, E026W lance un Job
+Kubernetes CPU reprenable et réserve la RTX à l'API. Le plan borné contient 300 prompts, 16
+recettes, trois seeds et jusqu'à 14 400 essais. Les commandes de démarrage, suivi, reprise et
+restauration sont dans
+[`../docs/e026-week-unattended.md`](../docs/e026-week-unattended.md).
+
 ## Comparaison des ControlNet E008
 
 ```powershell

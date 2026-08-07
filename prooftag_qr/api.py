@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import io
+import json
 import re
 from contextlib import asynccontextmanager
 from dataclasses import asdict
@@ -444,9 +445,24 @@ def export_lab_campaign(campaign_id: str) -> StreamingResponse:
         provenance_names.update(run.provenance if run else {})
         export_rows.append((trial, run, rating))
     fields = [
+        "campaign_id",
+        "campaign_name",
+        "payload_hash",
+        "payload_length",
         "trial_id",
         "prompt_id",
+        "prompt_text",
+        "negative_prompt",
         "method_id",
+        "method_name",
+        "method_backend",
+        "output_variant_requested",
+        "reuse_stage1_requested",
+        "error_correction",
+        "method_generation_json",
+        "method_model_json",
+        "method_tools_json",
+        "method_configuration_json",
         "seed",
         "status",
         "generation_run_id",
@@ -478,10 +494,37 @@ def export_lab_campaign(campaign_id: str) -> StreamingResponse:
     writer = csv.DictWriter(stream, fieldnames=fields)
     writer.writeheader()
     for trial, run, rating in export_rows:
+        configuration = trial.get("configuration") or {}
+        prompt_configuration = configuration.get("prompt") or {}
+        method_configuration = configuration.get("method") or {}
+
+        def compact_json(value: object) -> str:
+            return json.dumps(
+                value or {},
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+
         row = {
+            "campaign_id": campaign_id,
+            "campaign_name": campaign["name"],
+            "payload_hash": campaign["payload_hash"],
+            "payload_length": (campaign.get("specification") or {}).get("payload_length"),
             "trial_id": trial["id"],
             "prompt_id": trial["prompt_id"],
+            "prompt_text": prompt_configuration.get("text", ""),
+            "negative_prompt": prompt_configuration.get("negative_prompt", ""),
             "method_id": trial["method_id"],
+            "method_name": method_configuration.get("name", ""),
+            "method_backend": method_configuration.get("backend", ""),
+            "output_variant_requested": method_configuration.get("output_variant", ""),
+            "reuse_stage1_requested": method_configuration.get("reuse_stage1"),
+            "error_correction": configuration.get("error_correction", ""),
+            "method_generation_json": compact_json(method_configuration.get("generation")),
+            "method_model_json": compact_json(method_configuration.get("model")),
+            "method_tools_json": compact_json(method_configuration.get("tools")),
+            "method_configuration_json": compact_json(method_configuration),
             "seed": trial["seed"],
             "status": trial["status"],
             "generation_run_id": trial["generation_run_id"],

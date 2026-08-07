@@ -219,11 +219,18 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     assert rating.json()["human_scan_successes"] == 2
     campaign_csv = client.get(f"/v1/lab/campaigns/{campaign_id}/results.csv")
     assert campaign_csv.status_code == 200
-    assert "quality_brightness_mean" in campaign_csv.text.splitlines()[0]
-    assert "human_scan_result" in campaign_csv.text.splitlines()[0]
-    assert "human_scan_attempts" in campaign_csv.text.splitlines()[0]
-    assert "human_scan_device" in campaign_csv.text.splitlines()[0]
-    assert "provenance_final_image_sha256" in campaign_csv.text.splitlines()[0]
+    csv_header = campaign_csv.text.splitlines()[0]
+    csv_row = campaign_csv.text.splitlines()[1]
+    assert "quality_brightness_mean" in csv_header
+    assert "human_scan_result" in csv_header
+    assert "human_scan_attempts" in csv_header
+    assert "human_scan_device" in csv_header
+    assert "provenance_final_image_sha256" in csv_header
+    assert "prompt_text" in csv_header
+    assert "method_configuration_json" in csv_header
+    assert "payload_length" in csv_header
+    assert "reference" in csv_row
+    assert '""steps"":1' in csv_row
     artifacts = client.get(f"/v1/generations/{trial['generation_run_id']}/artifacts").json()
     assert artifacts[0]["name"] == "final"
     assert len(artifacts) == 1

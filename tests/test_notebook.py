@@ -663,4 +663,26 @@ def test_e014f_uses_unseen_contexts_and_a_strict_delivery_cascade():
     assert "'post_diffusion_pixel_projection': False" in source
     assert "physical-validation-template.csv" in source
     assert "20_e014f_unseen_generalization_cascade.ipynb" in launcher
-    assert "20_e014f_unseen_generalization_cascade.ipynb" in deployer
+    assert "expected_notebook" in deployer
+
+
+def test_e026_notebook_uses_qr_verify_as_a_calibrated_first_objective():
+    source = Path("notebooks/21_e026_prompt_parameter_advisor.ipynb").read_text(
+        encoding="utf-8"
+    )
+    advisor = Path("prooftag_qr/parameter_advisor.py").read_text(encoding="utf-8")
+    launcher = Path("scripts/notebook-remote.ps1").read_text(encoding="utf-8")
+    deployer = Path("scripts/deploy-notebook-image.sh").read_text(encoding="utf-8")
+
+    assert "E026ParameterAdvisor" in source
+    assert "quality_qr_verify_any_exact" in advisor
+    assert "MINIMUM_PROMPT_GROUPS = 12" in source
+    assert "SCAN_PROBABILITY_THRESHOLD = 0.80" in source
+    assert "GroupKFold by SHA-256(prompt text)" in advisor
+    assert "COLLECTION_PROMPTS" in source
+    assert "len(COLLECTION_PROMPTS) == 24" in source
+    assert "/data/e026-week/*/exports/*.csv" in source
+    assert "3 exploitation + 3 maximum uncertainty" in source
+    assert "prooftag-e026-parameter-advisor.joblib" in source
+    assert "21_e026_prompt_parameter_advisor.ipynb" in launcher
+    assert "21_e026_prompt_parameter_advisor.ipynb" in deployer

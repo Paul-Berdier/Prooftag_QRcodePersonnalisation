@@ -21,7 +21,8 @@ param(
         "17_e014b_multicontext_generalization.ipynb",
         "18_e014d_functional_late_rediffusion.ipynb",
         "19_e014e_mechanism_window_ablation.ipynb",
-        "20_e014f_unseen_generalization_cascade.ipynb"
+        "20_e014f_unseen_generalization_cascade.ipynb",
+        "21_e026_prompt_parameter_advisor.ipynb"
     )]
     [string]$Notebook = "02_generate_live_on_gpu.ipynb",
     [switch]$Reset,

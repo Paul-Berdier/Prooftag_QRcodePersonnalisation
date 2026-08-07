@@ -883,6 +883,10 @@ class LabService:
         campaign_id = str(uuid.uuid4())
         now = datetime.now(UTC)
         specification = request.model_dump(exclude={"payload"})
+        # The payload itself remains deliberately absent from persistence. Its
+        # length is safe to retain and is needed by E026 because QR density can
+        # change the parameter regime that scans reliably.
+        specification["payload_length"] = len(request.payload)
         total = len(request.prompts) * len(request.seeds) * len(active_methods)
         campaign = self.lab_repository.create_campaign(
             {
