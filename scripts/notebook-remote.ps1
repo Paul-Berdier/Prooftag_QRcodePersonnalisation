@@ -85,7 +85,7 @@ $remoteStarted = $false
 $tunnel = $null
 try {
     $remoteAction = if ($Reset) { "reset" } else { "start" }
-    $remoteOutput = & ssh $Server "cd $RemoteRepository && bash scripts/notebook-server.sh $remoteAction"
+    $remoteOutput = & ssh $Server "cd $RemoteRepository && bash scripts/notebook-server.sh $remoteAction $Notebook"
     if ($LASTEXITCODE -ne 0) {
         throw "Impossible de demarrer le notebook distant."
     }

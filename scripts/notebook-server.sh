@@ -2,10 +2,17 @@
 set -euo pipefail
 
 command_name="${1:-status}"
+expected_notebook="${2:-21_e026_prompt_parameter_advisor.ipynb}"
 namespace="${PROOFTAG_QR_NAMESPACE:-qr-core}"
 api_deployment="${PROOFTAG_QR_DEPLOYMENT:-prooftag-qr}"
 notebook_deployment="${PROOFTAG_QR_NOTEBOOK_DEPLOYMENT:-prooftag-qr-notebook}"
 state_file="${TMPDIR:-/tmp}/prooftag-qr-notebook-previous-state"
+
+if [[ ! "$expected_notebook" =~ ^[A-Za-z0-9_.-]+\.ipynb$ ]]; then
+  echo "Nom de notebook invalide : $expected_notebook" >&2
+  exit 2
+fi
+expected_notebook_path="/workspace/notebooks/${expected_notebook}"
 
 replicas_or_zero() {
   kubectl get deployment "$1" -n "$2" -o jsonpath='{.spec.replicas}' 2>/dev/null || printf '0'
@@ -37,6 +44,32 @@ print_token() {
   printf 'JUPYTER_TARGET=%s:%s\n' "$service_ip" "$service_port"
 }
 
+verify_running_notebook() {
+  local pod desired_image running_image
+  pod="$(
+    kubectl get pod -n "$namespace" -l app=prooftag-qr-notebook \
+      -o jsonpath='{.items[0].metadata.name}'
+  )"
+  desired_image="$(
+    kubectl get deployment "$notebook_deployment" -n "$namespace" \
+      -o jsonpath='{.spec.template.spec.containers[?(@.name=="notebook")].image}'
+  )"
+  running_image="$(
+    kubectl get pod "$pod" -n "$namespace" \
+      -o jsonpath='{.spec.containers[?(@.name=="notebook")].image}'
+  )"
+  if [[ "$running_image" != "$desired_image" ]]; then
+    echo "Image notebook obsolete : pod=$running_image deployment=$desired_image" >&2
+    return 1
+  fi
+  if ! kubectl exec -n "$namespace" "$pod" -- test -f "$expected_notebook_path"; then
+    echo "Notebook absent du pod $pod ($running_image) : $expected_notebook_path" >&2
+    echo "Redeployer avec scripts/deploy-notebook-image.sh avant de relancer." >&2
+    return 1
+  fi
+  echo "Notebook verifie dans le pod : $pod:$expected_notebook_path" >&2
+}
+
 restore_previous_state() {
   local api_replicas=1
   local vllm_replicas=0
@@ -62,6 +95,7 @@ case "$command_name" in
     ensure_token
     notebook_replicas="$(replicas_or_zero "$notebook_deployment" "$namespace")"
     if [[ "$notebook_replicas" -gt 0 ]]; then
+      verify_running_notebook
       print_token
       exit 0
     fi
@@ -79,6 +113,7 @@ case "$command_name" in
     wait_for_pods_to_stop vllm vllm
     kubectl scale "deployment/${notebook_deployment}" -n "$namespace" --replicas=1 >/dev/null
     kubectl rollout status "deployment/${notebook_deployment}" -n "$namespace" --timeout=1200s
+    verify_running_notebook
     trap - ERR
     print_token
     ;;
@@ -93,6 +128,7 @@ case "$command_name" in
     wait_for_pods_to_stop "$namespace" prooftag-qr-notebook
     kubectl scale "deployment/${notebook_deployment}" -n "$namespace" --replicas=1 >/dev/null
     kubectl rollout status "deployment/${notebook_deployment}" -n "$namespace" --timeout=1200s
+    verify_running_notebook
     print_token
     ;;
   stop)

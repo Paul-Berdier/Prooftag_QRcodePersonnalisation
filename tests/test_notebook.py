@@ -81,7 +81,9 @@ def test_remote_gpu_notebook_has_an_isolated_kubernetes_runtime():
     assert "restore_previous_state" in server
     assert "JUPYTER_TARGET" in server
     assert "[switch]$Reset" in launcher
-    assert "bash scripts/notebook-server.sh $remoteAction" in launcher
+    assert "bash scripts/notebook-server.sh $remoteAction $Notebook" in launcher
+    assert "verify_running_notebook" in server
+    assert 'expected_notebook_path="/workspace/notebooks/${expected_notebook}"' in server
     assert "reset)" in server
 
 
