@@ -48,6 +48,10 @@ notebook = [
   # Required by the T5 tokenizer embedded in FLUX pipelines.
   "protobuf==5.29.3",
   "sentencepiece==0.2.0",
+  # Historical E014/E016 notebooks use ZXing as an experimental labeler.
+  # The production API remains QR-Verify-only because this dependency is
+  # deliberately confined to the notebook extra.
+  "zxing-cpp>=3.0,<4",
 ]
 optimizer = [
   "catboost>=1.2.8,<2",

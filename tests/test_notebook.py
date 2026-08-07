@@ -1,5 +1,6 @@
 import ast
 import json
+import tomllib
 from pathlib import Path
 
 
@@ -42,6 +43,7 @@ def test_live_gpu_notebook_generates_instead_of_reading_an_archive():
 
 
 def test_remote_gpu_notebook_has_an_isolated_kubernetes_runtime():
+    project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
     dockerfile = Path("Dockerfile.notebook").read_text(encoding="utf-8")
     manifest = Path("deploy/k8s/notebook.yaml").read_text(encoding="utf-8")
     launcher = Path("scripts/notebook-remote.ps1").read_text(encoding="utf-8")
@@ -54,6 +56,7 @@ def test_remote_gpu_notebook_has_an_isolated_kubernetes_runtime():
     assert "02_generate_live_on_gpu.ipynb" in launcher
     assert "03_srpg_parameter_search.ipynb" in launcher
     assert "04_e007_contextual_optimizer.ipynb" in launcher
+    assert "zxing-cpp>=3.0,<4" in project["project"]["optional-dependencies"]["notebook"]
     assert "05_controlnet_model_bakeoff.ipynb" in launcher
     assert "06_nacholmo_generate_live.ipynb" in launcher
     assert "07_diffqrcoder_official_live.ipynb" in launcher
