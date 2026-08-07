@@ -12,6 +12,7 @@ FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
 
 ARG DIFFQRCODER_COMMIT=e24ea73ee2e13c7e6e87cb422e8b11784e70ae00
 ARG QART_COMMIT=6e0e00804a1994db7098432c19fadfc552071e30
+ARG EXPECTED_NOTEBOOK=notebooks/21_e026_prompt_parameter_advisor.ipynb
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -56,7 +57,9 @@ RUN useradd --create-home --uid 10001 app \
 
 WORKDIR /workspace
 COPY notebooks /workspace/notebooks
-RUN mkdir -p /workspace/results /data/notebook-runs /data/parameter-search \
+RUN test -f "/workspace/${EXPECTED_NOTEBOOK}" \
+    && echo "Notebook present in image: /workspace/${EXPECTED_NOTEBOOK}" \
+    && mkdir -p /workspace/results /data/notebook-runs /data/parameter-search \
     && chown -R app:app /workspace /data/notebook-runs /data/parameter-search
 
 USER app

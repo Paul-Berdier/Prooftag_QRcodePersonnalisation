@@ -676,6 +676,7 @@ def test_e026_notebook_uses_qr_verify_as_a_calibrated_first_objective():
         encoding="utf-8"
     )
     advisor = Path("prooftag_qr/parameter_advisor.py").read_text(encoding="utf-8")
+    dockerfile = Path("Dockerfile.notebook").read_text(encoding="utf-8")
     launcher = Path("scripts/notebook-remote.ps1").read_text(encoding="utf-8")
     deployer = Path("scripts/deploy-notebook-image.sh").read_text(encoding="utf-8")
 
@@ -691,3 +692,7 @@ def test_e026_notebook_uses_qr_verify_as_a_calibrated_first_objective():
     assert "prooftag-e026-parameter-advisor.joblib" in source
     assert "21_e026_prompt_parameter_advisor.ipynb" in launcher
     assert "21_e026_prompt_parameter_advisor.ipynb" in deployer
+    assert '--build-arg "EXPECTED_NOTEBOOK=${expected_notebook}"' in deployer
+    assert "docker run" not in deployer
+    assert "ARG EXPECTED_NOTEBOOK=" in dockerfile
+    assert 'test -f "/workspace/${EXPECTED_NOTEBOOK}"' in dockerfile

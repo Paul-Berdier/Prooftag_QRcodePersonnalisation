@@ -28,11 +28,19 @@ image_notebook="/workspace/${expected_notebook}"
 
 echo "Construction de $image depuis $git_sha"
 docker build -f Dockerfile.notebook \
+  --build-arg "EXPECTED_NOTEBOOK=${expected_notebook}" \
   --label "org.opencontainers.image.revision=${git_sha}" \
   -t "$image" .
 
-docker run --rm --entrypoint test "$image" -f "$image_notebook"
-echo "Notebook vérifié dans l'image : $image_notebook"
+image_revision="$(
+  docker image inspect "$image" \
+    --format '{{index .Config.Labels "org.opencontainers.image.revision"}}'
+)"
+if [[ "$image_revision" != "$git_sha" ]]; then
+  echo "Révision de l'image inattendue : $image_revision != $git_sha" >&2
+  exit 1
+fi
+echo "Notebook vérifié pendant le build : $image_notebook"
 
 docker save "$image" | sudo k3s ctr images import -
 
