@@ -85,6 +85,34 @@ def test_week_runner_persists_only_a_redacted_plan(tmp_path):
     assert state["active_campaign_id"] is None
 
 
+def test_week_runner_supports_notebook_sized_plans_and_progress_callback(tmp_path):
+    events = []
+    runner = WeekCampaignRunner(
+        api_url="http://127.0.0.1:9",
+        payload="https://ptag.io/t/e026",
+        output_root=tmp_path,
+        duration_hours=1,
+        minimum_free_gib=0,
+        poll_seconds=0.01,
+        prompt_count=12,
+        prompts_per_batch=5,
+        seeds=(7, 11),
+        progress_callback=events.append,
+    )
+
+    assert [len(batch["prompts"]) for batch in runner.batches] == [5, 5, 2]
+    assert runner.batches[0]["seeds"] == [7, 11]
+    runner._notify("unit_progress", completed_trials=4, total_trials=10)
+    assert events == [
+        {
+            "event": "unit_progress",
+            "timestamp": events[0]["timestamp"],
+            "completed_trials": 4,
+            "total_trials": 10,
+        }
+    ]
+
+
 def test_week_job_has_no_gpu_and_uses_the_persistent_data_volume():
     manifest = Path("deploy/k8s/e026-week-job.yaml").read_text(encoding="utf-8")
     launcher = Path("scripts/e026-week-campaign.sh").read_text(encoding="utf-8")

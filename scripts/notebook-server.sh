@@ -13,6 +13,10 @@ if [[ ! "$expected_notebook" =~ ^[A-Za-z0-9_.-]+\.ipynb$ ]]; then
   exit 2
 fi
 expected_notebook_path="/workspace/notebooks/${expected_notebook}"
+advisor_mode=0
+if [[ "$expected_notebook" == "21_e026_prompt_parameter_advisor.ipynb" ]]; then
+  advisor_mode=1
+fi
 
 replicas_or_zero() {
   kubectl get deployment "$1" -n "$2" -o jsonpath='{.spec.replicas}' 2>/dev/null || printf '0'
@@ -20,6 +24,30 @@ replicas_or_zero() {
 
 wait_for_pods_to_stop() {
   kubectl wait --for=delete pod -n "$1" -l "app=$2" --timeout=300s || true
+}
+
+configure_notebook_runtime() {
+  local patch
+  if [[ "$advisor_mode" -eq 1 ]]; then
+    patch='{"spec":{"template":{"metadata":{"annotations":{"prooftag.io/notebook-mode":"advisor-cpu"}},"spec":{"runtimeClassName":null,"containers":[{"name":"notebook","resources":{"$patch":"replace","requests":{"cpu":"1","memory":"2Gi"},"limits":{"cpu":"4","memory":"8Gi"}}}]}}}}'
+  else
+    patch='{"spec":{"template":{"metadata":{"annotations":{"prooftag.io/notebook-mode":"generation-gpu"}},"spec":{"runtimeClassName":"nvidia","containers":[{"name":"notebook","resources":{"$patch":"replace","requests":{"cpu":"2","memory":"8Gi","nvidia.com/gpu":"1"},"limits":{"cpu":"12","memory":"32Gi","nvidia.com/gpu":"1"}}}]}}}}'
+  fi
+  kubectl patch deployment "$notebook_deployment" -n "$namespace" \
+    --type=strategic -p "$patch" >/dev/null
+}
+
+prepare_runtime() {
+  kubectl scale deployment/vllm -n vllm --replicas=0 >/dev/null
+  wait_for_pods_to_stop vllm vllm
+  configure_notebook_runtime
+  if [[ "$advisor_mode" -eq 1 ]]; then
+    kubectl scale "deployment/${api_deployment}" -n "$namespace" --replicas=1 >/dev/null
+    kubectl rollout status "deployment/${api_deployment}" -n "$namespace" --timeout=1200s
+  else
+    kubectl scale "deployment/${api_deployment}" -n "$namespace" --replicas=0 >/dev/null
+    wait_for_pods_to_stop "$namespace" prooftag-qr
+  fi
 }
 
 ensure_token() {
@@ -45,7 +73,7 @@ print_token() {
 }
 
 verify_running_notebook() {
-  local pod desired_image running_image
+  local pod desired_image running_image desired_mode runtime_mode
   pod="$(
     kubectl get pod -n "$namespace" -l app=prooftag-qr-notebook \
       -o jsonpath='{.items[0].metadata.name}'
@@ -58,6 +86,19 @@ verify_running_notebook() {
     kubectl get pod "$pod" -n "$namespace" \
       -o jsonpath='{.spec.containers[?(@.name=="notebook")].image}'
   )"
+  desired_mode="generation-gpu"
+  if [[ "$advisor_mode" -eq 1 ]]; then
+    desired_mode="advisor-cpu"
+  fi
+  runtime_mode="$(
+    kubectl get deployment "$notebook_deployment" -n "$namespace" \
+      -o jsonpath='{.spec.template.metadata.annotations.prooftag\.io/notebook-mode}'
+  )"
+  if [[ "$runtime_mode" != "$desired_mode" ]]; then
+    echo "Mode notebook incorrect : actif=$runtime_mode demande=$desired_mode" >&2
+    echo "Utiliser -Reset pour recréer le pod dans le bon mode." >&2
+    return 1
+  fi
   if [[ "$running_image" != "$desired_image" ]]; then
     echo "Image notebook obsolete : pod=$running_image deployment=$desired_image" >&2
     return 1
@@ -107,10 +148,7 @@ case "$command_name" in
       restore_previous_state
     }
     trap rollback ERR
-    kubectl scale "deployment/${api_deployment}" -n "$namespace" --replicas=0 >/dev/null
-    kubectl scale deployment/vllm -n vllm --replicas=0 >/dev/null
-    wait_for_pods_to_stop "$namespace" prooftag-qr
-    wait_for_pods_to_stop vllm vllm
+    prepare_runtime
     kubectl scale "deployment/${notebook_deployment}" -n "$namespace" --replicas=1 >/dev/null
     kubectl rollout status "deployment/${notebook_deployment}" -n "$namespace" --timeout=1200s
     verify_running_notebook
@@ -126,6 +164,7 @@ case "$command_name" in
     fi
     kubectl scale "deployment/${notebook_deployment}" -n "$namespace" --replicas=0 >/dev/null
     wait_for_pods_to_stop "$namespace" prooftag-qr-notebook
+    prepare_runtime
     kubectl scale "deployment/${notebook_deployment}" -n "$namespace" --replicas=1 >/dev/null
     kubectl rollout status "deployment/${notebook_deployment}" -n "$namespace" --timeout=1200s
     verify_running_notebook

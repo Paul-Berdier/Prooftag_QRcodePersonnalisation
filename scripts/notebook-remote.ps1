@@ -128,7 +128,13 @@ try {
             Invoke-WebRequest -Uri "http://127.0.0.1:${LocalPort}/api" `
                 -Headers $headers -TimeoutSec 1 | Out-Null
             Start-Process $url
-            Write-Host "Notebook GPU ouvert sur le PC : $url"
+            Write-Host "Notebook ouvert sur le PC : $url"
+            if ($Notebook -eq "21_e026_prompt_parameter_advisor.ipynb") {
+                Write-Host "Mode E026 : Jupyter reste sur CPU et l'API conserve la RTX pour generer les donnees."
+            }
+            else {
+                Write-Host "Mode generation directe : ce notebook utilise la RTX."
+            }
             if ($Reset) {
                 Write-Host "Tous les anciens kernels ont ete supprimes et la VRAM a ete liberee."
             }

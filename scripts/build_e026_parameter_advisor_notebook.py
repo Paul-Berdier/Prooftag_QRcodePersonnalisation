@@ -29,11 +29,11 @@ def code(source: str) -> dict:
 
 cells = [
     markdown(
-        """# E026 — conseiller prompt → paramètres DiffQRCoder
+        """# E026 — collecte autonome puis conseiller prompt → paramètres DiffQRCoder
 
-Ce notebook entraîne un **modèle de sélection**, pas un générateur d'images. Il apprend à
-prédire les résultats de recettes DiffQRCoder déjà mesurées, puis recommande un top-K pour un
-nouveau prompt.
+Ce notebook exécute la chaîne complète : il **génère les données sur l'API GPU**, les exporte
+après chaque lot, reprend automatiquement après une coupure, puis entraîne un modèle de
+sélection de paramètres et recommande un top-K pour un nouveau prompt.
 
 Priorité immuable :
 
@@ -46,7 +46,9 @@ La recommandation ne certifie jamais une image. Les candidates réellement gén�
 encore franchir QR-Verify avant livraison.
 
 ```text
-exports CSV du laboratoire + prompt + configuration demandée
+prompts + recettes -> campagnes persistantes API GPU -> exports CSV
+                            |
+             état JSON atomique et reprise après incident
                             |
         validation groupée par prompt complètement inconnu
                             |
@@ -61,17 +63,17 @@ exports CSV du laboratoire + prompt + configuration demandée
     markdown(
         """## Mode d'emploi
 
-1. Pour créer des données, renseigner `COLLECTION_PAYLOAD`, exécuter les cellules 1 à 3 et
-   récupérer les quatre JSON de campagne.
-2. Arrêter Jupyter avant de lancer les campagnes dans le laboratoire Web : l'API doit récupérer
-   la RTX.
-3. Exporter chaque campagne avec **Exporter CSV**.
-4. Relancer ce notebook et téléverser les CSV dans `/workspace/imports` depuis JupyterLab.
-5. Exécuter toutes les cellules. Si la porte de données est rouge, collecter davantage de cas ;
-   le notebook refuse volontairement d'entraîner un faux modèle.
+1. Renseigner `COLLECTION_PAYLOAD` dans la configuration.
+2. Exécuter **Run → Run All Cells**. La cellule 3 soumet les lots à l'API qui possède le GPU.
+3. Laisser la page ouverte pour voir la progression. Fermer le navigateur ne détruit pas la
+   campagne : l'API continue et l'état est écrit dans `/data/e026-week`.
+4. Après une erreur, un redémarrage ou une déconnexion, relancer le même notebook et la même
+   cellule : les lots terminés sont ignorés et la campagne active est retrouvée.
+5. Quand la collecte se termine (ou atteint sa durée limite), les cellules suivantes chargent
+   automatiquement les CSV persistants, auditent les données et entraînent le conseiller.
 
-Les anciens CSV sans `prompt_text` peuvent être complétés dans `LEGACY_PROMPT_CATALOG`. Les
-nouveaux exports contiennent directement le prompt et la configuration exacte.
+Le notebook E026 tourne en mode CPU afin de laisser la RTX à l'API de génération. Les anciens
+CSV sans `prompt_text` peuvent encore être complétés dans `LEGACY_PROMPT_CATALOG`.
 """
     ),
     code(
@@ -82,21 +84,25 @@ import hashlib
 import json
 import shutil
 import sys
+import time
+from collections import deque
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.request import urlopen
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from IPython.display import Markdown, clear_output, display
 
 for candidate in [Path('/app'), Path.cwd(), Path.cwd().parent]:
     if (candidate / 'prooftag_qr').is_dir() and str(candidate) not in sys.path:
         sys.path.insert(0, str(candidate))
 
-from prooftag_qr.lab import laboratory_profiles
 from prooftag_qr.parameter_advisor import E026ParameterAdvisor, load_lab_exports
 from prooftag_qr.quality_scoring import CLIPQualityScorer, project_embedding
+from prooftag_qr.week_campaign import WeekCampaignRunner, build_week_batches
 
 print('Python :', sys.version.split()[0])
 print('Répertoire :', Path.cwd())
@@ -133,9 +139,17 @@ NEW_QR_CONTEXT = {
     'qr_padding_px': 78,
 }
 
-# Utilisé uniquement pour fabriquer les JSON de collecte ; le payload n'est jamais
-# enregistré dans le dataset, seulement sa longueur et son SHA-256.
-COLLECTION_PAYLOAD = None  # ex. 'https://ptag.io/t/e026-pilot'
+# Collecte intégrée. Conserver exactement ces valeurs pour reprendre le même plan.
+RUN_COLLECTION = True
+COLLECTION_PAYLOAD = 'https://ptag.io/t/e026w'  # remplacer par votre URL courte réelle
+COLLECTION_API_URL = 'http://prooftag-qr-svc.qr-core.svc.cluster.local:8080'
+COLLECTION_OUTPUT_ROOT = Path('/data/e026-week')
+COLLECTION_PROMPT_COUNT = 300
+COLLECTION_PROMPTS_PER_BATCH = 10
+COLLECTION_SEEDS = (113001, 223001, 337001)
+COLLECTION_DURATION_HOURS = 162.0
+COLLECTION_POLL_SECONDS = 15.0
+COLLECTION_MINIMUM_FREE_GIB = 8.0
 
 RUN_DIR = Path('/data/notebook-runs') / (
     datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + EXPERIMENT_NAME
@@ -146,97 +160,125 @@ DOWNLOAD_DIR = Path('/workspace/results') / RUN_DIR.name
 DOWNLOAD_DIR.mkdir(parents=True, exist_ok=False)
 print('Résultats :', RUN_DIR)
 print('Téléchargements Jupyter :', DOWNLOAD_DIR)
+print('Collecte persistante :', COLLECTION_OUTPUT_ROOT)
+print('Ce kernel reste sur CPU ; la génération est exécutée par l API sur la RTX.')
 """
     ),
-    markdown("## 2. Plan de collecte E026A — 24 prompts × 10 recettes × 2 seeds"),
+    markdown("## 2. Construire et auditer le plan de collecte"),
     code(
-        """COLLECTION_PROMPTS = [
-    ('simple_01', 'A single amber pear on slate, soft studio photograph.'),
-    ('simple_02', 'One red paper boat floating on dark blue water, minimalist photograph.'),
-    ('simple_03', 'A white porcelain cup beside a eucalyptus leaf, quiet editorial still life.'),
-    ('simple_04', 'A brass key on burgundy velvet, dramatic museum lighting.'),
-    ('simple_05', 'A moon-shaped lamp on an indigo wall, clean product photography.'),
-    ('simple_06', 'A solitary kingfisher on a reed, pale morning mist, nature photograph.'),
-    ('scene_01', 'A tiled Lisbon courtyard with citrus trees and a small fountain, warm daylight.'),
-    ('scene_02', 'A winter library with arched windows, ladders and a glowing fireplace.'),
-    ('scene_03', 'A mountain observatory above clouds at sunrise, cinematic landscape.'),
-    ('scene_04', 'A Japanese flower market under translucent umbrellas in gentle rain.'),
-    ('scene_05', 'An Art Deco railway hall with clocks, travelers and polished brass kiosks.'),
-    ('scene_06', 'An underwater museum gallery with rays, coral and blue shafts of light.'),
-    ('detail_01', 'An embroidered night garden with moths, irises and silver constellations.'),
-    ('detail_02', 'A turquoise peacock mosaic with gold vines and opal flowers, Art Nouveau.'),
-    ('detail_03', 'An illuminated manuscript forest with foxes, mushrooms and curling ivy.'),
-    ('detail_04', 'A mechanical orrery made of walnut and brass, intricate astronomical detail.'),
-    ('detail_05', 'A Persian carpet city seen from above, tiny gardens, canals and lanterns.'),
-    ('detail_06', 'A cabinet of botanical curiosities, labeled seeds, shells and glass vials.'),
-    ('atypical_01', 'A Möbius opera house folded through violet fog, impossible architecture.'),
-    ('atypical_02',
-     'A transparent mycelium cube growing miniature blue forests, macro photograph.'),
-    ('atypical_03', 'An orchestra of ceramic insects performing inside a pomegranate.'),
-    ('atypical_04', 'A crystal droplet containing a complete stormy harbor, surreal macro art.'),
-    ('atypical_05', 'A recursive paper city cut from a single map, isometric shadow theatre.'),
-    ('atypical_06', 'A bioluminescent archive grown from coral shelves and floating manuscripts.'),
-]
+        """if not COLLECTION_PAYLOAD or COLLECTION_PAYLOAD.endswith('/e026w'):
+    print('ATTENTION : remplacez COLLECTION_PAYLOAD par une URL courte Prooftag réelle.')
 
-profiles = {
-    profile['id']: profile for profile in laboratory_profiles()
-    if profile['backend'] == 'controlnet' and profile['id'] != 'diffqrcoder_auto'
+collection_batches = build_week_batches(
+    COLLECTION_PAYLOAD,
+    prompt_count=COLLECTION_PROMPT_COUNT,
+    prompts_per_batch=COLLECTION_PROMPTS_PER_BATCH,
+    seeds=COLLECTION_SEEDS,
+)
+collection_plan = {
+    'batches': len(collection_batches),
+    'prompts': sum(len(batch['prompts']) for batch in collection_batches),
+    'methods': len(collection_batches[0]['methods']),
+    'seeds': len(collection_batches[0]['seeds']),
+    'trials': sum(
+        len(batch['prompts']) * len(batch['methods']) * len(batch['seeds'])
+        for batch in collection_batches
+    ),
+    'duration_limit_hours': COLLECTION_DURATION_HOURS,
 }
-COLLECTION_METHOD_IDS = [
-    'diffqrcoder_stage1', 'diffqrcoder_srpg', 'diffqrcoder_paper_srpg',
-    'diffqrcoder_srmpgd', 'diffqrcoder_srmpgd_robust',
-    'diffqrcoder_srpg_s035', 'diffqrcoder_srpg_s050',
-    'diffqrcoder_srpg_s080', 'diffqrcoder_qart_srpg',
-]
-collection_methods = []
-for method_id in COLLECTION_METHOD_IDS:
-    method = json.loads(json.dumps(profiles[method_id]))
-    method['enabled'] = True
-    collection_methods.append(method)
+display(pd.DataFrame([collection_plan]))
+display(pd.DataFrame([
+    {'id': method['id'], 'name': method['name'], 'output': method['output_variant']}
+    for method in collection_batches[0]['methods']
+]))
+print('Les lots sont déterministes : mêmes paramètres = même plan et reprise du même état.')
+"""
+    ),
+    markdown("## 3. Générer, suivre et reprendre automatiquement"),
+    code(
+        """progress_events = deque(maxlen=25)
+progress_path = None
+collection_started = time.monotonic()
 
-# Dixième recette : même chaîne publique, point intermédiaire non couvert par les profils Web.
-extra = json.loads(json.dumps(profiles['diffqrcoder_srpg']))
-extra['id'] = 'e026_srpg_qr750_pg1'
-extra['name'] = 'E026 — SRPG QR 750 / PG 1'
-extra['enabled'] = True
-extra['tools']['settings']['srpg_qr_weight'] = 750.0
-extra['tools']['settings']['srpg_perceptual_weight'] = 1.0
-collection_methods.append(extra)
 
-assert len(COLLECTION_PROMPTS) == 24
-assert len(collection_methods) == 10
-assert 6 * 2 * len(collection_methods) == 120
+def collection_progress(event):
+    progress_events.append(event)
+    if progress_path is not None:
+        with progress_path.open('a', encoding='utf-8') as stream:
+            stream.write(json.dumps(event, ensure_ascii=False) + '\\n')
+    clear_output(wait=True)
+    latest = progress_events[-1]
+    elapsed_hours = (time.monotonic() - collection_started) / 3600
+    summary = {
+        'événement': latest.get('event'),
+        'état': latest.get('status', 'en cours'),
+        'lot': (
+            f"{latest.get('batch_number', '—')}/"
+            f"{latest.get('batch_count', len(collection_batches))}"
+        ),
+        'essais': (
+            f"{latest.get('completed_trials', '—')}/"
+            f"{latest.get('total_trials', '—')}"
+        ),
+        'acceptés': latest.get('accepted_trials', '—'),
+        'lots terminés': latest.get('completed_batches', 0),
+        'prompt actuel': latest.get('current_prompt_id') or '—',
+        'méthode actuelle': latest.get('current_method_id') or '—',
+        'seed actuelle': latest.get('current_seed') or '—',
+        'temps écoulé (h)': round(elapsed_hours, 2),
+    }
+    display(Markdown('### Progression de la collecte E026'))
+    display(pd.DataFrame([summary]))
+    display(pd.DataFrame(list(progress_events)[-10:]))
 
-collection_dir = RUN_DIR / 'collection-plan'
-collection_dir.mkdir()
-collection_manifests = []
-if COLLECTION_PAYLOAD:
-    for batch_index in range(4):
-        prompts = COLLECTION_PROMPTS[batch_index * 6:(batch_index + 1) * 6]
-        manifest = {
-            'name': f'E026A batch {batch_index + 1}/4',
-            'payload': COLLECTION_PAYLOAD,
-            'error_correction': 'M',
-            'prompts': [
-                {'id': prompt_id, 'text': text, 'negative_prompt': ''}
-                for prompt_id, text in prompts
-            ],
-            'seeds': [83001, 93001],
-            'methods': collection_methods,
-            'max_attempts': 1,
-        }
-        path = collection_dir / f'e026a-campaign-{batch_index + 1:02d}.json'
-        path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')
-        shutil.copy2(path, DOWNLOAD_DIR / path.name)
-        collection_manifests.append(path)
-    print('Quatre campagnes prêtes :', *collection_manifests, sep='\\n- ')
-    print('Arrêter Jupyter avant de les soumettre : le laboratoire doit récupérer le GPU.')
+
+runner = WeekCampaignRunner(
+    api_url=COLLECTION_API_URL,
+    payload=COLLECTION_PAYLOAD,
+    output_root=COLLECTION_OUTPUT_ROOT,
+    duration_hours=COLLECTION_DURATION_HOURS,
+    minimum_free_gib=COLLECTION_MINIMUM_FREE_GIB,
+    poll_seconds=COLLECTION_POLL_SECONDS,
+    prompt_count=COLLECTION_PROMPT_COUNT,
+    prompts_per_batch=COLLECTION_PROMPTS_PER_BATCH,
+    seeds=COLLECTION_SEEDS,
+    progress_callback=collection_progress,
+)
+progress_path = runner.output_dir / 'notebook-progress.jsonl'
+print('Plan :', runner.plan_id)
+print('État persistant :', runner.state_path)
+print('Exports persistants :', runner.exports_dir)
+print('État retrouvé :', runner.state['status'])
+print('Lots déjà terminés :', len(runner.state['completed_batches']), '/', len(runner.batches))
+
+if RUN_COLLECTION:
+    try:
+        health = json.loads(urlopen(COLLECTION_API_URL + '/healthz', timeout=20).read())
+        print('API génération :', health)
+    except Exception as exc:
+        raise RuntimeError(
+            'API de génération indisponible. Relancer ce notebook avec '
+            'scripts/notebook-remote.ps1 -Reset afin d activer le mode conseiller CPU + API GPU.'
+        ) from exc
+    runner.run()
+    clear_output(wait=True)
+    final_state = json.loads(runner.state_path.read_text(encoding='utf-8'))
+    display(Markdown('### Collecte arrêtée ou terminée — état sauvegardé'))
+    display(pd.DataFrame([{
+        'plan': runner.plan_id,
+        'état': final_state['status'],
+        'lots terminés': len(final_state['completed_batches']),
+        'lots prévus': len(runner.batches),
+        'campagnes soumises': len(final_state['campaigns']),
+        'exports CSV': len(list(runner.exports_dir.glob('*.csv'))),
+        'reprise': str(runner.state_path),
+    }]))
 else:
-    print('COLLECTION_PAYLOAD=None : aucun manifeste écrit. Le plan reste visible et auditable.')
+    print('RUN_COLLECTION=False : collecte ignorée, entraînement sur les exports existants.')
 """
     ),
     markdown(
-        """## 3. Charger les exports et fabriquer les embeddings de prompts
+        """## 4. Charger les exports et fabriquer les embeddings de prompts
 
 CLIP n'est utilisé ici que pour représenter le texte du prompt. La projection aléatoire est
 déterministe et réduit l'embedding à 32 dimensions. Elle doit rester identique en entraînement
@@ -288,7 +330,7 @@ if dataset is not None:
     display(pd.DataFrame([dataset.audit]))
 """
     ),
-    markdown("## 4. Audit sans fuite et porte minimale"),
+    markdown("## 5. Audit sans fuite et porte minimale"),
     code(
         """DATA_READY = False
 if dataset is not None:
@@ -328,7 +370,7 @@ if dataset is not None:
         print('PORTE VERTE — dataset identifiable pour un premier modèle E026.')
 """
     ),
-    markdown("## 5. Entraînement et validation par prompts entièrement inconnus"),
+    markdown("## 6. Entraînement et validation par prompts entièrement inconnus"),
     code(
         """advisor = None
 training_report = None
@@ -353,7 +395,7 @@ else:
     print('Étape ignorée tant que la porte de données n’est pas verte.')
 """
     ),
-    markdown("## 6. Calibration, importance des paramètres et couverture des objectifs"),
+    markdown("## 7. Calibration, importance des paramètres et couverture des objectifs"),
     code(
         """if advisor is not None:
     validation = pd.DataFrame(advisor.validation_predictions)
@@ -389,7 +431,7 @@ else:
     print('Graphiques indisponibles : aucun modèle entraîné.')
 """
     ),
-    markdown("## 7. Recommander les paramètres pour un nouveau prompt"),
+    markdown("## 8. Recommander les paramètres pour un nouveau prompt"),
     code(
         """recommendations = []
 if advisor is not None:
@@ -452,7 +494,7 @@ else:
 """
     ),
     markdown(
-        """## 8. Lot d'apprentissage actif
+        """## 9. Lot d'apprentissage actif
 
 Le prochain lot mélange exploitation et exploration : trois recettes au meilleur compromis sûr,
 puis trois recettes très incertaines. Cela évite de répéter uniquement les configurations déjà
@@ -498,7 +540,7 @@ connues et améliore progressivement le modèle.
     ]))
 """
     ),
-    markdown("## 9. Manifest, limites et archive"),
+    markdown("## 10. Manifest, limites et archive"),
     code(
         """manifest = {
     'experiment': EXPERIMENT_NAME,

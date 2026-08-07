@@ -8,6 +8,7 @@ import shutil
 import signal
 import sys
 import time
+from collections.abc import Callable
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -299,6 +300,10 @@ class WeekCampaignRunner:
         minimum_free_gib: float,
         poll_seconds: float,
         maximum_campaign_attempts: int = 3,
+        prompt_count: int = 300,
+        prompts_per_batch: int = 10,
+        seeds: tuple[int, ...] = (113_001, 223_001, 337_001),
+        progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         self.api_url = api_url.rstrip("/")
         self.payload = payload
@@ -306,7 +311,13 @@ class WeekCampaignRunner:
         self.minimum_free_gib = minimum_free_gib
         self.poll_seconds = poll_seconds
         self.maximum_campaign_attempts = maximum_campaign_attempts
-        self.batches = build_week_batches(payload)
+        self.progress_callback = progress_callback
+        self.batches = build_week_batches(
+            payload,
+            prompt_count=prompt_count,
+            prompts_per_batch=prompts_per_batch,
+            seeds=seeds,
+        )
         plan_public = {
             "protocol": "e026w-v1",
             "prompt_count": sum(len(item["prompts"]) for item in self.batches),
@@ -337,6 +348,20 @@ class WeekCampaignRunner:
         self.state = self._load_state()
         self.stop_requested = False
         self.active_campaign_id: str | None = self.state.get("active_campaign_id")
+
+    def _notify(self, event: str, **values: Any) -> None:
+        if self.progress_callback is None:
+            return
+        try:
+            self.progress_callback(
+                {
+                    "event": event,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    **values,
+                }
+            )
+        except Exception as exc:  # pragma: no cover - notebook display is best effort
+            print(f"Progress callback failed: {type(exc).__name__}: {exc}")
 
     def _load_state(self) -> dict[str, Any]:
         if self.state_path.exists():
@@ -448,10 +473,24 @@ class WeekCampaignRunner:
                 "Waiting for existing laboratory campaign(s):",
                 [(item["id"], item["name"], item["status"]) for item in active],
             )
+            self._notify(
+                "waiting_foreign_campaign",
+                batch_count=len(self.batches),
+                completed_batches=len(self.state["completed_batches"]),
+                foreign_campaigns=[
+                    {"id": item["id"], "name": item["name"], "status": item["status"]}
+                    for item in active
+                ],
+            )
             time.sleep(self.poll_seconds)
 
     def _export(self, batch_index: int, attempt: int, campaign_id: str) -> Path:
-        body = self._request("GET", f"/v1/lab/campaigns/{campaign_id}/results.csv", raw=True)
+        body = self._request(
+            "GET",
+            f"/v1/lab/campaigns/{campaign_id}/results.csv",
+            raw=True,
+            respect_stop=False,
+        )
         path = self.exports_dir / (
             f"batch-{batch_index + 1:02d}-attempt-{attempt:02d}-{campaign_id}.csv"
         )
@@ -462,6 +501,10 @@ class WeekCampaignRunner:
         last_progress = None
         while not self.stop_requested and not self._deadline_reached():
             campaign = self._request("GET", f"/v1/lab/campaigns/{campaign_id}")
+            current_trial = next(
+                (item for item in campaign.get("trials", []) if item["status"] == "running"),
+                None,
+            )
             progress = (
                 campaign["status"],
                 campaign["completed_trials"],
@@ -475,13 +518,68 @@ class WeekCampaignRunner:
                     f"accepted={progress[3]}"
                 )
                 last_progress = progress
+            # Emit a heartbeat even while one GPU trial is still running. The notebook
+            # dashboard therefore proves that polling is alive instead of appearing frozen.
+            self._notify(
+                "campaign_progress",
+                batch_index=batch_index,
+                batch_number=batch_index + 1,
+                batch_count=len(self.batches),
+                attempt=attempt,
+                campaign_id=campaign_id,
+                status=progress[0],
+                completed_trials=progress[1],
+                total_trials=progress[2],
+                accepted_trials=progress[3],
+                completed_batches=len(self.state["completed_batches"]),
+                current_prompt_id=current_trial["prompt_id"] if current_trial else None,
+                current_method_id=current_trial["method_id"] if current_trial else None,
+                current_seed=current_trial["seed"] if current_trial else None,
+            )
             if campaign["status"] in TERMINAL_CAMPAIGN_STATUSES:
                 exported = self._export(batch_index, attempt, campaign_id)
                 print("Exported:", exported)
+                self._notify(
+                    "campaign_exported",
+                    batch_index=batch_index,
+                    batch_number=batch_index + 1,
+                    batch_count=len(self.batches),
+                    campaign_id=campaign_id,
+                    status=campaign["status"],
+                    export_path=str(exported),
+                )
                 return str(campaign["status"])
             time.sleep(self.poll_seconds)
+        reason = "deadline" if self._deadline_reached() else "cancelled"
         self._cancel_active()
-        return "deadline" if self._deadline_reached() else "cancelled"
+        # Preserve the completed rows of the interrupted batch. Only that batch may be
+        # retried later; every prior export and completed batch remains untouched.
+        for _ in range(30):
+            try:
+                campaign = self._request(
+                    "GET",
+                    f"/v1/lab/campaigns/{campaign_id}",
+                    respect_stop=False,
+                )
+                if campaign["status"] in TERMINAL_CAMPAIGN_STATUSES:
+                    exported = self._export(batch_index, attempt, campaign_id)
+                    self._notify(
+                        "campaign_partial_exported",
+                        batch_index=batch_index,
+                        batch_number=batch_index + 1,
+                        batch_count=len(self.batches),
+                        campaign_id=campaign_id,
+                        status=campaign["status"],
+                        completed_trials=campaign["completed_trials"],
+                        total_trials=campaign["total_trials"],
+                        accepted_trials=campaign["accepted_trials"],
+                        export_path=str(exported),
+                    )
+                    break
+            except Exception as exc:  # pragma: no cover - best effort during shutdown
+                print(f"Unable to export partial campaign yet: {exc}")
+            time.sleep(min(self.poll_seconds, 2.0))
+        return reason
 
     def _resume_active_campaign(self) -> None:
         if not self.active_campaign_id:
@@ -521,6 +619,14 @@ class WeekCampaignRunner:
         print(
             f"E026 week runner plan={self.plan_id} batches={len(self.batches)} "
             f"deadline={self.state['deadline']}"
+        )
+        self._notify(
+            "runner_started",
+            plan_id=self.plan_id,
+            batch_count=len(self.batches),
+            completed_batches=len(self.state["completed_batches"]),
+            deadline=self.state["deadline"],
+            state_path=str(self.state_path),
         )
         try:
             self._resume_active_campaign()
@@ -573,6 +679,15 @@ class WeekCampaignRunner:
             else:
                 self.state["status"] = "completed_with_failed_batches"
             self._save_state()
+            self._notify(
+                "runner_finished",
+                plan_id=self.plan_id,
+                status=self.state["status"],
+                batch_count=len(self.batches),
+                completed_batches=len(self.state["completed_batches"]),
+                failed_batches=len(self.state.get("failed_batches", [])),
+                state_path=str(self.state_path),
+            )
             return 0
         finally:
             if self.stop_requested:

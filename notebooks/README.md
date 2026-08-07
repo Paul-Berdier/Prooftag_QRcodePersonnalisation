@@ -181,13 +181,17 @@ second `kubectl port-forward` sur le serveur : une tentative interrompue ne peut
 le port distant 18888 occupé. En cas d'échec SSH, le diagnostic est conservé dans
 `$env:TEMP\prooftag-qr-notebook-ssh.log` sur le PC.
 
-Cette commande :
+Pour les notebooks de génération directe (02 à 20), cette commande :
 
 1. mémorise l'état de l'API QR et de vLLM ;
 2. les arrête pour libérer l'unique GPU ;
 3. démarre le pod Jupyter avec la RTX ;
 4. crée un tunnel SSH privé ;
 5. ouvre directement `02_generate_live_on_gpu.ipynb` sur le PC.
+
+Exception : le notebook 21 E026 est lancé en CPU, conserve l'API à une réplique et lui laisse la
+RTX. C'est indispensable pour que le notebook puisse soumettre et suivre la génération des
+données sans concurrence GPU avec le kernel Jupyter.
 
 Sans clé SSH, une seconde fenêtre s'ouvre pour le tunnel : saisir le mot de passe `paul@pcIA`
 dans cette fenêtre et la laisser ouverte pendant la session Jupyter. Elle sera fermée par la
@@ -240,16 +244,17 @@ essai est persisté. Voir
 
 E026 remplace le prototype E007 par un contrat adapté au laboratoire actuel : QR-Verify est la
 cible de scan, CLIP-Aesthetic, CLIPScore et HPS v2.1 restent des objectifs secondaires, et la
-validation sépare entièrement les textes de prompts. Le notebook prépare aussi quatre campagnes
-de collecte reprenables, audite les CSV, refuse les datasets non identifiables, entraîne le
-modèle et exporte un top-K accompagné d'une incertitude :
+validation sépare entièrement les textes de prompts. Le notebook lance lui-même les campagnes
+persistantes via l'API GPU, affiche leur progression, reprend après incident, charge les CSV,
+refuse les datasets non identifiables, entraîne le modèle et exporte un top-K avec incertitude :
 
 ```powershell
 .\scripts\notebook-remote.ps1 -Notebook 21_e026_prompt_parameter_advisor.ipynb
 ```
 
-Les CSV récents doivent être téléversés dans `/workspace/imports`. Le notebook ne remplace jamais
-la validation finale QR-Verify. Le protocole complet est décrit dans
+Le notebook E026 tourne en CPU pour laisser la RTX à l'API. Les exports sont écrits après chaque
+lot sous `/data/e026-week`; `/workspace/imports` reste seulement une source facultative pour les
+anciens CSV. Le notebook ne remplace jamais la validation finale QR-Verify. Le protocole est dans
 [`../docs/e026-prompt-parameter-advisor.md`](../docs/e026-prompt-parameter-advisor.md).
 
 Pour remplir ce dataset pendant une absence sans laisser Jupyter ouvert, E026W lance un Job

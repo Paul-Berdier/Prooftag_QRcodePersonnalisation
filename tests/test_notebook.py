@@ -84,6 +84,9 @@ def test_remote_gpu_notebook_has_an_isolated_kubernetes_runtime():
     assert "bash scripts/notebook-server.sh $remoteAction $Notebook" in launcher
     assert "verify_running_notebook" in server
     assert 'expected_notebook_path="/workspace/notebooks/${expected_notebook}"' in server
+    assert 'prooftag.io/notebook-mode":"advisor-cpu"' in server
+    assert "prepare_runtime" in server
+    assert 'kubectl scale "deployment/${api_deployment}"' in server
     assert "reset)" in server
 
 
@@ -679,14 +682,19 @@ def test_e026_notebook_uses_qr_verify_as_a_calibrated_first_objective():
     dockerfile = Path("Dockerfile.notebook").read_text(encoding="utf-8")
     launcher = Path("scripts/notebook-remote.ps1").read_text(encoding="utf-8")
     deployer = Path("scripts/deploy-notebook-image.sh").read_text(encoding="utf-8")
+    stack_deployer = Path("scripts/deploy-e026-notebook.sh").read_text(encoding="utf-8")
 
     assert "E026ParameterAdvisor" in source
     assert "quality_qr_verify_any_exact" in advisor
     assert "MINIMUM_PROMPT_GROUPS = 12" in source
     assert "SCAN_PROBABILITY_THRESHOLD = 0.80" in source
     assert "GroupKFold by SHA-256(prompt text)" in advisor
-    assert "COLLECTION_PROMPTS" in source
-    assert "len(COLLECTION_PROMPTS) == 24" in source
+    assert "WeekCampaignRunner" in source
+    assert "RUN_COLLECTION = True" in source
+    assert "COLLECTION_PROMPT_COUNT = 300" in source
+    assert "progress_callback=collection_progress" in source
+    assert "notebook-progress.jsonl" in source
+    assert "les lots terminés sont ignorés" in source
     assert "/data/e026-week/*/exports/*.csv" in source
     assert "3 exploitation + 3 maximum uncertainty" in source
     assert "prooftag-e026-parameter-advisor.joblib" in source
@@ -696,3 +704,6 @@ def test_e026_notebook_uses_qr_verify_as_a_calibrated_first_objective():
     assert "docker run" not in deployer
     assert "ARG EXPECTED_NOTEBOOK=" in dockerfile
     assert 'test -f "/workspace/${EXPECTED_NOTEBOOK}"' in dockerfile
+    assert "bash scripts/deploy-app-image.sh" in stack_deployer
+    assert "bash scripts/deploy-notebook-image.sh" in stack_deployer
+    assert 'bash scripts/notebook-server.sh reset "$notebook"' in stack_deployer

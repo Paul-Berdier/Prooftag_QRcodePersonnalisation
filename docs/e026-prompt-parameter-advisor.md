@@ -68,28 +68,33 @@ Le seed n'est pas traité comme une grandeur numérique prédictible. Deux entie
 produisent pas des images voisines. En production, il faut appliquer les meilleures recettes à
 plusieurs seeds appariés, puis valider les images réelles.
 
-## Collecte E026A
+## Collecte intégrée et reprise
 
-Le notebook contient un plan initial de 24 prompts : six simples, six scènes, six détaillés et
-six atypiques. Il retient dix recettes publiques/pinnées et deux seeds. La campagne totale compte
-480 essais, découpés en quatre lots de 120 afin qu'une interruption ne perde pas tout le travail.
+Le notebook 21 pilote maintenant directement E026W : 300 prompts, quatre familles, 16 recettes,
+trois seeds et jusqu'à 14 400 essais. Le kernel Jupyter reste en CPU ; l'API Kubernetes conserve
+seule la RTX et exécute les générations. Il n'y a plus de manifestes à télécharger ni de CSV à
+réimporter manuellement.
 
-Ce premier plan est un **minimum pilote**, pas une preuve de généralisation industrielle. Après
-le pilote, la cible recommandée reste 5 000 à 15 000 sorties réparties sur au moins 100 prompts.
+La collecte est découpée en lots de dix prompts. Après chaque lot, son CSV est écrit dans
+`/data/e026-week/<plan-id>/exports`. Toute transition est enregistrée atomiquement dans
+`state.json`, et les événements affichés sont aussi ajoutés à `notebook-progress.jsonl`.
+Lors d'un arrêt propre, le runner annule uniquement le lot courant et exporte également ses
+lignes déjà terminées ; une reprise ne refait donc jamais les lots antérieurs.
 
-Pour profiter d'une semaine de calcul sans garder Jupyter connecté, utiliser la collecte E026W
-décrite dans [`e026-week-unattended.md`](e026-week-unattended.md). Elle étend ce pilote à 300
-prompts, 16 recettes, trois seeds et un maximum de 14 400 essais persistants.
+Pour lancer :
 
-Pour écrire les quatre manifests :
+1. déployer les deux images du même commit avec `bash scripts/deploy-e026-notebook.sh` ;
+2. ouvrir `21_e026_prompt_parameter_advisor.ipynb` ;
+3. définir l'URL courte réelle dans `COLLECTION_PAYLOAD` ;
+4. exécuter **Run All Cells** ;
+5. surveiller le tableau vivant du lot et des essais ;
+6. après une coupure, relancer avec les mêmes paramètres : la campagne active est retrouvée et
+   les lots terminés sont ignorés.
 
-1. ouvrir `21_e026_prompt_parameter_advisor.ipynb` ;
-2. définir `COLLECTION_PAYLOAD` ;
-3. exécuter les cellules 1 à 3 ;
-4. récupérer les JSON dans `collection-plan` ;
-5. arrêter Jupyter pour rendre la RTX à l'API ;
-6. soumettre les campagnes l'une après l'autre au laboratoire ;
-7. exporter chaque résultat en CSV.
+À la fin de la durée allouée ou de tous les lots, les cellules suivantes chargent directement les
+exports persistants, appliquent la porte scientifique puis entraînent le modèle si le dataset est
+identifiable. Le runner autonome en Job reste disponible comme seconde interface et est décrit
+dans [`e026-week-unattended.md`](e026-week-unattended.md).
 
 Les scores CLIP/HPS doivent être activés durant la génération. Un recalcul E025 reste possible
 pour les campagnes dont les images sont encore présentes.

@@ -1,8 +1,14 @@
-# E026W — collecte autonome pendant une semaine
+# E026W — collecte autonome et reprenable
 
 E026W remplit le PVC avec un dataset borné et reprenable pendant l'absence de l'opérateur. Le
 runner est un Job Kubernetes CPU : l'API conserve seule la RTX pour DiffQRCoder. Fermer SSH ou le
 navigateur n'interrompt pas le Job.
+
+Le même runner est désormais accessible dans le notebook 21. Dans ce mode, le pod Jupyter est
+automatiquement basculé en CPU et l'API reste active sur le GPU. Le tableau du notebook montre la
+progression, tandis que `state.json`, les CSV et `notebook-progress.jsonl` persistent sur le PVC.
+Fermer seulement l'onglet navigateur ne tue pas le kernel. Si le pod ou le kernel disparaît, une
+nouvelle exécution reprend le même plan.
 
 ## Volume prévu
 
