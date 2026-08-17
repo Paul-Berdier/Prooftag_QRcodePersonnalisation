@@ -220,11 +220,48 @@ def load_lab_exports(
         key = str(row.get("trial_id") or f"legacy-{index}-{row.get('_source_file')}")
         deduplicated[key] = row
 
+    # A power failure or a retried campaign creates new trial IDs for the same
+    # prompt/configuration/seed. Keep only the richest generated observation so
+    # retries cannot overweight one recipe in the advisor.
+    logical_rows: dict[str, tuple[tuple[int, int, int], str, dict[str, Any]]] = {}
+    for trial_id, row in deduplicated.items():
+        prompt = str(row.get("prompt_text") or prompt_catalog.get(row.get("prompt_id"), "")).strip()
+        configuration = _method_configuration(row)
+        seed = _float(row.get("seed"))
+        if not prompt or not configuration or seed is None:
+            logical_key = f"trial:{trial_id}"
+        else:
+            logical_key = hashlib.sha256(
+                _canonical_json(
+                    {
+                        "payload_hash": row.get("payload_hash"),
+                        "payload_length": row.get("payload_length"),
+                        "prompt": prompt,
+                        "configuration": configuration,
+                        "seed": seed,
+                        "error_correction": row.get("error_correction"),
+                    }
+                ).encode("utf-8")
+            ).hexdigest()
+        targets = _target_values(row)
+        rank = (
+            int("qr_success" in targets),
+            int(bool(str(row.get("generation_run_id") or "").strip())),
+            len(targets),
+        )
+        previous = logical_rows.get(logical_key)
+        if previous is None or rank > previous[0]:
+            logical_rows[logical_key] = (rank, trial_id, row)
+
+    logical_deduplicated = {
+        trial_id: row for _, trial_id, row in logical_rows.values()
+    }
+
     embedding_cache: dict[str, list[float]] = {}
     records: list[AdvisorRecord] = []
     skipped = {"missing_prompt": 0, "missing_qr_target": 0, "non_generated": 0}
     legacy_configurations = 0
-    for trial_id, row in deduplicated.items():
+    for trial_id, row in logical_deduplicated.items():
         if str(row.get("status", "")).lower() in {"error", "queued", "running"}:
             skipped["non_generated"] += 1
             continue
@@ -307,6 +344,8 @@ def load_lab_exports(
         "source_files": source_files,
         "raw_rows": len(raw_rows),
         "deduplicated_rows": len(deduplicated),
+        "logical_deduplicated_rows": len(logical_deduplicated),
+        "logical_duplicates_removed": len(deduplicated) - len(logical_deduplicated),
         "usable_rows": len(records),
         "prompt_groups": len({record.group_id for record in records}),
         "recipes": len(candidates),

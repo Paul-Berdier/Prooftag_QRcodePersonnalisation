@@ -1,0 +1,191 @@
+{
+  "name": "E025 - QR-Verify + CLIP/HPS - all",
+  "payload": "https://ptag.io/t/e025",
+  "error_correction": "M",
+  "prompts": [
+    {
+      "id": "e022_simple_01_blue_vase",
+      "text": "A single cobalt blue ceramic vase holding one yellow tulip, centered on a warm cream background, soft window light, clean still-life photograph.",
+      "negative_prompt": "easynegative, text, letters, watermark, logo, signature, low quality, deformed geometry, duplicate objects"
+    },
+    {
+      "id": "e022_simple_02_red_rowboat",
+      "text": "A small red wooden rowboat floating alone on a perfectly calm misty lake, pale mountains in the distance, minimalist landscape photograph.",
+      "negative_prompt": "easynegative, text, letters, watermark, logo, signature, low quality, deformed geometry, duplicate objects"
+    },
+    {
+      "id": "e022_simple_03_sleeping_cat",
+      "text": "One orange cat curled asleep on a round moss-green cushion, plain light background, gentle children's-book illustration, simple composition.",
+      "negative_prompt": "easynegative, text, letters, watermark, logo, signature, low quality, deformed geometry, duplicate objects"
+    },
+    {
+      "id": "e022_simple_04_lighthouse",
+      "text": "A solitary white stone lighthouse beside a calm blue sea at sunrise, centered composition, clean vintage travel poster, no lettering.",
+      "negative_prompt": "easynegative, text, letters, watermark, logo, signature, low quality, deformed geometry, duplicate objects"
+    },
+    {
+      "id": "e022_simple_05_pear",
+      "text": "A single ripe golden pear on a dark wooden table, black background, soft studio light, restrained classical oil painting.",
+      "negative_prompt": "easynegative, text, letters, watermark, logo, signature, low quality, deformed geometry, duplicate objects"
+    },
+    {
+      "id": "e022_atypical_01_mycelium_cube",
+      "text": "A transparent glass cube containing a living bioluminescent mycelium circuit, cyan branching veins and tiny amber spores, dark laboratory, surreal macro photography.",
+      "negative_prompt": "easynegative, text, letters, watermark, logo, signature, low quality, deformed geometry, duplicate objects"
+    },
+    {
+      "id": "e022_atypical_02_ferrofluid_aurora",
+      "text": "A crown of black ferrofluid spikes levitating beneath a miniature aurora, iridescent magnetic reflections, frozen high-speed macro photograph.",
+      "negative_prompt": "easynegative, text, letters, watermark, logo, signature, low quality, deformed geometry, duplicate objects"
+    },
+    {
+      "id": "e022_atypical_03_mobius_opera",
+      "text": "An impossible brutalist opera house folded into a continuous Mobius strip, tiny spectators on concrete balconies, overcast architectural photography.",
+      "negative_prompt": "easynegative, text, letters, watermark, logo, signature, low quality, deformed geometry, duplicate objects"
+    },
+    {
+      "id": "e022_atypical_04_crystal_droplet",
+      "text": "A complete crystalline city refracted inside one suspended water droplet, prismatic towers, inverted horizon, extreme microscopy, shallow depth of field.",
+      "negative_prompt": "easynegative, text, letters, watermark, logo, signature, low quality, deformed geometry, duplicate objects"
+    },
+    {
+      "id": "e022_atypical_05_xray_koi",
+      "text": "An X-ray image of a mechanical koi fish whose bones are clockwork gears, swimming through translucent lotus roots, cyan radiograph on deep navy.",
+      "negative_prompt": "easynegative, text, letters, watermark, logo, signature, low quality, deformed geometry, duplicate objects"
+    }
+  ],
+  "seeds": [
+    61001
+  ],
+  "methods": [
+    {
+      "id": "diffqrcoder_srpg",
+      "name": "DiffQRCoder — Stage 2 SRPG",
+      "backend": "controlnet",
+      "enabled": true,
+      "output_variant": "srpg",
+      "reuse_stage1": true,
+      "generation": {
+        "steps": 40,
+        "guidance_scale": 7.5,
+        "controlnet_scale": 1.35,
+        "strength": 1.0
+      },
+      "model": {
+        "base_model_id": "https://huggingface.co/fp16-guy/Cetus-Mix_Whalefall_fp16_cleaned/blob/main/cetusMix_Whalefall2_fp16.safetensors",
+        "controlnet_model_id": "monster-labs/control_v1p_sd15_qrcode_monster",
+        "controlnet_model_subfolder": "v2",
+        "controlnet_conditioning_profile": "binary",
+        "controlnet_pipeline_mode": "text2img",
+        "diffqrcoder_upstream_enabled": true,
+        "diffqrcoder_revision": "e24ea73ee2e13c7e6e87cb422e8b11784e70ae00",
+        "diffqrcoder_qr_version": 3,
+        "diffqrcoder_qr_mask_pattern": 4,
+        "diffqrcoder_qr_module_size": 20,
+        "diffqrcoder_qr_padding_px": 78
+      },
+      "tools": {
+        "srpg_enabled": true,
+        "settings": {
+          "srpg_steps": 40,
+          "srpg_controlnet_scale": 1.35,
+          "srpg_qr_weight": 500.0,
+          "srpg_perceptual_weight": 2.0,
+          "srpg_eta": 0.0,
+          "srpg_seed_offset": 2000003,
+          "srpg_save_step_previews": true,
+          "srpg_preview_interval": 5,
+          "diffqrcoder_control_guidance_start": 0.0,
+          "diffqrcoder_control_guidance_end": 1.0,
+          "diffqrcoder_stage2_initialization": "paper_stage1_noise",
+          "diffqrcoder_stage2_strength": 0.65,
+          "diffqrcoder_stage2_target_mode": "binary_exact",
+          "diffqrcoder_qart_thresholds": [
+            96,
+            112,
+            128,
+            144,
+            160
+          ],
+          "diffqrcoder_guard_max_changed_pixel_ratio": 0.995,
+          "diffqrcoder_guard_max_mean_absolute_change": 0.35,
+          "diffqrcoder_guard_max_clipped_pixel_ratio_increase": 0.05,
+          "diffqrcoder_guard_max_rgb_clipped_channel_ratio_increase": 0.02,
+          "diffqrcoder_guard_max_saturation_mean_increase": 0.08,
+          "diffqrcoder_guard_max_high_saturation_ratio_increase": 0.05,
+          "diffqrcoder_guard_hard_max_mean_absolute_change": 0.4,
+          "diffqrcoder_guard_hard_max_clipped_pixel_ratio_increase": 0.2,
+          "diffqrcoder_guard_hard_max_rgb_clipped_channel_ratio_increase": 0.25,
+          "diffqrcoder_guard_hard_max_saturation_mean_increase": 0.2,
+          "diffqrcoder_guard_hard_max_high_saturation_ratio_increase": 0.3
+        }
+      },
+      "description": "Recette principale mesurée : cible binaire exacte, Stage 1 partiellement bruité à 65 %, puis SRPG."
+    },
+    {
+      "id": "diffqrcoder_paper_srpg",
+      "name": "DiffQRCoder — Stage 2 protocole PDF",
+      "backend": "controlnet",
+      "enabled": true,
+      "output_variant": "srpg",
+      "reuse_stage1": true,
+      "generation": {
+        "steps": 40,
+        "guidance_scale": 7.5,
+        "controlnet_scale": 1.35,
+        "strength": 1.0
+      },
+      "model": {
+        "base_model_id": "https://huggingface.co/fp16-guy/Cetus-Mix_Whalefall_fp16_cleaned/blob/main/cetusMix_Whalefall2_fp16.safetensors",
+        "controlnet_model_id": "monster-labs/control_v1p_sd15_qrcode_monster",
+        "controlnet_model_subfolder": "v2",
+        "controlnet_conditioning_profile": "binary",
+        "controlnet_pipeline_mode": "text2img",
+        "diffqrcoder_upstream_enabled": true,
+        "diffqrcoder_revision": "e24ea73ee2e13c7e6e87cb422e8b11784e70ae00",
+        "diffqrcoder_qr_version": 3,
+        "diffqrcoder_qr_mask_pattern": 4,
+        "diffqrcoder_qr_module_size": 20,
+        "diffqrcoder_qr_padding_px": 78
+      },
+      "tools": {
+        "srpg_enabled": true,
+        "settings": {
+          "srpg_steps": 40,
+          "srpg_controlnet_scale": 1.35,
+          "srpg_qr_weight": 500.0,
+          "srpg_perceptual_weight": 3.0,
+          "srpg_eta": 0.0,
+          "srpg_seed_offset": 2000003,
+          "srpg_save_step_previews": true,
+          "srpg_preview_interval": 5,
+          "diffqrcoder_control_guidance_start": 0.0,
+          "diffqrcoder_control_guidance_end": 1.0,
+          "diffqrcoder_stage2_initialization": "paper_stage1_noise",
+          "diffqrcoder_stage2_strength": 1.0,
+          "diffqrcoder_stage2_target_mode": "qart_url_fragment",
+          "diffqrcoder_qart_thresholds": [
+            96,
+            112,
+            128,
+            144,
+            160
+          ],
+          "diffqrcoder_guard_max_changed_pixel_ratio": 0.995,
+          "diffqrcoder_guard_max_mean_absolute_change": 0.35,
+          "diffqrcoder_guard_max_clipped_pixel_ratio_increase": 0.05,
+          "diffqrcoder_guard_max_rgb_clipped_channel_ratio_increase": 0.02,
+          "diffqrcoder_guard_max_saturation_mean_increase": 0.08,
+          "diffqrcoder_guard_max_high_saturation_ratio_increase": 0.05,
+          "diffqrcoder_guard_hard_max_mean_absolute_change": 0.4,
+          "diffqrcoder_guard_hard_max_clipped_pixel_ratio_increase": 0.2,
+          "diffqrcoder_guard_hard_max_rgb_clipped_channel_ratio_increase": 0.25,
+          "diffqrcoder_guard_hard_max_saturation_mean_increase": 0.2,
+          "diffqrcoder_guard_hard_max_high_saturation_ratio_increase": 0.3
+        }
+      },
+      "description": "E022 : approximation publique du protocole PDF. Le même Stage 1 est entièrement rebruité, les 40 pas Stage 2 sont exécutés, PG λ2=3 et la cible vient du QArt public à fragment d'URL. Ce QArt n'est pas le constructeur privé des auteurs."
+    }
+  ],
+  "max_attempts": 1
+}

@@ -1,0 +1,305 @@
+{
+  "name": "E020 — SR-MPGD officiel vs loss robuste",
+  "payload": "https://ptag.io/t/e020",
+  "error_correction": "M",
+  "prompts": [
+    {
+      "id": "courtyard",
+      "text": "A Mediterranean courtyard with blue tiles, lemon trees and a stone fountain, warm editorial photograph.",
+      "negative_prompt": "easynegative"
+    }
+  ],
+  "seeds": [
+    51001
+  ],
+  "methods": [
+    {
+      "id": "qr_reference",
+      "name": "QR témoin",
+      "backend": "qr",
+      "enabled": true,
+      "output_variant": "raw",
+      "reuse_stage1": false,
+      "generation": {
+        "steps": 1,
+        "guidance_scale": 0,
+        "controlnet_scale": 0,
+        "strength": 1
+      },
+      "model": {},
+      "tools": {
+        "settings": {}
+      },
+      "description": "QR binaire exact, sans diffusion. Contrôle des décodeurs."
+    },
+    {
+      "id": "diffqrcoder_stage1",
+      "name": "DiffQRCoder — Stage 1",
+      "backend": "controlnet",
+      "enabled": true,
+      "output_variant": "raw",
+      "reuse_stage1": true,
+      "generation": {
+        "steps": 40,
+        "guidance_scale": 7.5,
+        "controlnet_scale": 1.35,
+        "strength": 1.0
+      },
+      "model": {
+        "base_model_id": "https://huggingface.co/fp16-guy/Cetus-Mix_Whalefall_fp16_cleaned/blob/main/cetusMix_Whalefall2_fp16.safetensors",
+        "controlnet_model_id": "monster-labs/control_v1p_sd15_qrcode_monster",
+        "controlnet_model_subfolder": "v2",
+        "controlnet_conditioning_profile": "binary",
+        "controlnet_pipeline_mode": "text2img",
+        "diffqrcoder_upstream_enabled": true,
+        "diffqrcoder_revision": "e24ea73ee2e13c7e6e87cb422e8b11784e70ae00",
+        "diffqrcoder_qr_version": 3,
+        "diffqrcoder_qr_mask_pattern": 4,
+        "diffqrcoder_qr_module_size": 20,
+        "diffqrcoder_qr_padding_px": 78
+      },
+      "tools": {
+        "settings": {}
+      },
+      "description": "Cetus-Mix Whalefall + QR Monster v2, sortie Stage 1 brute."
+    },
+    {
+      "id": "diffqrcoder_srpg",
+      "name": "DiffQRCoder — Stage 2 SRPG",
+      "backend": "controlnet",
+      "enabled": true,
+      "output_variant": "srpg",
+      "reuse_stage1": true,
+      "generation": {
+        "steps": 40,
+        "guidance_scale": 7.5,
+        "controlnet_scale": 1.35,
+        "strength": 1.0
+      },
+      "model": {
+        "base_model_id": "https://huggingface.co/fp16-guy/Cetus-Mix_Whalefall_fp16_cleaned/blob/main/cetusMix_Whalefall2_fp16.safetensors",
+        "controlnet_model_id": "monster-labs/control_v1p_sd15_qrcode_monster",
+        "controlnet_model_subfolder": "v2",
+        "controlnet_conditioning_profile": "binary",
+        "controlnet_pipeline_mode": "text2img",
+        "diffqrcoder_upstream_enabled": true,
+        "diffqrcoder_revision": "e24ea73ee2e13c7e6e87cb422e8b11784e70ae00",
+        "diffqrcoder_qr_version": 3,
+        "diffqrcoder_qr_mask_pattern": 4,
+        "diffqrcoder_qr_module_size": 20,
+        "diffqrcoder_qr_padding_px": 78
+      },
+      "tools": {
+        "srpg_enabled": true,
+        "settings": {
+          "srpg_steps": 40,
+          "srpg_controlnet_scale": 1.35,
+          "srpg_qr_weight": 500.0,
+          "srpg_perceptual_weight": 2.0,
+          "srpg_eta": 0.0,
+          "srpg_seed_offset": 2000003,
+          "srpg_save_step_previews": true,
+          "srpg_preview_interval": 5,
+          "diffqrcoder_control_guidance_start": 0.0,
+          "diffqrcoder_control_guidance_end": 1.0,
+          "diffqrcoder_stage2_initialization": "paper_stage1_noise",
+          "diffqrcoder_stage2_strength": 0.65,
+          "diffqrcoder_stage2_target_mode": "binary_exact",
+          "diffqrcoder_qart_thresholds": [
+            96,
+            112,
+            128,
+            144,
+            160
+          ],
+          "diffqrcoder_guard_max_changed_pixel_ratio": 0.995,
+          "diffqrcoder_guard_max_mean_absolute_change": 0.35,
+          "diffqrcoder_guard_max_clipped_pixel_ratio_increase": 0.05,
+          "diffqrcoder_guard_max_rgb_clipped_channel_ratio_increase": 0.02,
+          "diffqrcoder_guard_max_saturation_mean_increase": 0.08,
+          "diffqrcoder_guard_max_high_saturation_ratio_increase": 0.05,
+          "diffqrcoder_guard_hard_max_mean_absolute_change": 0.4,
+          "diffqrcoder_guard_hard_max_clipped_pixel_ratio_increase": 0.2,
+          "diffqrcoder_guard_hard_max_rgb_clipped_channel_ratio_increase": 0.25,
+          "diffqrcoder_guard_hard_max_saturation_mean_increase": 0.2,
+          "diffqrcoder_guard_hard_max_high_saturation_ratio_increase": 0.3
+        }
+      },
+      "description": "Recette principale mesurée : cible binaire exacte, Stage 1 partiellement bruité à 65 %, puis SRPG."
+    },
+    {
+      "id": "diffqrcoder_srmpgd",
+      "name": "DiffQRCoder — Stage 2 + SR-MPGD",
+      "backend": "controlnet",
+      "enabled": true,
+      "output_variant": "srmpgd",
+      "reuse_stage1": true,
+      "generation": {
+        "steps": 40,
+        "guidance_scale": 7.5,
+        "controlnet_scale": 1.35,
+        "strength": 1.0
+      },
+      "model": {
+        "base_model_id": "https://huggingface.co/fp16-guy/Cetus-Mix_Whalefall_fp16_cleaned/blob/main/cetusMix_Whalefall2_fp16.safetensors",
+        "controlnet_model_id": "monster-labs/control_v1p_sd15_qrcode_monster",
+        "controlnet_model_subfolder": "v2",
+        "controlnet_conditioning_profile": "binary",
+        "controlnet_pipeline_mode": "text2img",
+        "diffqrcoder_upstream_enabled": true,
+        "diffqrcoder_revision": "e24ea73ee2e13c7e6e87cb422e8b11784e70ae00",
+        "diffqrcoder_qr_version": 3,
+        "diffqrcoder_qr_mask_pattern": 4,
+        "diffqrcoder_qr_module_size": 20,
+        "diffqrcoder_qr_padding_px": 78
+      },
+      "tools": {
+        "srpg_enabled": true,
+        "srmpgd_enabled": true,
+        "settings": {
+          "srpg_steps": 40,
+          "srpg_controlnet_scale": 1.35,
+          "srpg_qr_weight": 500.0,
+          "srpg_perceptual_weight": 2.0,
+          "srpg_eta": 0.0,
+          "srpg_seed_offset": 2000003,
+          "srpg_save_step_previews": true,
+          "srpg_preview_interval": 5,
+          "diffqrcoder_control_guidance_start": 0.0,
+          "diffqrcoder_control_guidance_end": 1.0,
+          "diffqrcoder_stage2_initialization": "paper_stage1_noise",
+          "diffqrcoder_stage2_strength": 0.65,
+          "diffqrcoder_stage2_target_mode": "binary_exact",
+          "diffqrcoder_qart_thresholds": [
+            96,
+            112,
+            128,
+            144,
+            160
+          ],
+          "diffqrcoder_guard_max_changed_pixel_ratio": 0.995,
+          "diffqrcoder_guard_max_mean_absolute_change": 0.35,
+          "diffqrcoder_guard_max_clipped_pixel_ratio_increase": 0.05,
+          "diffqrcoder_guard_max_rgb_clipped_channel_ratio_increase": 0.02,
+          "diffqrcoder_guard_max_saturation_mean_increase": 0.08,
+          "diffqrcoder_guard_max_high_saturation_ratio_increase": 0.05,
+          "diffqrcoder_guard_hard_max_mean_absolute_change": 0.4,
+          "diffqrcoder_guard_hard_max_clipped_pixel_ratio_increase": 0.2,
+          "diffqrcoder_guard_hard_max_rgb_clipped_channel_ratio_increase": 0.25,
+          "diffqrcoder_guard_hard_max_saturation_mean_increase": 0.2,
+          "diffqrcoder_guard_hard_max_high_saturation_ratio_increase": 0.3,
+          "srmpgd_max_iterations": 4,
+          "srmpgd_step_size": 100.0,
+          "srmpgd_lpips_weight": 0.1,
+          "srmpgd_lpips_net": "vgg",
+          "srmpgd_crop_padding_px": 78,
+          "srmpgd_dark_threshold": 0.45,
+          "srmpgd_light_threshold": 0.65,
+          "srmpgd_center_fraction": 0.3333333333333333,
+          "srmpgd_max_initial_module_error_rate": 0.12,
+          "srmpgd_max_step_rms": 0.02,
+          "srmpgd_max_total_delta_rms": 0.06,
+          "srmpgd_min_relative_module_improvement": 0.01,
+          "srmpgd_max_lpips_loss": 0.15,
+          "srmpgd_max_mean_absolute_change": 0.06,
+          "srmpgd_max_saturation_mean_increase": 0.04,
+          "srmpgd_max_high_saturation_ratio_increase": 0.05,
+          "srmpgd_max_rgb_clipped_channel_ratio_increase": 0.01
+        }
+      },
+      "description": "E019 : latent SRPG strictement apparié, 4 itérations, gamma 100, LPIPS 0,10, pas latent borné et rejet des états tachés ou saturés."
+    },
+    {
+      "id": "diffqrcoder_srmpgd_robust",
+      "name": "E020 — SR-MPGD robuste",
+      "backend": "controlnet",
+      "enabled": true,
+      "output_variant": "srmpgd",
+      "reuse_stage1": true,
+      "generation": {
+        "steps": 40,
+        "guidance_scale": 7.5,
+        "controlnet_scale": 1.35,
+        "strength": 1.0
+      },
+      "model": {
+        "base_model_id": "https://huggingface.co/fp16-guy/Cetus-Mix_Whalefall_fp16_cleaned/blob/main/cetusMix_Whalefall2_fp16.safetensors",
+        "controlnet_model_id": "monster-labs/control_v1p_sd15_qrcode_monster",
+        "controlnet_model_subfolder": "v2",
+        "controlnet_conditioning_profile": "binary",
+        "controlnet_pipeline_mode": "text2img",
+        "diffqrcoder_upstream_enabled": true,
+        "diffqrcoder_revision": "e24ea73ee2e13c7e6e87cb422e8b11784e70ae00",
+        "diffqrcoder_qr_version": 3,
+        "diffqrcoder_qr_mask_pattern": 4,
+        "diffqrcoder_qr_module_size": 20,
+        "diffqrcoder_qr_padding_px": 78
+      },
+      "tools": {
+        "srpg_enabled": true,
+        "srmpgd_enabled": true,
+        "settings": {
+          "srpg_steps": 40,
+          "srpg_controlnet_scale": 1.35,
+          "srpg_qr_weight": 500.0,
+          "srpg_perceptual_weight": 2.0,
+          "srpg_eta": 0.0,
+          "srpg_seed_offset": 2000003,
+          "srpg_save_step_previews": true,
+          "srpg_preview_interval": 5,
+          "diffqrcoder_control_guidance_start": 0.0,
+          "diffqrcoder_control_guidance_end": 1.0,
+          "diffqrcoder_stage2_initialization": "paper_stage1_noise",
+          "diffqrcoder_stage2_strength": 0.65,
+          "diffqrcoder_stage2_target_mode": "binary_exact",
+          "diffqrcoder_qart_thresholds": [
+            96,
+            112,
+            128,
+            144,
+            160
+          ],
+          "diffqrcoder_guard_max_changed_pixel_ratio": 0.995,
+          "diffqrcoder_guard_max_mean_absolute_change": 0.35,
+          "diffqrcoder_guard_max_clipped_pixel_ratio_increase": 0.05,
+          "diffqrcoder_guard_max_rgb_clipped_channel_ratio_increase": 0.02,
+          "diffqrcoder_guard_max_saturation_mean_increase": 0.08,
+          "diffqrcoder_guard_max_high_saturation_ratio_increase": 0.05,
+          "diffqrcoder_guard_hard_max_mean_absolute_change": 0.4,
+          "diffqrcoder_guard_hard_max_clipped_pixel_ratio_increase": 0.2,
+          "diffqrcoder_guard_hard_max_rgb_clipped_channel_ratio_increase": 0.25,
+          "diffqrcoder_guard_hard_max_saturation_mean_increase": 0.2,
+          "diffqrcoder_guard_hard_max_high_saturation_ratio_increase": 0.3,
+          "srmpgd_max_iterations": 4,
+          "srmpgd_step_size": 100.0,
+          "srmpgd_lpips_weight": 0.1,
+          "srmpgd_lpips_net": "vgg",
+          "srmpgd_crop_padding_px": 78,
+          "srmpgd_dark_threshold": 0.45,
+          "srmpgd_light_threshold": 0.65,
+          "srmpgd_center_fraction": 0.3333333333333333,
+          "srmpgd_max_initial_module_error_rate": 0.12,
+          "srmpgd_max_step_rms": 0.02,
+          "srmpgd_max_total_delta_rms": 0.06,
+          "srmpgd_min_relative_module_improvement": 0.01,
+          "srmpgd_max_lpips_loss": 0.15,
+          "srmpgd_max_mean_absolute_change": 0.06,
+          "srmpgd_max_saturation_mean_increase": 0.04,
+          "srmpgd_max_high_saturation_ratio_increase": 0.05,
+          "srmpgd_max_rgb_clipped_channel_ratio_increase": 0.01,
+          "srmpgd_robust_blur_weight": 1.0,
+          "srmpgd_robust_blur_kernel": 3,
+          "srmpgd_robust_downscale_weight": 1.0,
+          "srmpgd_robust_downscale_factor": 0.75,
+          "srmpgd_robust_brightness_weight": 0.5,
+          "srmpgd_robust_brightness_low": 0.8,
+          "srmpgd_robust_brightness_high": 1.2,
+          "srmpgd_robust_contrast_weight": 1.0,
+          "srmpgd_robust_contrast_factor": 0.75
+        }
+      },
+      "description": "E020 : même latent SRPG et mêmes gardes que le témoin E019, mais la loss officielle est moyennée avec flou, réduction, luminosité et contraste différentiables."
+    }
+  ],
+  "max_attempts": 1
+}

@@ -363,6 +363,42 @@ class WeekCampaignRunner:
         except Exception as exc:  # pragma: no cover - notebook display is best effort
             print(f"Progress callback failed: {type(exc).__name__}: {exc}")
 
+    def _acquire_runner_lock(self):
+        lock_path = self.output_dir / "runner.lock"
+        handle = lock_path.open("a+", encoding="utf-8")
+        if os.name != "nt":
+            import fcntl
+
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                handle.close()
+                raise RuntimeError(
+                    f"another E026 runner already owns plan {self.plan_id}; "
+                    "do not run the notebook and Kubernetes Job concurrently"
+                ) from exc
+        handle.seek(0)
+        handle.truncate()
+        handle.write(
+            json.dumps(
+                {
+                    "plan_id": self.plan_id,
+                    "pid": os.getpid(),
+                    "acquired_at": datetime.now(UTC).isoformat(),
+                }
+            )
+        )
+        handle.flush()
+        return handle
+
+    @staticmethod
+    def _release_runner_lock(handle) -> None:
+        if os.name != "nt":
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        handle.close()
+
     def _load_state(self) -> dict[str, Any]:
         if self.state_path.exists():
             state = json.loads(self.state_path.read_text(encoding="utf-8"))
@@ -614,6 +650,7 @@ class WeekCampaignRunner:
         self._save_state()
 
     def run(self) -> int:
+        runner_lock = self._acquire_runner_lock()
         signal.signal(signal.SIGTERM, self.request_stop)
         signal.signal(signal.SIGINT, self.request_stop)
         print(
@@ -692,6 +729,7 @@ class WeekCampaignRunner:
         finally:
             if self.stop_requested:
                 self._cancel_active()
+            self._release_runner_lock(runner_lock)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

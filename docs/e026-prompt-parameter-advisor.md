@@ -96,6 +96,14 @@ exports persistants, appliquent la porte scientifique puis entraînent le modèl
 identifiable. Le runner autonome en Job reste disponible comme seconde interface et est décrit
 dans [`e026-week-unattended.md`](e026-week-unattended.md).
 
+Après une coupure électrique, le notebook interroge aussi PostgreSQL par l'API, réexporte toutes
+les campagnes terminales du même hash de payload dans `exports-recovered`, puis déduplique les
+reprises par `(payload, prompt, configuration, seed, ECC)`. Une campagne rejouée ne peut donc pas
+surpondérer artificiellement sa recette dans le modèle.
+
+L'incident réel et les chiffres de récupération du 17 août 2026 sont consignés dans
+[`e026-power-recovery-2026-08-17.md`](e026-power-recovery-2026-08-17.md).
+
 Les scores CLIP/HPS doivent être activés durant la génération. Un recalcul E025 reste possible
 pour les campagnes dont les images sont encore présentes.
 

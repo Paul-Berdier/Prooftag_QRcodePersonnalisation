@@ -694,6 +694,8 @@ def test_e026_notebook_uses_qr_verify_as_a_calibrated_first_objective():
     assert "COLLECTION_PROMPT_COUNT = 300" in source
     assert "progress_callback=collection_progress" in source
     assert "notebook-progress.jsonl" in source
+    assert "recover_e026_exports" in source
+    assert "exports-recovered" in source
     assert "les lots terminés sont ignorés" in source
     assert "/data/e026-week/*/exports/*.csv" in source
     assert "3 exploitation + 3 maximum uncertainty" in source

@@ -92,6 +92,26 @@ def test_e026_loads_exports_without_using_output_metrics_as_features(tmp_path):
     assert "quality_clip_aesthetic" not in record.context_features
 
 
+def test_e026_collapses_logical_duplicates_created_by_campaign_retries(tmp_path):
+    export = tmp_path / "campaign.csv"
+    _write_training_export(export)
+    with export.open("r", encoding="utf-8", newline="") as stream:
+        rows = list(csv.DictReader(stream))
+        fields = list(rows[0])
+    duplicate = dict(rows[0])
+    duplicate["trial_id"] = "retry-with-a-new-trial-id"
+    with export.open("a", encoding="utf-8", newline="") as stream:
+        csv.DictWriter(stream, fieldnames=fields).writerow(duplicate)
+
+    dataset = load_lab_exports([export])
+
+    assert dataset.audit["raw_rows"] == 121
+    assert dataset.audit["deduplicated_rows"] == 121
+    assert dataset.audit["logical_deduplicated_rows"] == 120
+    assert dataset.audit["logical_duplicates_removed"] == 1
+    assert dataset.audit["usable_rows"] == 120
+
+
 def test_e026_grouped_model_keeps_scan_as_a_hard_first_objective(tmp_path):
     export = tmp_path / "campaign.csv"
     _write_training_export(export)

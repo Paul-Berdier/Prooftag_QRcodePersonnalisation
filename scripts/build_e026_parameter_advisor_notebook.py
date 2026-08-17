@@ -100,6 +100,7 @@ for candidate in [Path('/app'), Path.cwd(), Path.cwd().parent]:
     if (candidate / 'prooftag_qr').is_dir() and str(candidate) not in sys.path:
         sys.path.insert(0, str(candidate))
 
+from prooftag_qr.e026_recovery import recover_e026_exports
 from prooftag_qr.parameter_advisor import E026ParameterAdvisor, load_lab_exports
 from prooftag_qr.quality_scoring import CLIPQualityScorer, project_embedding
 from prooftag_qr.week_campaign import WeekCampaignRunner, build_week_batches
@@ -115,6 +116,7 @@ INPUT_GLOBS = [
     '/workspace/imports/prooftag-lab-*.csv',
     '/data/e026-input/prooftag-lab-*.csv',
     '/data/e026-week/*/exports/*.csv',
+    '/data/e026-week/*/exports-recovered/*.csv',
 ]
 LEGACY_PROMPT_CATALOG = {
     # 'ancien_prompt_id': 'Texte exact du prompt ancien',
@@ -286,7 +288,16 @@ et en recommandation.
 """
     ),
     code(
-        """csv_paths = sorted({path for pattern in INPUT_GLOBS for path in glob.glob(pattern)})
+        """recovery_summary = None
+if RUN_COLLECTION and runner.plan_path.exists():
+    recovery_summary = recover_e026_exports(
+        api_url=COLLECTION_API_URL,
+        plan_dir=runner.output_dir,
+    )
+    display(Markdown('### Récupération PostgreSQL après interruption'))
+    display(pd.DataFrame([recovery_summary]))
+
+csv_paths = sorted({path for pattern in INPUT_GLOBS for path in glob.glob(pattern)})
 print('CSV trouvés :', len(csv_paths))
 for path in csv_paths:
     print('-', path)
