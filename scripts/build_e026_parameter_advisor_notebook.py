@@ -94,6 +94,7 @@ from urllib.request import urlopen
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from IPython.display import Image as NotebookImage
 from IPython.display import Markdown, clear_output, display
 
 for candidate in [Path('/app'), Path.cwd(), Path.cwd().parent]:
@@ -101,6 +102,12 @@ for candidate in [Path('/app'), Path.cwd(), Path.cwd().parent]:
         sys.path.insert(0, str(candidate))
 
 from prooftag_qr.e026_recovery import recover_e026_exports
+from prooftag_qr.advisor_gallery import (
+    download_advisor_gallery,
+    render_advisor_contact_sheet,
+    select_advisor_gallery,
+    write_gallery_index,
+)
 from prooftag_qr.parameter_advisor import E026ParameterAdvisor, load_lab_exports
 from prooftag_qr.quality_scoring import CLIPQualityScorer, project_embedding
 from prooftag_qr.week_campaign import WeekCampaignRunner, build_week_batches
@@ -129,6 +136,17 @@ MINIMUM_CLASS_COUNT = 12
 SCAN_PROBABILITY_THRESHOLD = 0.80
 TOP_K = 6
 PROMPT_EMBEDDING_DIMENSIONS = 32
+
+# Rapport visuel inclus dans l'archive. La comparaison emploie le même seed.
+GALLERY_COMPARISON_METHODS = (
+    'diffqrcoder_stage1',
+    'diffqrcoder_srpg',
+    'diffqrcoder_srmpgd_robust',
+    'e026w_srpg_q250_pg1',
+)
+GALLERY_PROMPT_COUNT = 8
+GALLERY_SECTION_SIZE = 8
+GALLERY_SEED = 113001
 
 # À modifier après entraînement pour obtenir une recommandation.
 NEW_PROMPT = 'A cobalt glass greenhouse filled with white orchids, elegant editorial photograph.'
@@ -351,6 +369,8 @@ if dataset is not None:
             'prompt_id': record.prompt_id,
             'prompt_text': record.prompt_text,
             'method_id': record.metadata.get('method_id'),
+            'seed': record.metadata.get('seed'),
+            'generation_run_id': record.metadata.get('generation_run_id'),
             **record.targets,
         }
         for record in dataset.records
@@ -442,7 +462,72 @@ else:
     print('Graphiques indisponibles : aucun modèle entraîné.')
 """
     ),
-    markdown("## 8. Recommander les paramètres pour un nouveau prompt"),
+    markdown(
+        """## 8. Rapport visuel des QR générés
+
+Le rapport ne choisit pas seulement les jolies images. Il contient quatre vues complémentaires :
+
+- comparaison appariée des quatre recettes principales sur les mêmes prompts et le même seed ;
+- meilleurs QR à la fois scannables et esthétiques ;
+- images esthétiques qui échouent à QR-Verify ;
+- cas proches de la frontière de décision du conseiller.
+
+Les PNG individuels, les planches contact et un index CSV sont inclus dans l'archive finale.
+Une image ancienne supprimée du stockage apparaît comme `IMAGE INDISPONIBLE`, sans interrompre
+l'entraînement.
+"""
+    ),
+    code(
+        """gallery_entries = []
+gallery_paths = []
+gallery_dir = RUN_DIR / 'visual-gallery'
+if advisor is not None:
+    selected_gallery = select_advisor_gallery(
+        dataset.records,
+        validation_predictions=advisor.validation_predictions,
+        comparison_method_ids=GALLERY_COMPARISON_METHODS,
+        comparison_prompt_count=GALLERY_PROMPT_COUNT,
+        preferred_seed=GALLERY_SEED,
+        section_size=GALLERY_SECTION_SIZE,
+    )
+    gallery_entries = download_advisor_gallery(
+        selected_gallery,
+        api_url=COLLECTION_API_URL,
+        output_dir=gallery_dir / 'images',
+        timeout=30,
+    )
+    write_gallery_index(gallery_entries, gallery_dir)
+    section_titles = {
+        'comparison': 'Comparaison appariée - mêmes prompts et seed',
+        'best_scannable': 'Meilleurs QR scannables et esthétiques',
+        'aesthetic_failures': 'Beaux candidats qui échouent à QR-Verify',
+        'uncertain': 'Cas incertains pour le conseiller',
+    }
+    for section, title in section_titles.items():
+        section_entries = [
+            entry for entry in gallery_entries if entry['section'] == section
+        ]
+        if not section_entries:
+            continue
+        sheet_path = render_advisor_contact_sheet(
+            section_entries,
+            title=title,
+            output_path=gallery_dir / f'{section}.png',
+            columns=len(GALLERY_COMPARISON_METHODS) if section == 'comparison' else 4,
+        )
+        gallery_paths.append(sheet_path)
+        display(Markdown(f'### {title}'))
+        display(NotebookImage(filename=str(sheet_path)))
+    gallery_audit = json.loads(
+        (gallery_dir / 'gallery-audit.json').read_text(encoding='utf-8')
+    )
+    display(pd.DataFrame([gallery_audit]))
+else:
+    gallery_audit = None
+    print('Galerie indisponible : aucun modèle entraîné.')
+"""
+    ),
+    markdown("## 9. Recommander les paramètres pour un nouveau prompt"),
     code(
         """recommendations = []
 if advisor is not None:
@@ -505,7 +590,7 @@ else:
 """
     ),
     markdown(
-        """## 9. Lot d'apprentissage actif
+        """## 10. Lot d'apprentissage actif
 
 Le prochain lot mélange exploitation et exploration : trois recettes au meilleur compromis sûr,
 puis trois recettes très incertaines. Cela évite de répéter uniquement les configurations déjà
@@ -551,7 +636,7 @@ connues et améliore progressivement le modèle.
     ]))
 """
     ),
-    markdown("## 10. Manifest, limites et archive"),
+    markdown("## 11. Manifest, limites et archive"),
     code(
         """manifest = {
     'experiment': EXPERIMENT_NAME,
@@ -560,6 +645,7 @@ connues et améliore progressivement le modèle.
     'dataset_audit': dataset.audit if dataset is not None else None,
     'data_ready': DATA_READY,
     'training_report': training_report,
+    'visual_gallery': gallery_audit,
     'objective_order': [
         'qr_verify_probability_lower_bound',
         'qr_verify_probability',
@@ -578,6 +664,7 @@ connues et améliore progressivement le modèle.
         'Tree dispersion is a heuristic epistemic uncertainty, not a formal guarantee.',
         'CLIP-Aesthetic, CLIPScore and HPS are proxies; human ratings remain valuable labels.',
         'Seeds are sampled at generation time, not treated as a numerically predictable parameter.',
+        'Gallery images depend on generation artifacts still being present in the API storage.',
     ],
 }
 (RUN_DIR / 'manifest.json').write_text(
@@ -591,6 +678,7 @@ download_archive = shutil.copy2(archive, DOWNLOAD_DIR / Path(archive).name)
 print('Archive :', archive)
 print('Archive téléchargeable dans Jupyter :', download_archive)
 print('Modèle entraîné :', bool(advisor))
+print('Planches visuelles :', [str(path) for path in gallery_paths])
 print('La prochaine décision de livraison reste une validation réelle QR-Verify.')
 """
     ),

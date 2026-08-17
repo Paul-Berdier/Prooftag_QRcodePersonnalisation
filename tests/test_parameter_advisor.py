@@ -16,6 +16,7 @@ def _write_training_export(path: Path, prompts: int = 12) -> None:
         "prompt_text",
         "method_id",
         "method_configuration_json",
+        "generation_run_id",
         "payload_length",
         "error_correction",
         "status",
@@ -59,6 +60,7 @@ def _write_training_export(path: Path, prompts: int = 12) -> None:
                             "prompt_text": f"Unseen visual prompt number {prompt_index}",
                             "method_id": method_id,
                             "method_configuration_json": json.dumps(configuration),
+                            "generation_run_id": f"run-p{prompt_index}-{repeat}-{method_id}",
                             "payload_length": 24,
                             "error_correction": "M",
                             "status": "accepted" if success else "rejected",
@@ -90,6 +92,7 @@ def test_e026_loads_exports_without_using_output_metrics_as_features(tmp_path):
     assert "qr_success" in record.targets
     assert "quality_qr_verify_any_exact" not in record.context_features
     assert "quality_clip_aesthetic" not in record.context_features
+    assert record.metadata["generation_run_id"].startswith("run-")
 
 
 def test_e026_collapses_logical_duplicates_created_by_campaign_retries(tmp_path):

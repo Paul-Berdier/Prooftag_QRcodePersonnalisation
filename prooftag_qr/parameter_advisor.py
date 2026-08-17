@@ -315,6 +315,7 @@ def load_lab_exports(
                     "campaign_id": row.get("campaign_id"),
                     "method_id": row.get("method_id"),
                     "seed": _float(row.get("seed")),
+                    "generation_run_id": row.get("generation_run_id"),
                     "source_file": row.get("_source_file"),
                 },
             )

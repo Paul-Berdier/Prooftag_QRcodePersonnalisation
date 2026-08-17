@@ -700,6 +700,12 @@ def test_e026_notebook_uses_qr_verify_as_a_calibrated_first_objective():
     assert "/data/e026-week/*/exports/*.csv" in source
     assert "3 exploitation + 3 maximum uncertainty" in source
     assert "prooftag-e026-parameter-advisor.joblib" in source
+    assert "select_advisor_gallery" in source
+    assert "visual-gallery" in source
+    assert "GALLERY_COMPARISON_METHODS" in source
+    assert "gallery-index.csv" in Path("prooftag_qr/advisor_gallery.py").read_text(
+        encoding="utf-8"
+    )
     assert "21_e026_prompt_parameter_advisor.ipynb" in launcher
     assert "21_e026_prompt_parameter_advisor.ipynb" in deployer
     assert '--build-arg "EXPECTED_NOTEBOOK=${expected_notebook}"' in deployer
