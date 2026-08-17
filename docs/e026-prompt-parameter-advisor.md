@@ -211,6 +211,29 @@ SRPG avant SR-MPGD, puis compte toute mesure manquante comme un échec technique
 principal. Son changement de protocole produit un nouvel identifiant de plan ; une relance ne peut
 donc pas réutiliser l'état v1 incomplet.
 
+### E026J — diversité effective et SR-MPGD adaptatif
+
+L'archive E026I v2 complète a ensuite montré 90 recommandations QR-Verify valides, mais seulement
+45 images uniques. Les 75 essais SR-MPGD avaient tous retenu l'itération zéro : le succès provenait
+du Stage 2 SRPG, tandis que plusieurs valeurs de gamma étaient présentées à tort comme des choix
+indépendants.
+
+Le protocole `e026j-v1-diversified-adaptive-srmpgd` impose maintenant :
+
+- une signature effective calculée avant SR-MPGD, sans gamma, LPIPS ni nombre d'itérations ;
+- au plus une recette par Stage 2 effectif dans le top-3 ;
+- trois objectifs explicites : `robust`, `balanced` et `aesthetic_scannable` ;
+- une sortie `auto` pour une recette SR-MPGD : si l'optimisation conserve l'itération zéro, la
+  variante réellement publiée est `srpg` ;
+- une porte QR-Verify à `0,80` : SR-MPGD ne calcule des pas que si SRPG échoue ou si sa tolérance
+  reste sous ce seuil ;
+- une seconde déduplication par SHA-256 des PNG après génération ;
+- un audit séparé des SR-MPGD demandés, réellement actifs et sans effet.
+
+La collecte hebdomadaire existante n'est pas relancée par défaut. Le notebook recharge ses CSV,
+réentraîne le conseiller et exécute uniquement le nouveau plan d'inférence dans
+`/data/e026j-inference/<plan-id>`.
+
 ## Artefacts
 
 Chaque exécution écrit dans `/data/notebook-runs/<date>-e026-...` :
@@ -225,7 +248,8 @@ Chaque exécution écrit dans `/data/notebook-runs/<date>-e026-...` :
 - `recommendations.csv` et `recommendations.json` ;
 - `advisor-inference-results.csv` et `advisor-inference-aggregate.csv` ;
 - `advisor-inference-evaluation.json` et `advisor-inference-scorecard.png` ;
-- `advisor-inference-gallery/` avec les PNG, trois comparaisons appariées et les gagnants ;
+- `advisor-inference-gallery/` avec les PNG, trois comparaisons appariées, les gagnants et
+  `effective-output-audit.json` pour les doublons et SR-MPGD sans effet ;
 - `advisor-inference-audit/` avec le plan, l'état, les prédictions et les exports API ;
 - `active-learning-batch.json` ;
 - `manifest.json` ;

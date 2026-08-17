@@ -1377,3 +1377,18 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
 - **Correction :** le protocole `e026i-v2-paired-srmpgd` insère un prérequis SRPG dédupliqué avant
   toute recette SR-MPGD, exclut ce prérequis de la comparaison et compte les erreurs techniques
   dans le dénominateur principal. Le nouvel identifiant de plan empêche de reprendre l'état v1.
+
+## E026J — recommandations réellement distinctes — 17 août 2026
+
+- **Archive source :** `20260817T113847Z-e026-prompt-parameter-advisor-v1.tar.gz` : 150/150 essais
+  terminés, 90/90 recommandations QR-Verify valides et 21/30 baselines valides.
+- **Constat :** les 75 recettes SR-MPGD ont toutes sélectionné l'itération zéro. Les 90 sorties
+  conseillées ne représentaient que 45 images uniques ; la robustesse venait de SRPG.
+- **Sélection :** déduplication des recettes par signature Stage 2 effective avant génération,
+  puis choix de trois profils `robust`, `balanced` et `aesthetic_scannable`.
+- **Provenance :** un SR-MPGD à l'itération zéro est désormais étiqueté `srpg`. Le SHA-256 des PNG
+  téléchargés fournit une seconde déduplication et corrige le compteur d'images uniques.
+- **Déclenchement adaptatif :** E026J exige une tolérance QR-Verify de `0,80` ; un Stage 2 exact
+  mais fragile reste éligible au raffinement, alors qu'un SRPG déjà robuste s'arrête à l'état zéro.
+- **Reprise :** `RUN_COLLECTION=False` conserve la collecte E026 existante ; seul le nouveau plan
+  `e026j-v1-diversified-adaptive-srmpgd` est généré dans `/data/e026j-inference`.

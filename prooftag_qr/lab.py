@@ -109,6 +109,7 @@ TOOL_SETTING_KEYS = {
     "srmpgd_light_threshold",
     "srmpgd_center_fraction",
     "srmpgd_max_initial_module_error_rate",
+    "srmpgd_min_qr_tolerance",
     "srmpgd_max_step_rms",
     "srmpgd_max_total_delta_rms",
     "srmpgd_min_relative_module_improvement",
@@ -1207,6 +1208,9 @@ class LabService:
                         "srmpgd_requested_lpips_weight": float(settings.srmpgd_lpips_weight),
                         "srmpgd_requested_max_initial_mer": float(
                             settings.srmpgd_max_initial_module_error_rate
+                        ),
+                        "srmpgd_requested_min_qr_tolerance": float(
+                            settings.srmpgd_min_qr_tolerance
                         ),
                         "srmpgd_requested_max_step_rms": float(settings.srmpgd_max_step_rms),
                         "srmpgd_requested_max_total_delta_rms": float(

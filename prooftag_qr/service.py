@@ -53,6 +53,11 @@ class GenerationService:
     def _matches_target_variant(variant_name: str, target_variant: str) -> bool:
         if target_variant == "latent":
             return variant_name.endswith("latent_srl")
+        if target_variant == "srmpgd":
+            # A requested SR-MPGD run may legitimately retain iteration zero.
+            # The backend reports that effective output as SRPG, while this
+            # compatibility match keeps existing forced SR-MPGD profiles valid.
+            return variant_name in {"srpg", "srmpgd"}
         return variant_name == target_variant
 
     def generate(
@@ -209,15 +214,26 @@ class GenerationService:
                             image,
                             "srmpgd",
                         )
+                        qr_verify_mode = bool(summary.get("qr_verify_mode"))
+                        pass_rate = float(
+                            summary.get("qr_verify_tolerance_score", 0.0)
+                            if qr_verify_mode
+                            else summary["normalized_pass_rate"]
+                        )
+                        strict_all = bool(
+                            (
+                                summary.get("qr_verify_any_exact", False)
+                                and pass_rate
+                                >= self.settings.srmpgd_min_qr_tolerance
+                            )
+                            if qr_verify_mode
+                            else summary["normalized_strict_all"]
+                        )
                         return {
                             "passed": summary["normalized_passed"],
                             "total": summary["normalized_total"],
-                            "pass_rate": summary["normalized_pass_rate"],
-                            "strict_all": (
-                                summary["qr_verify_any_exact"]
-                                if summary.get("qr_verify_mode")
-                                else summary["normalized_strict_all"]
-                            ),
+                            "pass_rate": pass_rate,
+                            "strict_all": strict_all,
                             "decoder_pass_rates": summary["decoder_pass_rates"],
                             "scenario_pass_rates": summary["scenario_pass_rates"],
                             "worst_decoder_pass_rate": summary[

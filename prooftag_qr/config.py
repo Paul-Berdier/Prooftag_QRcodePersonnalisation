@@ -143,6 +143,7 @@ class Settings(BaseSettings):
     srmpgd_max_initial_module_error_rate: float = Field(
         default=0.10, ge=0.0, le=1.0
     )
+    srmpgd_min_qr_tolerance: float = Field(default=0.0, ge=0.0, le=1.0)
     srmpgd_max_step_rms: float = Field(default=0.02, gt=0.0, le=10.0)
     srmpgd_max_total_delta_rms: float = Field(default=0.06, gt=0.0, le=10.0)
     srmpgd_min_relative_module_improvement: float = Field(

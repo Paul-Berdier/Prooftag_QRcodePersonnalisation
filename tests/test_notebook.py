@@ -690,7 +690,7 @@ def test_e026_notebook_uses_qr_verify_as_a_calibrated_first_objective():
     assert "SCAN_PROBABILITY_THRESHOLD = 0.80" in source
     assert "GroupKFold by SHA-256(prompt text)" in advisor
     assert "WeekCampaignRunner" in source
-    assert "RUN_COLLECTION = True" in source
+    assert "RUN_COLLECTION = False" in source
     assert "COLLECTION_PROMPT_COUNT = 300" in source
     assert "progress_callback=collection_progress" in source
     assert "notebook-progress.jsonl" in source
@@ -705,6 +705,8 @@ def test_e026_notebook_uses_qr_verify_as_a_calibrated_first_objective():
     assert "GALLERY_COMPARISON_METHODS" in source
     assert "AdvisorInferenceRunner" in source
     assert "build_advisor_inference_plan" in source
+    assert "deduplicate_advisor_inference_results" in source
+    assert "E026J — générer trois recommandations réellement distinctes" in source
     assert "summarize_advisor_inference_results" in source
     assert "technical_error_images" in source
     assert "RUN_ADVISOR_INFERENCE = True" in source
@@ -718,7 +720,8 @@ def test_e026_notebook_uses_qr_verify_as_a_calibrated_first_objective():
     assert "measured-winners.png" in source
     assert "Images visibles dans Jupyter" in source
     assert "shutil.copytree(source, DOWNLOAD_DIR / directory_name" in source
-    assert "/data/e026-inference" in source
+    assert "/data/e026j-inference" in source
+    assert "effective-output-audit.json" in source
     assert "gallery-index.csv" in Path("prooftag_qr/advisor_gallery.py").read_text(
         encoding="utf-8"
     )

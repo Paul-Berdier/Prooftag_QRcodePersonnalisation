@@ -99,6 +99,7 @@ def runtime_info(settings: Settings | None = None) -> dict:
             "srmpgd_max_initial_module_error_rate": (
                 settings.srmpgd_max_initial_module_error_rate
             ),
+            "srmpgd_min_qr_tolerance": settings.srmpgd_min_qr_tolerance,
             "srmpgd_max_step_rms": settings.srmpgd_max_step_rms,
             "srmpgd_max_total_delta_rms": settings.srmpgd_max_total_delta_rms,
             "srmpgd_min_relative_module_improvement": (

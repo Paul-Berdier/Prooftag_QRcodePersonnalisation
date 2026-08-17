@@ -1,3 +1,4 @@
+import json
 from io import BytesIO
 from types import SimpleNamespace
 
@@ -67,6 +68,7 @@ def test_advisor_gallery_keeps_paired_comparisons_and_survives_downloads(tmp_pat
         fetcher=lambda run_id: buffer.getvalue(),
     )
     assert all(entry["local_image"] for entry in downloaded)
+    assert all(entry["image_sha256"] for entry in downloaded)
     sheet = render_advisor_contact_sheet(
         comparison,
         title="Paired comparison",
@@ -77,3 +79,6 @@ def test_advisor_gallery_keeps_paired_comparisons_and_survives_downloads(tmp_pat
     write_gallery_index(downloaded, tmp_path / "gallery")
     assert (tmp_path / "gallery" / "gallery-index.csv").is_file()
     assert (tmp_path / "gallery" / "gallery-audit.json").is_file()
+    audit = json.loads((tmp_path / "gallery" / "gallery-audit.json").read_text())
+    assert audit["unique_images_downloaded"] == 1
+    assert audit["duplicate_images_downloaded"] == len(downloaded) - 1

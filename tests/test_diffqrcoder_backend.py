@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 from PIL import Image
@@ -148,3 +150,32 @@ def test_hard_color_guard_must_be_at_least_the_warning_threshold():
             diffqrcoder_guard_max_saturation_mean_increase=0.25,
             diffqrcoder_guard_hard_max_saturation_mean_increase=0.20,
         )
+
+
+@pytest.mark.parametrize(
+    ("selected_iteration", "expected_variant"),
+    [(0, "srpg"), (2, "srmpgd")],
+)
+def test_srmpgd_iteration_zero_is_reported_as_srpg(
+    selected_iteration, expected_variant
+):
+    backend = UpstreamDiffQRCoderBackend(
+        Settings(srpg_enabled=True, srmpgd_enabled=True)
+    )
+    image = Image.new("RGB", (32, 32), "navy")
+
+    def fake_stage2(*_args, **_kwargs):
+        backend._srmpgd_selected_iteration = selected_iteration
+        return image.copy()
+
+    backend._run_stage2 = fake_stage2
+    variants = list(
+        backend.variants(
+            image,
+            SimpleNamespace(),
+            request=SimpleNamespace(),
+            seed=41,
+        )
+    )
+
+    assert [name for name, _ in variants] == ["raw", expected_variant]

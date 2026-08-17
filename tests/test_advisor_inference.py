@@ -8,6 +8,8 @@ import pytest
 from prooftag_qr.advisor_inference import (
     AdvisorInferenceRunner,
     build_advisor_inference_plan,
+    deduplicate_advisor_inference_results,
+    effective_candidate_signature,
     load_advisor_inference_results,
     select_advisor_inference_winners,
     summarize_advisor_inference_results,
@@ -44,7 +46,13 @@ def _candidate(identifier: str, index: int) -> RecipeCandidate:
     )
 
 
-def _srmpgd_candidate(identifier: str, index: int, *, gamma: float) -> RecipeCandidate:
+def _srmpgd_candidate(
+    identifier: str,
+    index: int,
+    *,
+    gamma: float,
+    strength: float = 0.65,
+) -> RecipeCandidate:
     candidate = _candidate(identifier, index)
     candidate.configuration.update(
         {
@@ -62,7 +70,7 @@ def _srmpgd_candidate(identifier: str, index: int, *, gamma: float) -> RecipeCan
                     "srpg_steps": 40,
                     "srpg_qr_weight": 500.0,
                     "srpg_perceptual_weight": 2.0,
-                    "diffqrcoder_stage2_strength": 0.65,
+                    "diffqrcoder_stage2_strength": strength,
                     "srmpgd_max_iterations": 4,
                     "srmpgd_step_size": gamma,
                     "srmpgd_lpips_weight": 0.1,
@@ -165,11 +173,43 @@ def test_inference_plan_rejects_a_prompt_seen_during_training():
         )
 
 
+def test_e026j_selects_robust_balanced_and_aesthetic_effective_recipes():
+    candidates = [
+        _candidate("recipe_robust", 1),
+        _candidate("recipe_balanced", 2),
+        _candidate("recipe_aesthetic", 3),
+        _candidate("diffqrcoder_stage1", 4),
+    ]
+    plan = build_advisor_inference_plan(
+        advisor=_Advisor(),
+        candidates=candidates,
+        prompts=[{"id": "unseen", "text": "A blue cup on a wooden shelf."}],
+        payload="https://ptag.io/t/e026j",
+        advisor_sha256="d" * 64,
+        seeds=(41,),
+        top_k=3,
+    )
+
+    selected = [
+        row for row in plan.predictions if row["role"] == "advisor_recommendation"
+    ]
+    assert [row["selection_profile"] for row in selected] == [
+        "robust",
+        "balanced",
+        "aesthetic_scannable",
+    ]
+    assert len({row["effective_candidate_signature"] for row in selected}) == 3
+    assert plan.public["comparison_trial_count"] == 4
+
+
 def test_inference_plan_materializes_and_deduplicates_paired_srpg_prerequisites():
     candidates = [
         _srmpgd_candidate("srmpgd_gamma_30", 1, gamma=30.0),
         _srmpgd_candidate("srmpgd_gamma_300", 2, gamma=300.0),
-        _candidate("diffqrcoder_stage1", 3),
+        _srmpgd_candidate(
+            "srmpgd_strength_80", 3, gamma=100.0, strength=0.80
+        ),
+        _candidate("diffqrcoder_stage1", 4),
     ]
     plan = build_advisor_inference_plan(
         advisor=_Advisor(),
@@ -185,9 +225,9 @@ def test_inference_plan_materializes_and_deduplicates_paired_srpg_prerequisites(
     prerequisites = [
         item
         for item in methods
-        if item["id"].startswith("e026i_dep_")
+        if item["id"].startswith("e026j_dep_")
     ]
-    assert len(prerequisites) == 1
+    assert len(prerequisites) == 2
     assert prerequisites[0]["output_variant"] == "srpg"
     assert prerequisites[0]["tools"]["srpg_enabled"] is True
     assert prerequisites[0]["tools"]["srmpgd_enabled"] is False
@@ -197,17 +237,34 @@ def test_inference_plan_materializes_and_deduplicates_paired_srpg_prerequisites(
     )
     assert [item["output_variant"] for item in methods] == [
         "srpg",
-        "srmpgd",
-        "srmpgd",
+        "auto",
+        "srpg",
+        "auto",
         "raw",
     ]
-    assert plan.public["protocol"] == "e026i-v2-paired-srmpgd"
-    assert plan.public["trial_count"] == 8
+    adaptive = [item for item in methods if item["output_variant"] == "auto"]
+    assert all(
+        item["tools"]["settings"]["srmpgd_min_qr_tolerance"] == 0.80
+        for item in adaptive
+    )
+    assert plan.public["protocol"] == "e026j-v1-diversified-adaptive-srmpgd"
+    assert plan.public["trial_count"] == 10
     assert plan.public["comparison_trial_count"] == 6
-    assert plan.public["prerequisite_trial_count"] == 2
+    assert plan.public["prerequisite_trial_count"] == 4
     assert sum(
         row["role"] == "srmpgd_prerequisite" for row in plan.predictions
-    ) == 1
+    ) == 2
+    recommendations = [
+        row for row in plan.predictions if row["role"] == "advisor_recommendation"
+    ]
+    assert {row["selection_profile"] for row in recommendations} == {
+        "robust",
+        "aesthetic_scannable",
+    }
+    assert len({row["effective_candidate_signature"] for row in recommendations}) == 2
+    assert effective_candidate_signature(candidates[0]) == effective_candidate_signature(
+        candidates[1]
+    )
 
 
 def test_inference_runner_resumes_without_resubmitting_completed_campaign(tmp_path):
@@ -270,6 +327,7 @@ def test_inference_results_join_predictions_and_select_scannable_winner(tmp_path
             "role": "advisor_recommendation",
             "advisor_rank": 2,
             "predicted_qr_success": 0.90,
+            "requested_source_output_variant": "srmpgd",
         },
     ]
     (output_dir / "advisor-predictions.jsonl").write_text(
@@ -293,6 +351,7 @@ def test_inference_results_join_predictions_and_select_scannable_winner(tmp_path
         "quality_rgb_clipped_channel_ratio",
         "total_ms",
         "module_error_rate",
+        "quality_diffqrcoder_srmpgd_selected_iteration",
         "error",
     ]
     with (exports_dir / "results.csv").open("w", encoding="utf-8", newline="") as stream:
@@ -338,6 +397,7 @@ def test_inference_results_join_predictions_and_select_scannable_winner(tmp_path
                 "quality_rgb_clipped_channel_ratio": 0.01,
                 "total_ms": 2000,
                 "module_error_rate": 0.05,
+                "quality_diffqrcoder_srmpgd_selected_iteration": 0,
             }
         )
 
@@ -347,6 +407,9 @@ def test_inference_results_join_predictions_and_select_scannable_winner(tmp_path
     assert len(rows) == 2
     assert rows[0]["predicted_qr_probability"] == pytest.approx(0.95)
     assert rows[0]["saturation_risk"] == pytest.approx(0.02)
+    assert rows[1]["output_variant"] == "srpg"
+    assert rows[1]["srmpgd_noop"] is True
+    assert rows[1]["srmpgd_effective"] is False
     assert winners[0]["trial_id"] == "t2"
 
 
@@ -415,3 +478,69 @@ def test_inference_summary_counts_missing_measurements_as_technical_failures():
     assert summary["top_k_image_qr_verify_success_rate"] == pytest.approx(0.25)
     assert summary["top_k_prompt_seed_coverage"] == pytest.approx(0.5)
     assert summary["baseline_qr_verify_success_rate"] == pytest.approx(1.0)
+
+
+def test_inference_deduplicates_measured_images_and_reports_noop_srmpgd():
+    rows = [
+        {
+            "trial_id": "t1",
+            "prompt_id": "p1",
+            "seed": 41,
+            "role": "advisor_recommendation",
+            "advisor_rank": 1,
+            "source_method_id": "srmpgd-g30",
+            "requested_source_output_variant": "srmpgd",
+            "final_image_sha256": "same-image",
+            "srmpgd_selected_iteration": 0.0,
+            "srmpgd_noop": True,
+            "srmpgd_effective": False,
+            "status": "accepted",
+            "qr_success": 1.0,
+            "qr_tolerance": 0.9,
+        },
+        {
+            "trial_id": "t2",
+            "prompt_id": "p1",
+            "seed": 41,
+            "role": "advisor_recommendation",
+            "advisor_rank": 2,
+            "source_method_id": "srmpgd-g300",
+            "requested_source_output_variant": "srmpgd",
+            "final_image_sha256": "same-image",
+            "srmpgd_selected_iteration": 0.0,
+            "srmpgd_noop": True,
+            "srmpgd_effective": False,
+            "status": "accepted",
+            "qr_success": 1.0,
+            "qr_tolerance": 0.8,
+        },
+        {
+            "trial_id": "t3",
+            "prompt_id": "p1",
+            "seed": 41,
+            "role": "advisor_recommendation",
+            "advisor_rank": 3,
+            "source_method_id": "different-stage2",
+            "requested_source_output_variant": "srpg",
+            "final_image_sha256": "different-image",
+            "srmpgd_selected_iteration": None,
+            "srmpgd_noop": False,
+            "srmpgd_effective": False,
+            "status": "accepted",
+            "qr_success": 1.0,
+            "qr_tolerance": 0.7,
+        },
+    ]
+
+    unique = deduplicate_advisor_inference_results(rows)
+    summary = summarize_advisor_inference_results(rows)
+
+    assert len(unique) == 2
+    assert unique[0]["duplicate_count"] == 1
+    assert unique[0]["duplicate_method_ids"] == ["srmpgd-g30", "srmpgd-g300"]
+    assert summary["top_k_images_measured"] == 3
+    assert summary["top_k_unique_images_measured"] == 2
+    assert summary["top_k_duplicate_images"] == 1
+    assert summary["srmpgd_requested_images"] == 2
+    assert summary["srmpgd_effective_images"] == 0
+    assert summary["srmpgd_noop_images"] == 2

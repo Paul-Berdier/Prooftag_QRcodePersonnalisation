@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import math
 import re
@@ -197,7 +198,7 @@ def download_advisor_gallery(
             return response.read()
 
     fetch_image = fetcher or fetch
-    downloaded: dict[str, tuple[str | None, str | None]] = {}
+    downloaded: dict[str, tuple[str | None, str | None, str | None]] = {}
     result: list[dict[str, Any]] = []
     for index, source in enumerate(entries, start=1):
         entry = dict(source)
@@ -212,12 +213,14 @@ def download_advisor_gallery(
             try:
                 image = Image.open(BytesIO(fetch_image(run_id))).convert("RGB")
                 image.save(path, format="PNG", optimize=True)
-                downloaded[run_id] = (str(path), None)
+                digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                downloaded[run_id] = (str(path), None, digest)
             except Exception as exc:  # a missing old artifact must remain visible in the audit
-                downloaded[run_id] = (None, f"{type(exc).__name__}: {exc}")
-        local_path, error = downloaded[run_id]
+                downloaded[run_id] = (None, f"{type(exc).__name__}: {exc}", None)
+        local_path, error, digest = downloaded[run_id]
         entry["local_image"] = local_path
         entry["download_error"] = error
+        entry["image_sha256"] = digest
         result.append(entry)
     return result
 
@@ -298,8 +301,13 @@ def render_advisor_contact_sheet(
         text_top = top + tile_size + 14
         lines = [
             textwrap.shorten(str(entry.get("prompt_id") or ""), width=36),
-            textwrap.shorten(str(entry.get("method_id") or ""), width=36),
-            f"seed {_metric(entry.get('seed'), 0)} | QR {'OK' if success else 'ECHEC'} "
+            textwrap.shorten(
+                f"{entry.get('selection_profile') or 'candidate'} | "
+                f"{entry.get('source_method_id') or entry.get('method_id') or ''}",
+                width=36,
+            ),
+            f"seed {_metric(entry.get('seed'), 0)} | {entry.get('output_variant') or '-'} | "
+            f"QR {'OK' if success else 'ECHEC'} "
             f"| tol {_metric(entry.get('qr_tolerance'))}",
             f"AES {_metric(entry.get('clip_aesthetic'))} | CLIP {_metric(entry.get('clip_score'))} "
             f"| HPS {_metric(entry.get('hpsv2_1'), 3)}",
@@ -345,10 +353,21 @@ def write_gallery_index(entries: Sequence[Mapping[str, Any]], output_dir: Path) 
         ),
         "unique_images_downloaded": len(
             {
-                entry.get("generation_run_id")
+                entry.get("image_sha256")
                 for entry in serializable
-                if not entry.get("download_error")
+                if not entry.get("download_error") and entry.get("image_sha256")
             }
+        ),
+        "duplicate_images_downloaded": (
+            sum(not entry.get("download_error") for entry in serializable)
+            - len(
+                {
+                    entry.get("image_sha256")
+                    for entry in serializable
+                    if not entry.get("download_error")
+                    and entry.get("image_sha256")
+                }
+            )
         ),
         "sections": {
             section: sum(entry.get("section") == section for entry in serializable)

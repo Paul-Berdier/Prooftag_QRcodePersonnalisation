@@ -167,6 +167,7 @@ class UpstreamDiffQRCoderBackend:
         self._stage2_source_method_id: str | None = None
         self._stage2_pairing_status: str | None = None
         self._srmpgd_stop_reason: str | None = None
+        self._srmpgd_selected_iteration: int | None = None
 
     def import_stage2_state(self, state: dict) -> None:
         actual_sha256 = _tensor_sha256(state["latent"])
@@ -668,6 +669,7 @@ class UpstreamDiffQRCoderBackend:
         )
         image = srmpgd.image
         self._srmpgd_stop_reason = srmpgd.stop_reason
+        self._srmpgd_selected_iteration = srmpgd.selected_iteration
         attempted_steps = list(srmpgd.steps[1:]) or [srmpgd.steps[0]]
         best_attempted = max(
             attempted_steps,
@@ -810,6 +812,8 @@ class UpstreamDiffQRCoderBackend:
         self._stage2_source_run_id = None
         self._stage2_source_method_id = None
         self._stage2_pairing_status = "generated_source"
+        self._srmpgd_stop_reason = None
+        self._srmpgd_selected_iteration = None
         if self._stage2_override is not None:
             cached = self._stage2_override
             self._stage2_override = None
@@ -1007,7 +1011,10 @@ class UpstreamDiffQRCoderBackend:
             seed,
             validation_callback=validation_callback,
         )
-        yield ("srmpgd" if self.settings.srmpgd_enabled else "srpg"), image
+        effective_variant = "srpg"
+        if self.settings.srmpgd_enabled and (self._srmpgd_selected_iteration or 0) > 0:
+            effective_variant = "srmpgd"
+        yield effective_variant, image
 
     def debug_artifacts(self) -> dict[str, Image.Image]:
         return self._debug_artifacts.copy()

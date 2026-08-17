@@ -26,6 +26,7 @@ TERMINAL_CAMPAIGN_STATUSES = {
     "interrupted",
 }
 SUCCESSFUL_CAMPAIGN_STATUSES = {"completed", "completed_with_errors"}
+E026J_SELECTION_PROFILES = ("robust", "balanced", "aesthetic_scannable")
 
 
 def _canonical_json(value: Any) -> str:
@@ -78,6 +79,7 @@ def _runtime_method(
     *,
     runtime_id: str,
     display_name: str,
+    adaptive_srmpgd: bool = False,
 ) -> dict[str, Any]:
     configuration = deepcopy(candidate.configuration)
     if "legacy_requested_parameters" in configuration:
@@ -91,7 +93,194 @@ def _runtime_method(
             "enabled": True,
         }
     )
+    if adaptive_srmpgd and (configuration.get("tools") or {}).get("srmpgd_enabled"):
+        # ``auto`` lets the service retain the paired SRPG state whenever
+        # SR-MPGD selects iteration zero.  A no-op refinement must not be
+        # advertised as a new SR-MPGD image.
+        configuration["output_variant"] = "auto"
+        tools = deepcopy(configuration.get("tools") or {})
+        settings = deepcopy(tools.get("settings") or {})
+        settings["srmpgd_min_qr_tolerance"] = max(
+            float(settings.get("srmpgd_min_qr_tolerance", 0.0)),
+            0.80,
+        )
+        tools["settings"] = settings
+        configuration["tools"] = tools
     return LabMethod.model_validate(configuration).model_dump(mode="json")
+
+
+def effective_candidate_signature(candidate: RecipeCandidate) -> str:
+    """Hash the generation state that exists *before* optional SR-MPGD.
+
+    Gamma, LPIPS weight and iteration count cannot make three independent
+    candidates when SR-MPGD keeps iteration zero: all of them return the same
+    paired Stage-2 image.  Collapsing those settings here prevents the advisor
+    from filling its top-K with aliases of one effective generation recipe.
+    """
+
+    configuration = deepcopy(candidate.configuration)
+    for key in ("id", "name", "description", "enabled"):
+        configuration.pop(key, None)
+    tools = deepcopy(configuration.get("tools") or {})
+    if tools.get("srmpgd_enabled"):
+        tools["srmpgd_enabled"] = False
+        tools["srpg_enabled"] = True
+        tools["settings"] = {
+            key: value
+            for key, value in (tools.get("settings") or {}).items()
+            if not str(key).startswith("srmpgd_")
+        }
+        configuration["tools"] = tools
+        configuration["output_variant"] = "srpg"
+    return hashlib.sha256(
+        _canonical_json(configuration).encode("utf-8")
+    ).hexdigest()
+
+
+def _normalized_scores(
+    recommendations: Sequence[Any],
+    getter: Callable[[Any], float | None],
+    *,
+    lower_is_better: bool = False,
+) -> dict[str, float]:
+    available = [
+        (item.candidate.signature, value)
+        for item in recommendations
+        if (value := getter(item)) is not None and math.isfinite(float(value))
+    ]
+    if not available:
+        return {item.candidate.signature: 0.5 for item in recommendations}
+    values = [float(value) for _, value in available]
+    low, high = min(values), max(values)
+    result = {}
+    for signature, value in available:
+        normalized = 0.5 if high == low else (float(value) - low) / (high - low)
+        result[signature] = 1.0 - normalized if lower_is_better else normalized
+    return {
+        item.candidate.signature: result.get(item.candidate.signature, 0.0)
+        for item in recommendations
+    }
+
+
+def _select_diversified_recommendations(
+    ranked: Sequence[Any],
+    *,
+    top_k: int,
+    excluded_method_ids: Sequence[str] = (),
+) -> list[tuple[str, Any, str]]:
+    """Select scan-safe, effective and objective-diverse recommendations."""
+
+    excluded = set(excluded_method_ids)
+    unique: list[tuple[Any, str]] = []
+    effective_seen: set[str] = set()
+    for recommendation in ranked:
+        if not recommendation.scan_safe:
+            continue
+        if recommendation.candidate.method_id in excluded:
+            continue
+        effective = effective_candidate_signature(recommendation.candidate)
+        if effective in effective_seen:
+            continue
+        effective_seen.add(effective)
+        unique.append((recommendation, effective))
+    if len(unique) < top_k:
+        raise RuntimeError(
+            f"only {len(unique)} distinct scan-safe generation recipes for top_k={top_k}"
+        )
+
+    recommendations = [item for item, _ in unique]
+    tolerance = _normalized_scores(
+        recommendations, lambda item: item.predicted_qr_tolerance
+    )
+    hps = _normalized_scores(recommendations, lambda item: item.predicted_hpsv2_1)
+    aesthetic = _normalized_scores(
+        recommendations, lambda item: item.predicted_clip_aesthetic
+    )
+    clip = _normalized_scores(recommendations, lambda item: item.predicted_clip_score)
+    saturation = _normalized_scores(
+        recommendations,
+        lambda item: item.predicted_saturation_risk,
+        lower_is_better=True,
+    )
+
+    def visual_score(item: Any) -> float:
+        signature = item.candidate.signature
+        return (
+            0.50 * hps[signature]
+            + 0.30 * aesthetic[signature]
+            + 0.20 * clip[signature]
+        )
+
+    def qr_score(item: Any) -> float:
+        signature = item.candidate.signature
+        return (
+            0.55 * float(item.qr_success_lower_bound)
+            + 0.25 * float(item.predicted_qr_success)
+            + 0.15 * tolerance[signature]
+            + 0.05 * saturation[signature]
+        )
+
+    robust = max(
+        recommendations,
+        key=lambda item: (
+            qr_score(item),
+            item.qr_success_lower_bound,
+            item.predicted_qr_success,
+            visual_score(item),
+        ),
+    )
+    if top_k == 1:
+        return [("robust", robust, effective_candidate_signature(robust.candidate))]
+    remaining = [item for item in recommendations if item is not robust]
+    aesthetic_pick = max(
+        remaining,
+        key=lambda item: (
+            visual_score(item),
+            qr_score(item),
+            -(item.predicted_saturation_risk or 0.0),
+        ),
+    )
+    if top_k == 2:
+        return [
+            ("robust", robust, effective_candidate_signature(robust.candidate)),
+            (
+                "aesthetic_scannable",
+                aesthetic_pick,
+                effective_candidate_signature(aesthetic_pick.candidate),
+            ),
+        ]
+    remaining = [item for item in remaining if item is not aesthetic_pick]
+    balanced = max(
+        remaining,
+        key=lambda item: (
+            0.55 * qr_score(item) + 0.45 * visual_score(item),
+            qr_score(item),
+            visual_score(item),
+        ),
+    )
+
+    primary = [
+        ("robust", robust),
+        ("balanced", balanced),
+        ("aesthetic_scannable", aesthetic_pick),
+    ]
+    selected = primary[:top_k]
+    used = {item.candidate.signature for _, item in selected}
+    if top_k > len(selected):
+        for item in recommendations:
+            if item.candidate.signature in used:
+                continue
+            selected.append((f"alternate_{len(selected) + 1}", item))
+            used.add(item.candidate.signature)
+            if len(selected) == top_k:
+                break
+    effective_by_signature = {
+        item.candidate.signature: effective for item, effective in unique
+    }
+    return [
+        (profile, item, effective_by_signature[item.candidate.signature])
+        for profile, item in selected
+    ]
 
 
 def _srpg_prerequisite(
@@ -135,13 +324,7 @@ def _srpg_prerequisite(
         "srmpgd_enabled": False,
         "settings": settings,
     }
-    signature_source = deepcopy(configuration)
-    signature_source.pop("id", None)
-    signature_source.pop("name", None)
-    signature_source.pop("description", None)
-    signature = hashlib.sha256(
-        _canonical_json(signature_source).encode("utf-8")
-    ).hexdigest()
+    signature = effective_candidate_signature(candidate)
     method = LabMethod.model_validate(configuration).model_dump(mode="json")
     return method, signature
 
@@ -225,21 +408,24 @@ def build_advisor_inference_plan(
             scan_probability_threshold=scan_probability_threshold,
             limit=len(candidates),
         )
-        selected = [item for item in ranked if item.scan_safe][:top_k]
-        if not selected:
-            raise RuntimeError(
-                f"no scan-safe recipe for {prompt.id} at threshold "
-                f"{scan_probability_threshold:.2f}"
-            )
+        selected = _select_diversified_recommendations(
+            ranked,
+            top_k=top_k,
+            excluded_method_ids=(baseline_method_id,) if baseline_method_id else (),
+        )
 
         methods = []
         prerequisite_signatures: set[str] = set()
         selected_signatures = set()
-        for recommendation in selected:
+        for selection_rank, (
+            selection_profile,
+            recommendation,
+            effective_signature,
+        ) in enumerate(selected, start=1):
             candidate = recommendation.candidate
             selected_signatures.add(candidate.signature)
             prerequisite_id = (
-                f"e026i_dep_{recommendation.rank:02d}_"
+                f"e026j_dep_{selection_rank:02d}_"
                 f"{_safe_identifier(candidate.method_id, maximum=52)}"
             )[:100]
             prerequisite = _srpg_prerequisite(
@@ -261,11 +447,18 @@ def build_advisor_inference_plan(
                             "plan_method_id": prerequisite_method["id"],
                             "source_method_id": candidate.method_id,
                             "role": "srmpgd_prerequisite",
-                            "advisor_rank": recommendation.rank,
+                            "advisor_rank": selection_rank,
+                            "model_rank": recommendation.rank,
+                            "selection_profile": f"{selection_profile}_prerequisite",
+                            "effective_candidate_signature": effective_signature,
                             "candidate_signature": (
                                 f"srpg-prerequisite:{prerequisite_signature}"
                             ),
                             "candidate_observations": candidate.observations,
+                            "requested_source_output_variant": candidate.configuration.get(
+                                "output_variant"
+                            ),
+                            "runtime_output_variant": "srpg",
                             "scan_safe": None,
                             "predicted_qr_success": None,
                             "predicted_qr_success_lower_bound": None,
@@ -279,7 +472,7 @@ def build_advisor_inference_plan(
                         }
                     )
             runtime_id = (
-                f"e026i_r{recommendation.rank:02d}_"
+                f"e026j_r{selection_rank:02d}_"
                 f"{_safe_identifier(candidate.method_id)}"
             )[:100]
             methods.append(
@@ -287,8 +480,9 @@ def build_advisor_inference_plan(
                     candidate,
                     runtime_id=runtime_id,
                     display_name=(
-                        f"E026 advisor rank {recommendation.rank} | {candidate.method_id}"
+                        f"E026J {selection_profile} | {candidate.method_id}"
                     ),
+                    adaptive_srmpgd=True,
                 )
             )
             prediction_rows.append(
@@ -298,9 +492,22 @@ def build_advisor_inference_plan(
                     "plan_method_id": runtime_id,
                     "source_method_id": candidate.method_id,
                     "role": "advisor_recommendation",
-                    "advisor_rank": recommendation.rank,
+                    "advisor_rank": selection_rank,
+                    "model_rank": recommendation.rank,
+                    "selection_profile": selection_profile,
+                    "effective_candidate_signature": effective_signature,
                     "candidate_signature": candidate.signature,
                     "candidate_observations": candidate.observations,
+                    "requested_source_output_variant": candidate.configuration.get(
+                        "output_variant"
+                    ),
+                    "runtime_output_variant": (
+                        "auto"
+                        if (candidate.configuration.get("tools") or {}).get(
+                            "srmpgd_enabled"
+                        )
+                        else candidate.configuration.get("output_variant")
+                    ),
                     "scan_safe": recommendation.scan_safe,
                     "predicted_qr_success": recommendation.predicted_qr_success,
                     "predicted_qr_success_lower_bound": (
@@ -324,7 +531,7 @@ def build_advisor_inference_plan(
             baseline_prediction = next(
                 item for item in ranked if item.candidate.signature == baseline.signature
             )
-            runtime_id = f"e026i_baseline_{_safe_identifier(baseline.method_id)}"[:100]
+            runtime_id = f"e026j_baseline_{_safe_identifier(baseline.method_id)}"[:100]
             methods.append(
                 _runtime_method(
                     baseline,
@@ -340,8 +547,19 @@ def build_advisor_inference_plan(
                     "source_method_id": baseline.method_id,
                     "role": "fixed_baseline",
                     "advisor_rank": baseline_prediction.rank,
+                    "model_rank": baseline_prediction.rank,
+                    "selection_profile": "fixed_baseline",
+                    "effective_candidate_signature": effective_candidate_signature(
+                        baseline
+                    ),
                     "candidate_signature": baseline.signature,
                     "candidate_observations": baseline.observations,
+                    "requested_source_output_variant": baseline.configuration.get(
+                        "output_variant"
+                    ),
+                    "runtime_output_variant": baseline.configuration.get(
+                        "output_variant"
+                    ),
                     "scan_safe": baseline_prediction.scan_safe,
                     "predicted_qr_success": baseline_prediction.predicted_qr_success,
                     "predicted_qr_success_lower_bound": (
@@ -371,7 +589,7 @@ def build_advisor_inference_plan(
         )
 
     plan_core = {
-        "protocol": "e026i-v2-paired-srmpgd",
+        "protocol": "e026j-v1-diversified-adaptive-srmpgd",
         "advisor_sha256": advisor_sha256,
         "payload_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
         "payload_length": len(payload),
@@ -406,7 +624,7 @@ def build_advisor_inference_plan(
     campaigns = []
     public_campaigns = []
     for index, draft in enumerate(drafts, start=1):
-        base_name = f"E026I {plan_id} {index:02d} {draft['prompt']['id']}"
+        base_name = f"E026J {plan_id} {index:02d} {draft['prompt']['id']}"
         request = {
             "name": base_name,
             "payload": payload,
@@ -779,6 +997,16 @@ def load_advisor_inference_results(output_dir: Path) -> list[dict[str, Any]]:
                 "method_id": row.get("method_id"),
                 "output_variant": row.get("selected_variant")
                 or row.get("output_variant_requested"),
+                "final_image_sha256": row.get("provenance_final_image_sha256")
+                or row.get("final_image_sha256")
+                or None,
+                "srmpgd_selected_iteration": _first_finite(
+                    row,
+                    (
+                        "quality_diffqrcoder_srmpgd_selected_iteration",
+                        "diffqrcoder_srmpgd_selected_iteration",
+                    ),
+                ),
                 "seed": _finite(row.get("seed")),
                 "status": row.get("status"),
                 "generation_run_id": row.get("generation_run_id"),
@@ -808,6 +1036,17 @@ def load_advisor_inference_results(output_dir: Path) -> list[dict[str, Any]]:
                 "_source_file": row.get("_source_file"),
             }
         )
+    for result in results:
+        iteration = _finite(result.get("srmpgd_selected_iteration"))
+        requested = result.get("requested_source_output_variant")
+        result["srmpgd_effective"] = bool(
+            requested == "srmpgd" and iteration is not None and iteration > 0
+        )
+        result["srmpgd_noop"] = bool(
+            requested == "srmpgd" and iteration is not None and iteration == 0
+        )
+        if result["srmpgd_noop"]:
+            result["output_variant"] = "srpg"
     return sorted(
         results,
         key=lambda item: (
@@ -823,8 +1062,11 @@ def select_advisor_inference_winners(
     entries: Sequence[Mapping[str, Any]],
 ) -> list[dict[str, Any]]:
     winners = []
-    for prompt_id in sorted({str(item["prompt_id"]) for item in entries}):
-        candidates = [dict(item) for item in entries if item["prompt_id"] == prompt_id]
+    unique_entries = deduplicate_advisor_inference_results(entries)
+    for prompt_id in sorted({str(item["prompt_id"]) for item in unique_entries}):
+        candidates = [
+            dict(item) for item in unique_entries if item["prompt_id"] == prompt_id
+        ]
         if not candidates:
             continue
         winners.append(
@@ -843,6 +1085,64 @@ def select_advisor_inference_winners(
             )
         )
     return winners
+
+
+def deduplicate_advisor_inference_results(
+    entries: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Collapse byte-identical advisor outputs within each prompt and seed.
+
+    Missing hashes are kept distinct.  This deliberately avoids claiming that
+    two images are identical merely because their recipes share a Stage-2
+    signature; only measured image provenance or downloaded bytes may collapse
+    a result after generation.
+    """
+
+    groups: dict[tuple[str, float | None, str], list[dict[str, Any]]] = {}
+    for source in entries:
+        item = dict(source)
+        digest = str(
+            item.get("image_sha256") or item.get("final_image_sha256") or ""
+        ).strip()
+        if not digest:
+            digest = f"run:{item.get('generation_run_id') or item.get('trial_id') or id(source)}"
+        key = (str(item.get("prompt_id")), _finite(item.get("seed")), digest)
+        groups.setdefault(key, []).append(item)
+
+    unique = []
+    for aliases in groups.values():
+        def metric(item: Mapping[str, Any], name: str, default: float) -> float:
+            value = _finite(item.get(name))
+            return default if value is None else value
+
+        representative = max(
+            aliases,
+            key=lambda item: (
+                metric(item, "qr_success", 0.0),
+                metric(item, "qr_tolerance", 0.0),
+                metric(item, "hpsv2_1", -math.inf),
+                metric(item, "clip_aesthetic", -math.inf),
+                metric(item, "clip_score", -math.inf),
+                -metric(item, "saturation_risk", 0.0),
+                -metric(item, "advisor_rank", 999.0),
+            ),
+        )
+        representative["duplicate_count"] = len(aliases) - 1
+        representative["duplicate_method_ids"] = sorted(
+            {
+                str(item.get("source_method_id") or item.get("method_id"))
+                for item in aliases
+            }
+        )
+        unique.append(representative)
+    return sorted(
+        unique,
+        key=lambda item: (
+            str(item.get("prompt_id")),
+            float(item.get("seed") or 0),
+            int(_finite(item.get("advisor_rank")) or 999),
+        ),
+    )
 
 
 def summarize_advisor_inference_results(
@@ -868,6 +1168,14 @@ def summarize_advisor_inference_results(
     generated_advisor = [
         item for item in advisor if _finite(item.get("qr_success")) is not None
     ]
+    hashed_generated_advisor = [
+        item
+        for item in generated_advisor
+        if str(item.get("final_image_sha256") or "").strip()
+    ]
+    unique_generated_advisor = deduplicate_advisor_inference_results(
+        hashed_generated_advisor
+    )
     generated_baseline = [
         item for item in baseline if _finite(item.get("qr_success")) is not None
     ]
@@ -922,6 +1230,17 @@ def summarize_advisor_inference_results(
         "rank1_qr_verify_success_rate_generated": success_rate(generated_rank1),
         "top_k_images_planned": len(advisor),
         "top_k_images_measured": len(generated_advisor),
+        "top_k_images_with_provenance_hash": len(hashed_generated_advisor),
+        "top_k_unique_images_measured": (
+            len(unique_generated_advisor)
+            if len(hashed_generated_advisor) == len(generated_advisor)
+            else None
+        ),
+        "top_k_duplicate_images": (
+            len(hashed_generated_advisor) - len(unique_generated_advisor)
+            if len(hashed_generated_advisor) == len(generated_advisor)
+            else None
+        ),
         "top_k_technical_completion_rate": (
             len(generated_advisor) / len(advisor) if advisor else None
         ),
@@ -931,6 +1250,16 @@ def summarize_advisor_inference_results(
         ),
         "top_k_prompt_seed_coverage": (
             sum(coverage.values()) / len(coverage) if coverage else None
+        ),
+        "srmpgd_requested_images": sum(
+            item.get("requested_source_output_variant") == "srmpgd"
+            for item in generated_advisor
+        ),
+        "srmpgd_effective_images": sum(
+            bool(item.get("srmpgd_effective")) for item in generated_advisor
+        ),
+        "srmpgd_noop_images": sum(
+            bool(item.get("srmpgd_noop")) for item in generated_advisor
         ),
         "baseline_qr_verify_success_rate": success_rate(baseline),
         "baseline_qr_verify_success_rate_generated": success_rate(

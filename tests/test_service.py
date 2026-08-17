@@ -1,6 +1,7 @@
 import numpy as np
 from PIL import Image
 
+import prooftag_qr.service as service_module
 from prooftag_qr.artifacts import LocalArtifactStore
 from prooftag_qr.backends import GenerationBackend, QRBackend
 from prooftag_qr.config import Settings
@@ -9,6 +10,11 @@ from prooftag_qr.repository import RunRepository
 from prooftag_qr.schemas import GenerationRequest
 from prooftag_qr.service import GenerationService
 from prooftag_qr.validation import OpenCVDecoder, QRValidator
+
+
+def test_forced_srmpgd_accepts_an_iteration_zero_srpg_result():
+    assert GenerationService._matches_target_variant("srpg", "srmpgd") is True
+    assert GenerationService._matches_target_variant("srmpgd", "srmpgd") is True
 
 
 class VariantBackend(GenerationBackend):
@@ -382,6 +388,64 @@ def test_service_supplies_full_decoder_summary_to_srmpgd(tmp_path):
         "worst_decoder_pass_rate": 1.0,
         "worst_scenario_pass_rate": 1.0,
     }
+
+
+def test_srmpgd_refines_an_exact_but_low_tolerance_qr(monkeypatch, tmp_path):
+    settings = Settings(
+        data_dir=tmp_path / "data",
+        model_cache_dir=tmp_path / "models",
+        srmpgd_min_qr_tolerance=0.80,
+        max_attempts=1,
+    )
+    settings.ensure_directories()
+    backend = RefinementCallbackBackend()
+    service = GenerationService(
+        settings=settings,
+        repository=RunRepository(settings.database_url),
+        artifact_store=LocalArtifactStore(settings.artifacts_dir),
+        backends={"controlnet": backend},
+        validator=ColorValidator(),
+    )
+    qr_summary = {
+        "normalized_passed": 1,
+        "normalized_total": 2,
+        "normalized_pass_rate": 0.5,
+        "normalized_strict_all": False,
+        "original_strict_all": True,
+        "decoder_pass_rates": {"qr_verify": 0.5},
+        "scenario_pass_rates": {"original": 1.0, "blur": 0.0},
+        "worst_decoder_pass_rate": 0.5,
+        "worst_scenario_pass_rate": 0.0,
+        "qr_verify_mode": True,
+        "qr_verify_any_exact": True,
+        "qr_verify_direct_exact": True,
+        "qr_verify_tolerance_score": 0.5,
+        "raw_pass_rate": 0.5,
+        "reference_pass_rate": 1.0,
+        "reference_passed": 2,
+        "reference_total": 2,
+        "original_passed": 1,
+        "original_total": 1,
+        "qr_verify_exact_presets": 1,
+        "qr_verify_supported_presets": 2,
+    }
+    monkeypatch.setattr(
+        service_module,
+        "compare_validation_to_reference",
+        lambda *_args, **_kwargs: dict(qr_summary),
+    )
+
+    service.generate(
+        GenerationRequest(
+            payload="https://example.prooftag.test/t/low-tolerance",
+            backend="controlnet",
+            max_attempts=1,
+        ),
+        target_variant="srmpgd",
+    )
+
+    assert backend.summary["pass_rate"] == 0.5
+    assert backend.summary["strict_all"] is False
 
 
 def test_forced_laboratory_output_reuses_supplied_stage1_without_regeneration(tmp_path):

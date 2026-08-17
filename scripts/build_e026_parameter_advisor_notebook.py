@@ -105,6 +105,7 @@ from prooftag_qr.e026_recovery import recover_e026_exports
 from prooftag_qr.advisor_inference import (
     AdvisorInferenceRunner,
     build_advisor_inference_plan,
+    deduplicate_advisor_inference_results,
     load_advisor_inference_results,
     select_advisor_inference_winners,
     summarize_advisor_inference_results,
@@ -125,7 +126,7 @@ print('Répertoire :', Path.cwd())
     ),
     markdown("## 1. Configuration explicite"),
     code(
-        """EXPERIMENT_NAME = 'e026-prompt-parameter-advisor-v1'
+        """EXPERIMENT_NAME = 'e026j-diversified-prompt-parameter-advisor-v1'
 INPUT_GLOBS = [
     '/workspace/imports/prooftag-lab-*.csv',
     '/data/e026-input/prooftag-lab-*.csv',
@@ -216,7 +217,9 @@ NEW_QR_CONTEXT = {
 }
 
 # Collecte intégrée. Conserver exactement ces valeurs pour reprendre le même plan.
-RUN_COLLECTION = True
+# La collecte hebdomadaire E026 existe dÃ©jÃ . E026J la recharge sans regÃ©nÃ©rer
+# les milliers d'images valides. Remettre True seulement pour une nouvelle collecte.
+RUN_COLLECTION = False
 COLLECTION_PAYLOAD = 'https://ptag.io/t/e026w'  # remplacer par votre URL courte réelle
 COLLECTION_API_URL = 'http://prooftag-qr-svc.qr-core.svc.cluster.local:8080'
 COLLECTION_OUTPUT_ROOT = Path('/data/e026-week')
@@ -229,7 +232,7 @@ COLLECTION_MINIMUM_FREE_GIB = 8.0
 
 # Campagne réelle après entraînement : top-3 E026 contre Stage 1, mêmes trois seeds.
 RUN_ADVISOR_INFERENCE = True
-ADVISOR_INFERENCE_OUTPUT_ROOT = Path('/data/e026-inference')
+ADVISOR_INFERENCE_OUTPUT_ROOT = Path('/data/e026j-inference')
 ADVISOR_INFERENCE_TOP_K = 3
 ADVISOR_INFERENCE_BASELINE = 'diffqrcoder_stage1'
 ADVISOR_INFERENCE_SEEDS = (413001, 523001, 631001)
@@ -655,13 +658,16 @@ else:
 """
     ),
     markdown(
-        """## 10. Générer réellement avec les recommandations E026
+        """## 10. E026J — générer trois recommandations réellement distinctes
 
-Cette étape est la preuve qui manquait. Pour chacun des dix prompts jamais vus pendant
-l'entraînement, le conseiller choisit ses trois recettes les plus sûres. L'API GPU génère ces
-trois candidats avec exactement les mêmes seeds qu'une baseline Stage 1 fixe.
+Pour chacun des dix prompts jamais vus pendant l'entraînement, E026J choisit trois objectifs
+distincts : robustesse QR maximale, compromis QR/esthétique et esthétique maximale parmi les
+recettes encore scan-safe. Les variantes SR-MPGD partageant le même Stage 2 sont dédupliquées
+avant la génération. La porte adaptative exige une tolérance QR-Verify de 0,80 : au-dessus,
+SR-MPGD reste à l'itération zéro et la sortie est honnêtement notée SRPG ; en dessous, le
+raffinement peut calculer ses pas sous les gardes esthétiques existantes.
 
-Le plan est déterministe et persistant dans `/data/e026-inference` : après une coupure, relancer
+Le plan est déterministe et persistant dans `/data/e026j-inference` : après une coupure, relancer
 la cellule retrouve la campagne distante et les CSV déjà exportés. Chaque PNG conserve son rang
 E026, la recette source, la prédiction avant génération et les scores réellement mesurés après
 génération. Seul QR-Verify décide du succès QR réel.
@@ -674,9 +680,11 @@ inference_summary = None
 inference_rows = []
 inference_frame = pd.DataFrame()
 inference_gallery_entries = []
+inference_gallery_unique_entries = []
 inference_gallery_paths = []
 inference_gallery_audit = None
 inference_evaluation = None
+duplicate_report = None
 
 if advisor is not None:
     advisor_fingerprint = {
@@ -716,7 +724,7 @@ if advisor is not None:
         'plan': inference_plan.plan_id,
         'modèle SHA-256': advisor_sha256,
         'prompts inconnus': len(ADVISOR_INFERENCE_PROMPTS),
-        'top-K conseillé': ADVISOR_INFERENCE_TOP_K,
+        'profils distincts': ADVISOR_INFERENCE_TOP_K,
         'seeds appariées': len(ADVISOR_INFERENCE_SEEDS),
         'images comparatives': inference_plan.public['comparison_trial_count'],
         'prérequis SRPG': inference_plan.public['prerequisite_trial_count'],
@@ -731,7 +739,7 @@ if advisor is not None:
         inference_events.append(event)
         clear_output(wait=True)
         latest = inference_events[-1]
-        display(Markdown('### Génération réelle guidée par E026'))
+        display(Markdown('### Génération réelle diversifiée E026J'))
         display(pd.DataFrame([{
             'événement': latest.get('event'),
             'état': latest.get('status', 'en cours'),
@@ -774,7 +782,8 @@ if advisor is not None:
         inference_frame.to_csv(RUN_DIR / 'advisor-inference-results.csv', index=False)
         display(Markdown('### Résultats réels : prédiction puis mesure'))
         display(inference_frame[[
-            'prompt_id', 'role', 'advisor_rank', 'source_method_id', 'seed',
+            'prompt_id', 'role', 'selection_profile', 'advisor_rank', 'model_rank',
+            'source_method_id', 'effective_candidate_signature', 'seed',
             'predicted_qr_success', 'predicted_qr_success_lower_bound',
             'qr_success', 'qr_tolerance', 'clip_aesthetic', 'clip_score',
             'hpsv2_1', 'saturation_risk', 'duration_ms', 'status',
@@ -790,8 +799,12 @@ if advisor is not None:
             json.dumps(inference_evaluation, ensure_ascii=False, indent=2),
             encoding='utf-8',
         )
-        display(Markdown('### Verdict mesuré du conseiller E026'))
+        display(Markdown('### Verdict mesuré du conseiller E026J'))
         display(pd.DataFrame([inference_evaluation]).T.rename(columns={0: 'valeur'}))
+        print(
+            'Couverture prompt/seed top-K :',
+            inference_evaluation['top_k_prompt_seed_coverage'],
+        )
         if inference_evaluation['technical_error_images']:
             display(Markdown(
                 '**ALERTE : le taux principal compte les erreurs techniques comme des '
@@ -799,7 +812,8 @@ if advisor is not None:
                 'effectivement produites et ne doit pas être présenté seul.**'
             ))
         aggregate = comparison_frame.groupby(
-            ['role', 'advisor_rank', 'source_method_id'], dropna=False
+            ['role', 'selection_profile', 'advisor_rank', 'source_method_id'],
+            dropna=False,
         ).agg(
             images_planned=('trial_id', 'size'),
             images_measured=('qr_success', 'count'),
@@ -816,12 +830,12 @@ if advisor is not None:
             predicted_qr=('predicted_qr_success', 'mean'),
         ).reset_index()
         aggregate.to_csv(RUN_DIR / 'advisor-inference-aggregate.csv', index=False)
-        display(Markdown('### Comparaison agrégée E026 contre baseline'))
+        display(Markdown('### Comparaison agrégée E026J contre baseline'))
         display(aggregate)
 
         fig, axes = plt.subplots(1, 3, figsize=(18, 5))
         labels = [
-            ('baseline' if row.role == 'fixed_baseline' else f'rang {int(row.advisor_rank)}')
+            ('baseline' if row.role == 'fixed_baseline' else str(row.selection_profile))
             + f'\\n{row.source_method_id}'
             for row in aggregate.itertuples()
         ]
@@ -876,16 +890,44 @@ if advisor is not None:
             timeout=30,
         )
         write_gallery_index(inference_gallery_entries, inference_gallery_dir)
+        inference_gallery_unique_entries = deduplicate_advisor_inference_results(
+            inference_gallery_entries
+        )
+        duplicate_report = {
+            'generated_images': len(inference_gallery_entries),
+            'unique_images': len(inference_gallery_unique_entries),
+            'duplicate_images': (
+                len(inference_gallery_entries) - len(inference_gallery_unique_entries)
+            ),
+            'srmpgd_requested': sum(
+                row.get('requested_source_output_variant') == 'srmpgd'
+                for row in inference_gallery_entries
+            ),
+            'srmpgd_effective': sum(
+                bool(row.get('srmpgd_effective'))
+                for row in inference_gallery_entries
+            ),
+            'srmpgd_noop': sum(
+                bool(row.get('srmpgd_noop'))
+                for row in inference_gallery_entries
+            ),
+        }
+        (inference_gallery_dir / 'effective-output-audit.json').write_text(
+            json.dumps(duplicate_report, ensure_ascii=False, indent=2),
+            encoding='utf-8',
+        )
+        display(Markdown('### Audit des sorties réellement distinctes'))
+        display(pd.DataFrame([duplicate_report]))
         for seed in ADVISOR_INFERENCE_SEEDS:
             selected = [
-                row for row in inference_gallery_entries
+                row for row in inference_gallery_unique_entries
                 if int(row.get('seed') or -1) == seed
             ]
             if not selected:
                 continue
             path = render_advisor_contact_sheet(
                 selected,
-                title=f'E026 conseillé contre baseline - seed {seed}',
+                title=f'E026J profils distincts contre baseline - seed {seed}',
                 output_path=inference_gallery_dir / f'comparison-seed-{seed}.png',
                 columns=ADVISOR_INFERENCE_TOP_K + 1,
             )
@@ -893,7 +935,7 @@ if advisor is not None:
             display(Markdown(f'### Comparaison réelle — seed {seed}'))
             display(NotebookImage(filename=str(path)))
 
-        winners = select_advisor_inference_winners(inference_gallery_entries)
+        winners = select_advisor_inference_winners(inference_gallery_unique_entries)
         if winners:
             winners_path = render_advisor_contact_sheet(
                 winners,
@@ -986,6 +1028,7 @@ connues et améliore progressivement le modèle.
         'result_rows': len(inference_rows),
         'evaluation': inference_evaluation,
         'gallery': inference_gallery_audit,
+        'effective_outputs': duplicate_report,
     },
     'objective_order': [
         'qr_verify_probability_lower_bound',
