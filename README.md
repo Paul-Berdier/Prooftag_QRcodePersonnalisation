@@ -133,6 +133,8 @@ QR-Verify. Le protocole et la commande de re-test sont dans
 Le conseiller E026 et sa collecte autonome d'une semaine sont documentés dans
 [`docs/e026-prompt-parameter-advisor.md`](docs/e026-prompt-parameter-advisor.md) et
 [`docs/e026-week-unattended.md`](docs/e026-week-unattended.md).
+Le notebook E026 exécute ensuite E026I : top-3 conseillé contre Stage 1 sur dix prompts inconnus,
+avec reprise, images, QR-Verify, CLIP-Aesthetic, CLIPScore et HPS v2.1.
 
 ## Déploiement
 

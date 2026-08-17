@@ -254,7 +254,10 @@ refuse les datasets non identifiables, entraîne le modèle et exporte un top-K 
 
 Le notebook E026 tourne en CPU pour laisser la RTX à l'API. Les exports sont écrits après chaque
 lot sous `/data/e026-week`; `/workspace/imports` reste seulement une source facultative pour les
-anciens CSV. Le notebook ne remplace jamais la validation finale QR-Verify. Le protocole est dans
+anciens CSV. Après l'entraînement, E026I applique réellement le top-3 conseillé à dix prompts
+inconnus et trois seeds, le compare à Stage 1, reprend après interruption et produit les PNG,
+QR-Verify, CLIP-Aesthetic, CLIPScore et HPS dans l'archive. Le notebook ne remplace jamais la
+validation finale QR-Verify. Le protocole est dans
 [`../docs/e026-prompt-parameter-advisor.md`](../docs/e026-prompt-parameter-advisor.md).
 
 Pour remplir ce dataset pendant une absence sans laisser Jupyter ouvert, E026W lance un Job

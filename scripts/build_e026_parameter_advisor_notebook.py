@@ -102,6 +102,12 @@ for candidate in [Path('/app'), Path.cwd(), Path.cwd().parent]:
         sys.path.insert(0, str(candidate))
 
 from prooftag_qr.e026_recovery import recover_e026_exports
+from prooftag_qr.advisor_inference import (
+    AdvisorInferenceRunner,
+    build_advisor_inference_plan,
+    load_advisor_inference_results,
+    select_advisor_inference_winners,
+)
 from prooftag_qr.advisor_gallery import (
     download_advisor_gallery,
     render_advisor_contact_sheet,
@@ -148,9 +154,58 @@ GALLERY_PROMPT_COUNT = 8
 GALLERY_SECTION_SIZE = 8
 GALLERY_SEED = 113001
 
-# À modifier après entraînement pour obtenir une recommandation.
-NEW_PROMPT = 'A cobalt glass greenhouse filled with white orchids, elegant editorial photograph.'
-NEW_PAYLOAD_LENGTH = 28
+# Prompts d'inférence strictement inconnus : cinq simples puis cinq atypiques.
+ADVISOR_INFERENCE_PROMPTS = [
+    {
+        'id': 'e026i_simple_teapot',
+        'text': (
+            'A handmade ceramic teapot on a linen table, soft window light, '
+            'editorial photograph.'
+        ),
+    },
+    {
+        'id': 'e026i_simple_bicycle',
+        'text': 'A red bicycle leaning against a pale concrete wall, clean afternoon light.',
+    },
+    {
+        'id': 'e026i_simple_perfume',
+        'text': 'A clear perfume bottle on a black pedestal, precise studio product photography.',
+    },
+    {
+        'id': 'e026i_simple_cabin',
+        'text': 'A small wooden cabin in a quiet snowy clearing at sunrise.',
+    },
+    {
+        'id': 'e026i_simple_lemons',
+        'text': 'A bowl of yellow lemons on a blue kitchen counter, natural daylight.',
+    },
+    {
+        'id': 'e026i_atypical_whale_library',
+        'text': (
+            'A transparent whale-shaped library floating inside a storm cloud, '
+            'cinematic concept art.'
+        ),
+    },
+    {
+        'id': 'e026i_atypical_clock_orchestra',
+        'text': 'An orchestra of antique clocks performing inside an abandoned greenhouse.',
+    },
+    {
+        'id': 'e026i_atypical_mobius',
+        'text': 'A Mobius staircase woven from crimson velvet and thousands of fireflies.',
+    },
+    {
+        'id': 'e026i_atypical_jellyfish',
+        'text': 'A crystalline jellyfish serving tea in a monumental brutalist hotel lobby.',
+    },
+    {
+        'id': 'e026i_atypical_egg_city',
+        'text': 'A miniature rain-soaked city growing inside a cracked porcelain egg.',
+    },
+]
+
+# Le premier prompt garde la cellule de recommandation détaillée.
+NEW_PROMPT = ADVISOR_INFERENCE_PROMPTS[0]['text']
 NEW_ERROR_CORRECTION = 'M'
 NEW_QR_CONTEXT = {
     'qr_version': 3,
@@ -170,6 +225,15 @@ COLLECTION_SEEDS = (113001, 223001, 337001)
 COLLECTION_DURATION_HOURS = 162.0
 COLLECTION_POLL_SECONDS = 15.0
 COLLECTION_MINIMUM_FREE_GIB = 8.0
+
+# Campagne réelle après entraînement : top-3 E026 contre Stage 1, mêmes trois seeds.
+RUN_ADVISOR_INFERENCE = True
+ADVISOR_INFERENCE_OUTPUT_ROOT = Path('/data/e026-inference')
+ADVISOR_INFERENCE_TOP_K = 3
+ADVISOR_INFERENCE_BASELINE = 'diffqrcoder_stage1'
+ADVISOR_INFERENCE_SEEDS = (413001, 523001, 631001)
+ADVISOR_INFERENCE_POLL_SECONDS = 15.0
+NEW_PAYLOAD_LENGTH = len(COLLECTION_PAYLOAD)
 
 RUN_DIR = Path('/data/notebook-runs') / (
     datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + EXPERIMENT_NAME
@@ -590,7 +654,290 @@ else:
 """
     ),
     markdown(
-        """## 10. Lot d'apprentissage actif
+        """## 10. Générer réellement avec les recommandations E026
+
+Cette étape est la preuve qui manquait. Pour chacun des dix prompts jamais vus pendant
+l'entraînement, le conseiller choisit ses trois recettes les plus sûres. L'API GPU génère ces
+trois candidats avec exactement les mêmes seeds qu'une baseline Stage 1 fixe.
+
+Le plan est déterministe et persistant dans `/data/e026-inference` : après une coupure, relancer
+la cellule retrouve la campagne distante et les CSV déjà exportés. Chaque PNG conserve son rang
+E026, la recette source, la prédiction avant génération et les scores réellement mesurés après
+génération. Seul QR-Verify décide du succès QR réel.
+"""
+    ),
+    code(
+        """inference_runner = None
+inference_plan = None
+inference_summary = None
+inference_rows = []
+inference_frame = pd.DataFrame()
+inference_gallery_entries = []
+inference_gallery_paths = []
+inference_gallery_audit = None
+inference_evaluation = None
+
+if advisor is not None:
+    advisor_fingerprint = {
+        'class': 'E026ParameterAdvisor',
+        'random_state': advisor.random_state,
+        'trees': advisor.trees,
+        'uncertainty_penalty': advisor.uncertainty_penalty,
+        'training_report': advisor.training_report,
+        'feature_names': advisor.feature_names,
+        'feature_importances': advisor.feature_importances,
+        'candidate_signatures': sorted(item.signature for item in dataset.candidates),
+    }
+    advisor_sha256 = hashlib.sha256(
+        json.dumps(
+            advisor_fingerprint, ensure_ascii=False, sort_keys=True,
+            separators=(',', ':'),
+        ).encode('utf-8')
+    ).hexdigest()
+    training_prompt_texts = sorted({record.prompt_text for record in dataset.records})
+    inference_plan = build_advisor_inference_plan(
+        advisor=advisor,
+        candidates=dataset.candidates,
+        prompts=ADVISOR_INFERENCE_PROMPTS,
+        payload=COLLECTION_PAYLOAD,
+        advisor_sha256=advisor_sha256,
+        prompt_embedding_provider=prompt_embedding,
+        seen_prompt_texts=training_prompt_texts,
+        seeds=ADVISOR_INFERENCE_SEEDS,
+        top_k=ADVISOR_INFERENCE_TOP_K,
+        baseline_method_id=ADVISOR_INFERENCE_BASELINE,
+        scan_probability_threshold=SCAN_PROBABILITY_THRESHOLD,
+        error_correction=NEW_ERROR_CORRECTION,
+        qr_context=NEW_QR_CONTEXT,
+    )
+    display(Markdown('### Plan d inférence avant génération'))
+    display(pd.DataFrame([{
+        'plan': inference_plan.plan_id,
+        'modèle SHA-256': advisor_sha256,
+        'prompts inconnus': len(ADVISOR_INFERENCE_PROMPTS),
+        'top-K conseillé': ADVISOR_INFERENCE_TOP_K,
+        'seeds appariées': len(ADVISOR_INFERENCE_SEEDS),
+        'essais réels': inference_plan.public['trial_count'],
+        'baseline': ADVISOR_INFERENCE_BASELINE,
+    }]))
+
+    inference_events = deque(maxlen=25)
+    inference_started = time.monotonic()
+
+    def inference_progress(event):
+        inference_events.append(event)
+        clear_output(wait=True)
+        latest = inference_events[-1]
+        display(Markdown('### Génération réelle guidée par E026'))
+        display(pd.DataFrame([{
+            'événement': latest.get('event'),
+            'état': latest.get('status', 'en cours'),
+            'prompt': (
+                f"{latest.get('prompt_number', '—')}/"
+                f"{latest.get('prompt_count', len(ADVISOR_INFERENCE_PROMPTS))}"
+            ),
+            'essais': (
+                f"{latest.get('completed_trials', '—')}/"
+                f"{latest.get('total_trials', '—')}"
+            ),
+            'acceptés QR-Verify': latest.get('accepted_trials', '—'),
+            'méthode': latest.get('current_method_id') or '—',
+            'seed': latest.get('current_seed') or '—',
+            'temps écoulé (min)': round((time.monotonic() - inference_started) / 60, 1),
+        }]))
+        display(pd.DataFrame(list(inference_events)[-10:]))
+
+    inference_runner = AdvisorInferenceRunner(
+        plan=inference_plan,
+        api_url=COLLECTION_API_URL,
+        output_root=ADVISOR_INFERENCE_OUTPUT_ROOT,
+        poll_seconds=ADVISOR_INFERENCE_POLL_SECONDS,
+        progress_callback=inference_progress,
+    )
+    print('Plan persistant :', inference_runner.output_dir)
+    print('État de reprise :', inference_runner.state_path)
+    if RUN_ADVISOR_INFERENCE:
+        inference_summary = inference_runner.run()
+    else:
+        inference_summary = inference_runner.summary()
+        print('RUN_ADVISOR_INFERENCE=False : résultats persistants uniquement.')
+
+    inference_rows = load_advisor_inference_results(inference_runner.output_dir)
+    inference_frame = pd.DataFrame(inference_rows)
+    if not inference_frame.empty:
+        inference_frame['prediction_error'] = (
+            inference_frame.qr_success - inference_frame.predicted_qr_success
+        )
+        inference_frame.to_csv(RUN_DIR / 'advisor-inference-results.csv', index=False)
+        display(Markdown('### Résultats réels : prédiction puis mesure'))
+        display(inference_frame[[
+            'prompt_id', 'role', 'advisor_rank', 'source_method_id', 'seed',
+            'predicted_qr_success', 'predicted_qr_success_lower_bound',
+            'qr_success', 'qr_tolerance', 'clip_aesthetic', 'clip_score',
+            'hpsv2_1', 'saturation_risk', 'duration_ms', 'status',
+        ]])
+        recommended_frame = inference_frame[
+            inference_frame.role == 'advisor_recommendation'
+        ]
+        rank1_frame = recommended_frame[recommended_frame.advisor_rank == 1]
+        baseline_frame = inference_frame[inference_frame.role == 'fixed_baseline']
+        successful_advisor = recommended_frame[recommended_frame.qr_success >= 0.5]
+        prompt_seed_coverage = recommended_frame.groupby(
+            ['prompt_id', 'seed']
+        ).qr_success.max()
+
+        def finite_mean(values):
+            value = float(values.mean())
+            return value if np.isfinite(value) else None
+
+        inference_evaluation = {
+            'images_measured': len(inference_frame),
+            'prompts_measured': int(inference_frame.prompt_id.nunique()),
+            'rank1_qr_verify_success_rate': finite_mean(rank1_frame.qr_success),
+            'top_k_image_qr_verify_success_rate': finite_mean(
+                recommended_frame.qr_success
+            ),
+            'top_k_prompt_seed_coverage': finite_mean(prompt_seed_coverage),
+            'baseline_qr_verify_success_rate': (
+                finite_mean(baseline_frame.qr_success)
+                if not baseline_frame.empty else None
+            ),
+            'successful_advisor_clip_aesthetic': (
+                finite_mean(successful_advisor.clip_aesthetic)
+                if not successful_advisor.empty else None
+            ),
+            'successful_advisor_clip_score': (
+                finite_mean(successful_advisor.clip_score)
+                if not successful_advisor.empty else None
+            ),
+            'successful_advisor_hpsv2_1': (
+                finite_mean(successful_advisor.hpsv2_1)
+                if not successful_advisor.empty else None
+            ),
+        }
+        (RUN_DIR / 'advisor-inference-evaluation.json').write_text(
+            json.dumps(inference_evaluation, ensure_ascii=False, indent=2),
+            encoding='utf-8',
+        )
+        display(Markdown('### Verdict mesuré du conseiller E026'))
+        display(pd.DataFrame([inference_evaluation]).T.rename(columns={0: 'valeur'}))
+        aggregate = inference_frame.groupby(
+            ['role', 'advisor_rank', 'source_method_id'], dropna=False
+        ).agg(
+            images=('trial_id', 'size'),
+            qr_verify_success=('qr_success', 'mean'),
+            qr_tolerance=('qr_tolerance', 'mean'),
+            clip_aesthetic=('clip_aesthetic', 'mean'),
+            clip_score=('clip_score', 'mean'),
+            hpsv2_1=('hpsv2_1', 'mean'),
+            saturation=('saturation_risk', 'mean'),
+            predicted_qr=('predicted_qr_success', 'mean'),
+        ).reset_index()
+        aggregate.to_csv(RUN_DIR / 'advisor-inference-aggregate.csv', index=False)
+        display(Markdown('### Comparaison agrégée E026 contre baseline'))
+        display(aggregate)
+
+        fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+        labels = [
+            ('baseline' if row.role == 'fixed_baseline' else f'rang {int(row.advisor_rank)}')
+            + f'\\n{row.source_method_id}'
+            for row in aggregate.itertuples()
+        ]
+        axes[0].scatter(
+            aggregate.predicted_qr, aggregate.qr_verify_success,
+            s=90, c='#3a86ff', edgecolors='white', linewidths=0.8,
+        )
+        axes[0].plot([0, 1], [0, 1], '--', color='grey')
+        for label, x_value, y_value in zip(
+            labels, aggregate.predicted_qr, aggregate.qr_verify_success
+        ):
+            axes[0].annotate(label, (x_value, y_value), fontsize=7, xytext=(4, 4),
+                             textcoords='offset points')
+        axes[0].set(
+            xlabel='Probabilité QR prédite', ylabel='Succès QR-Verify mesuré',
+            title='Prédiction contre réalité', xlim=(0, 1.02), ylim=(0, 1.02),
+        )
+        axes[0].grid(alpha=0.25)
+
+        colors = np.where(inference_frame.qr_success >= 0.5, '#22c55e', '#ef4444')
+        axes[1].scatter(
+            inference_frame.qr_tolerance, inference_frame.clip_aesthetic,
+            c=colors, alpha=0.75, s=42,
+        )
+        axes[1].set(
+            xlabel='Tolérance QR-Verify', ylabel='CLIP-Aesthetic',
+            title='Scannabilité et esthétique par image',
+        )
+        axes[1].grid(alpha=0.25)
+
+        positions = np.arange(len(aggregate))
+        axes[2].bar(positions, aggregate.hpsv2_1, color='#8338ec')
+        axes[2].set_xticks(positions, labels, rotation=55, ha='right')
+        axes[2].set(ylabel='HPS v2.1 moyen', title='Préférence visuelle mesurée')
+        axes[2].grid(axis='y', alpha=0.25)
+        fig.tight_layout()
+        scorecard_path = RUN_DIR / 'advisor-inference-scorecard.png'
+        fig.savefig(scorecard_path, dpi=170)
+        display(fig)
+
+        inference_gallery_dir = RUN_DIR / 'advisor-inference-gallery'
+        downloadable = [row for row in inference_rows if row.get('generation_run_id')]
+        inference_gallery_entries = download_advisor_gallery(
+            downloadable,
+            api_url=COLLECTION_API_URL,
+            output_dir=inference_gallery_dir / 'images',
+            timeout=30,
+        )
+        write_gallery_index(inference_gallery_entries, inference_gallery_dir)
+        for seed in ADVISOR_INFERENCE_SEEDS:
+            selected = [
+                row for row in inference_gallery_entries
+                if int(row.get('seed') or -1) == seed
+            ]
+            if not selected:
+                continue
+            path = render_advisor_contact_sheet(
+                selected,
+                title=f'E026 conseillé contre baseline - seed {seed}',
+                output_path=inference_gallery_dir / f'comparison-seed-{seed}.png',
+                columns=ADVISOR_INFERENCE_TOP_K + 1,
+            )
+            inference_gallery_paths.append(path)
+            display(Markdown(f'### Comparaison réelle — seed {seed}'))
+            display(NotebookImage(filename=str(path)))
+
+        winners = select_advisor_inference_winners(inference_gallery_entries)
+        if winners:
+            winners_path = render_advisor_contact_sheet(
+                winners,
+                title='Meilleur QR mesuré pour chaque prompt inconnu',
+                output_path=inference_gallery_dir / 'measured-winners.png',
+                columns=5,
+            )
+            inference_gallery_paths.append(winners_path)
+            display(Markdown('### Gagnants après QR-Verify et scores esthétiques'))
+            display(NotebookImage(filename=str(winners_path)))
+        inference_gallery_audit = json.loads(
+            (inference_gallery_dir / 'gallery-audit.json').read_text(encoding='utf-8')
+        )
+
+        audit_dir = RUN_DIR / 'advisor-inference-audit'
+        audit_dir.mkdir(exist_ok=True)
+        for source in [
+            inference_runner.plan_path,
+            inference_runner.predictions_path,
+            inference_runner.state_path,
+            *sorted(inference_runner.exports_dir.glob('*.csv')),
+        ]:
+            shutil.copy2(source, audit_dir / source.name)
+    else:
+        print('Aucun essai exporté pour ce plan. Relancer cette cellule pour reprendre.')
+else:
+    print('Inférence impossible : le conseiller n est pas entraîné.')
+"""
+    ),
+    markdown(
+        """## 11. Lot d'apprentissage actif
 
 Le prochain lot mélange exploitation et exploration : trois recettes au meilleur compromis sûr,
 puis trois recettes très incertaines. Cela évite de répéter uniquement les configurations déjà
@@ -636,7 +983,7 @@ connues et améliore progressivement le modèle.
     ]))
 """
     ),
-    markdown("## 11. Manifest, limites et archive"),
+    markdown("## 12. Manifest, limites et archive"),
     code(
         """manifest = {
     'experiment': EXPERIMENT_NAME,
@@ -646,6 +993,13 @@ connues et améliore progressivement le modèle.
     'data_ready': DATA_READY,
     'training_report': training_report,
     'visual_gallery': gallery_audit,
+    'advisor_inference': {
+        'plan': inference_plan.public if inference_plan is not None else None,
+        'summary': inference_summary,
+        'result_rows': len(inference_rows),
+        'evaluation': inference_evaluation,
+        'gallery': inference_gallery_audit,
+    },
     'objective_order': [
         'qr_verify_probability_lower_bound',
         'qr_verify_probability',
@@ -665,11 +1019,28 @@ connues et améliore progressivement le modèle.
         'CLIP-Aesthetic, CLIPScore and HPS are proxies; human ratings remain valuable labels.',
         'Seeds are sampled at generation time, not treated as a numerically predictable parameter.',
         'Gallery images depend on generation artifacts still being present in the API storage.',
+        'Advisor inference measures generated candidates; predictions alone never certify them.',
     ],
 }
 (RUN_DIR / 'manifest.json').write_text(
     json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8'
 )
+
+# Copie visible dans l'explorateur Jupyter, en plus de l'archive complète.
+for directory_name in ['visual-gallery', 'advisor-inference-gallery']:
+    source = RUN_DIR / directory_name
+    if source.is_dir():
+        shutil.copytree(source, DOWNLOAD_DIR / directory_name, dirs_exist_ok=True)
+for filename in [
+    'advisor-inference-results.csv',
+    'advisor-inference-aggregate.csv',
+    'advisor-inference-evaluation.json',
+    'advisor-inference-scorecard.png',
+    'manifest.json',
+]:
+    source = RUN_DIR / filename
+    if source.is_file():
+        shutil.copy2(source, DOWNLOAD_DIR / filename)
 
 archive = shutil.make_archive(
     str(RUN_DIR), 'gztar', root_dir=RUN_DIR.parent, base_dir=RUN_DIR.name
@@ -679,6 +1050,8 @@ print('Archive :', archive)
 print('Archive téléchargeable dans Jupyter :', download_archive)
 print('Modèle entraîné :', bool(advisor))
 print('Planches visuelles :', [str(path) for path in gallery_paths])
+print('Planches inférence E026 :', [str(path) for path in inference_gallery_paths])
+print('Images visibles dans Jupyter :', DOWNLOAD_DIR / 'advisor-inference-gallery')
 print('La prochaine décision de livraison reste une validation réelle QR-Verify.')
 """
     ),

@@ -703,6 +703,20 @@ def test_e026_notebook_uses_qr_verify_as_a_calibrated_first_objective():
     assert "select_advisor_gallery" in source
     assert "visual-gallery" in source
     assert "GALLERY_COMPARISON_METHODS" in source
+    assert "AdvisorInferenceRunner" in source
+    assert "build_advisor_inference_plan" in source
+    assert "RUN_ADVISOR_INFERENCE = True" in source
+    assert "ADVISOR_INFERENCE_TOP_K = 3" in source
+    assert "ADVISOR_INFERENCE_SEEDS = (413001, 523001, 631001)" in source
+    assert "seen_prompt_texts=training_prompt_texts" in source
+    assert "advisor-inference-results.csv" in source
+    assert "advisor-inference-evaluation.json" in source
+    assert "top_k_prompt_seed_coverage" in source
+    assert "comparison-seed-" in source
+    assert "measured-winners.png" in source
+    assert "Images visibles dans Jupyter" in source
+    assert "shutil.copytree(source, DOWNLOAD_DIR / directory_name" in source
+    assert "/data/e026-inference" in source
     assert "gallery-index.csv" in Path("prooftag_qr/advisor_gallery.py").read_text(
         encoding="utf-8"
     )

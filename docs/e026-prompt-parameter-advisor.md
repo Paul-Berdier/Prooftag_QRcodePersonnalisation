@@ -156,6 +156,38 @@ Le lot actif mélange les trois meilleures recettes et les trois configurations 
 incertaines. Après génération et QR-Verify, leurs nouvelles lignes rejoignent le dataset. Cette
 boucle est plus sûre qu'une exploration exhaustive permanente.
 
+## Inférence réelle E026I
+
+Une recommandation tabulaire ne constitue pas une image. Après l'entraînement, le notebook lance
+donc E026I sur dix textes absents du dataset : cinq prompts simples et cinq atypiques. Chaque
+prompt reçoit son propre top-3 E026, comparé à `diffqrcoder_stage1` avec trois seeds appariées.
+Le budget maximal est de 120 images.
+
+Les pixels restent générés par DiffQRCoder, Cetus-Mix Whalefall et QR Monster v2. L'expression
+« généré avec E026 » signifie précisément que la recette a été choisie par le conseiller avant
+la génération. Chaque essai conserve le rang, la recette source, les scores prédits et les scores
+mesurés. Le verdict rapporte séparément :
+
+- le taux QR-Verify du rang 1 ;
+- le taux QR-Verify de toutes les images du top-3 ;
+- la couverture prompt/seed lorsqu'au moins une des trois recettes réussit ;
+- le taux de la baseline Stage 1 ;
+- CLIP-Aesthetic, CLIPScore et HPS v2.1 uniquement parmi les recommandations scannables.
+
+Le plan est identifié par le hash du conseiller, des prompts, des recettes, des seeds et du
+contexte QR. Son état atomique réside dans `/data/e026-inference/<plan-id>`. Une reprise retrouve
+une campagne API déjà créée grâce à son nom déterministe, réexporte un résultat terminal si
+nécessaire et ne soumet jamais de nouveau les prompts terminés. Le plan persistant ne contient pas
+le payload clair, seulement son SHA-256 et sa longueur.
+
+Dans Jupyter, les images sont visibles sans extraire l'archive sous
+`results/<run>/advisor-inference-gallery`. Le sous-dossier `images` contient chaque PNG ; les
+fichiers `comparison-seed-*.png` et `measured-winners.png` sont les planches de synthèse.
+
+Les prompts E026I restent un holdout et ne sont pas automatiquement ajoutés aux globes
+d'entraînement du même run. Leur réutilisation pour entraîner une version suivante devra être
+accompagnée d'un nouveau jeu de prompts d'évaluation réellement inconnus.
+
 ## Artefacts
 
 Chaque exécution écrit dans `/data/notebook-runs/<date>-e026-...` :
@@ -168,6 +200,10 @@ Chaque exécution écrit dans `/data/notebook-runs/<date>-e026-...` :
 - `feature-importance.csv` ;
 - `prooftag-e026-parameter-advisor.joblib` ;
 - `recommendations.csv` et `recommendations.json` ;
+- `advisor-inference-results.csv` et `advisor-inference-aggregate.csv` ;
+- `advisor-inference-evaluation.json` et `advisor-inference-scorecard.png` ;
+- `advisor-inference-gallery/` avec les PNG, trois comparaisons appariées et les gagnants ;
+- `advisor-inference-audit/` avec le plan, l'état, les prédictions et les exports API ;
 - `active-learning-batch.json` ;
 - `manifest.json` ;
 - une archive `.tar.gz` du run.
