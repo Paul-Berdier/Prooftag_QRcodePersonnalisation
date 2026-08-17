@@ -660,10 +660,13 @@ else:
     markdown(
         """## 10. E026J — générer trois recommandations réellement distinctes
 
-Pour chacun des dix prompts jamais vus pendant l'entraînement, E026J choisit trois objectifs
-distincts : robustesse QR maximale, compromis QR/esthétique et esthétique maximale parmi les
-recettes encore scan-safe. Les variantes SR-MPGD partageant le même Stage 2 sont dédupliquées
-avant la génération. La porte adaptative exige une tolérance QR-Verify de 0,80 : au-dessus,
+Pour chacun des dix prompts jamais vus pendant l'entraînement, E026J choisit jusqu'à trois
+recettes effectivement distinctes. Il conserve d'abord toutes les recettes qui franchissent la
+borne probabiliste de sécurité. S'il n'en existe que deux pour un top-3, le troisième emplacement
+devient `aesthetic_exploratory` et reste explicitement `scan_safe=False` : il est généré pour
+apprendre, jamais présenté comme sûr avant la mesure QR-Verify. Les variantes SR-MPGD partageant
+le même Stage 2 sont dédupliquées avant la génération. La porte adaptative exige une tolérance
+QR-Verify de 0,80 : au-dessus,
 SR-MPGD reste à l'itération zéro et la sortie est honnêtement notée SRPG ; en dessous, le
 raffinement peut calculer ses pas sous les gardes esthétiques existantes.
 
@@ -727,10 +730,22 @@ if advisor is not None:
         'profils distincts': ADVISOR_INFERENCE_TOP_K,
         'seeds appariées': len(ADVISOR_INFERENCE_SEEDS),
         'images comparatives': inference_plan.public['comparison_trial_count'],
+        'recommandations scan-safe': inference_plan.public[
+            'scan_safe_recommendation_count'
+        ],
+        'recommandations exploratoires': inference_plan.public[
+            'exploratory_recommendation_count'
+        ],
         'prérequis SRPG': inference_plan.public['prerequisite_trial_count'],
         'générations GPU totales': inference_plan.public['trial_count'],
         'baseline': ADVISOR_INFERENCE_BASELINE,
     }]))
+    if inference_plan.public['exploratory_recommendation_count']:
+        display(Markdown(
+            '**Important : les profils `*_exploratory` sont sous la borne de '
+            'sécurité prédite. Ils servent à mesurer et enrichir les données ; '
+            'seul leur résultat QR-Verify peut les valider après génération.**'
+        ))
 
     inference_events = deque(maxlen=25)
     inference_started = time.monotonic()
@@ -782,7 +797,8 @@ if advisor is not None:
         inference_frame.to_csv(RUN_DIR / 'advisor-inference-results.csv', index=False)
         display(Markdown('### Résultats réels : prédiction puis mesure'))
         display(inference_frame[[
-            'prompt_id', 'role', 'selection_profile', 'advisor_rank', 'model_rank',
+            'prompt_id', 'role', 'selection_profile', 'scan_safe',
+            'advisor_rank', 'model_rank',
             'source_method_id', 'effective_candidate_signature', 'seed',
             'predicted_qr_success', 'predicted_qr_success_lower_bound',
             'qr_success', 'qr_tolerance', 'clip_aesthetic', 'clip_score',

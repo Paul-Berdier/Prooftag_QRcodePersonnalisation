@@ -707,6 +707,9 @@ def test_e026_notebook_uses_qr_verify_as_a_calibrated_first_objective():
     assert "build_advisor_inference_plan" in source
     assert "deduplicate_advisor_inference_results" in source
     assert "E026J — générer trois recommandations réellement distinctes" in source
+    assert "aesthetic_exploratory" in source
+    assert "exploratory_recommendation_count" in source
+    assert "seul leur résultat QR-Verify peut les valider" in source
     assert "summarize_advisor_inference_results" in source
     assert "technical_error_images" in source
     assert "RUN_ADVISOR_INFERENCE = True" in source

@@ -222,7 +222,11 @@ Le protocole `e026j-v1-diversified-adaptive-srmpgd` impose maintenant :
 
 - une signature effective calculée avant SR-MPGD, sans gamma, LPIPS ni nombre d'itérations ;
 - au plus une recette par Stage 2 effectif dans le top-3 ;
-- trois objectifs explicites : `robust`, `balanced` et `aesthetic_scannable` ;
+- trois objectifs explicites quand trois recettes franchissent la borne : `robust`, `balanced`
+  et `aesthetic_scannable` ;
+- un repli contrôlé lorsque seules une ou deux recettes distinctes sont prédites scan-safe : les
+  places manquantes deviennent `balanced_exploratory` ou `aesthetic_exploratory`, conservent
+  `scan_safe=false` et ne sont validées qu'après la mesure réelle QR-Verify ;
 - une sortie `auto` pour une recette SR-MPGD : si l'optimisation conserve l'itération zéro, la
   variante réellement publiée est `srpg` ;
 - une porte QR-Verify à `0,80` : SR-MPGD ne calcule des pas que si SRPG échoue ou si sa tolérance
@@ -231,7 +235,8 @@ Le protocole `e026j-v1-diversified-adaptive-srmpgd` impose maintenant :
 - un audit séparé des SR-MPGD demandés, réellement actifs et sans effet.
 
 La collecte hebdomadaire existante n'est pas relancée par défaut. Le notebook recharge ses CSV,
-réentraîne le conseiller et exécute uniquement le nouveau plan d'inférence dans
+réentraîne le conseiller et exécute uniquement le nouveau plan d'inférence
+`e026j-v2-scan-safe-exploratory-fallback` dans
 `/data/e026j-inference/<plan-id>`.
 
 ## Artefacts

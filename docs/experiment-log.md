@@ -1392,3 +1392,17 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   mais fragile reste éligible au raffinement, alors qu'un SRPG déjà robuste s'arrête à l'état zéro.
 - **Reprise :** `RUN_COLLECTION=False` conserve la collecte E026 existante ; seul le nouveau plan
   `e026j-v1-diversified-adaptive-srmpgd` est généré dans `/data/e026j-inference`.
+
+## E026J v2 — repli exploratoire explicite — 17 août 2026
+
+- **Blocage observé :** pour certains prompts, le conseiller ne trouvait que deux recettes Stage 2
+  distinctes au-dessus de la borne scan-safe de `0,80`, alors que le notebook exigeait un top-3.
+- **Correction :** les recettes scan-safe restent prioritaires et la meilleure devient toujours le
+  profil `robust`. Une place manquante est remplie par une recette effectivement distincte marquée
+  `aesthetic_exploratory` ou `balanced_exploratory`, sans modifier sa prédiction
+  `scan_safe=false`.
+- **Garantie :** le candidat exploratoire n'est jamais déclaré sûr par le conseiller. Il doit
+  franchir QR-Verify après génération, exactement comme les autres sorties, et sert aussi à
+  enrichir le prochain entraînement.
+- **Protocole :** `e026j-v2-scan-safe-exploratory-fallback`, donc aucun état E026J v1 ambigu ne
+  peut être repris silencieusement.

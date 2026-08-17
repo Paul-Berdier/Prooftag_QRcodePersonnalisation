@@ -82,6 +82,9 @@ def _srmpgd_candidate(
 
 
 class _Advisor:
+    def __init__(self, *, safe_count: int = 3):
+        self.safe_count = safe_count
+
     def recommend(self, *, candidates, limit, **_):
         output = []
         for rank, candidate in enumerate(candidates, start=1):
@@ -90,7 +93,7 @@ class _Advisor:
                 ParameterRecommendation(
                     rank=rank,
                     candidate=candidate,
-                    scan_safe=rank < 4,
+                    scan_safe=rank <= self.safe_count,
                     predicted_qr_success=probability,
                     qr_success_uncertainty=0.02,
                     qr_success_lower_bound=probability - 0.02,
@@ -200,6 +203,40 @@ def test_e026j_selects_robust_balanced_and_aesthetic_effective_recipes():
     ]
     assert len({row["effective_candidate_signature"] for row in selected}) == 3
     assert plan.public["comparison_trial_count"] == 4
+    assert plan.public["scan_safe_recommendation_count"] == 3
+    assert plan.public["exploratory_recommendation_count"] == 0
+
+
+def test_e026j_fills_a_missing_scan_safe_slot_with_an_explicit_exploration():
+    candidates = [
+        _candidate("recipe_robust", 1),
+        _candidate("recipe_balanced", 2),
+        _candidate("recipe_exploratory", 3),
+        _candidate("diffqrcoder_stage1", 4),
+    ]
+    plan = build_advisor_inference_plan(
+        advisor=_Advisor(safe_count=2),
+        candidates=candidates,
+        prompts=[{"id": "unseen", "text": "A paper lighthouse in violet fog."}],
+        payload="https://ptag.io/t/e026j",
+        advisor_sha256="e" * 64,
+        seeds=(41,),
+        top_k=3,
+    )
+
+    selected = [
+        row for row in plan.predictions if row["role"] == "advisor_recommendation"
+    ]
+    assert [row["selection_profile"] for row in selected] == [
+        "robust",
+        "balanced",
+        "aesthetic_exploratory",
+    ]
+    assert [row["scan_safe"] for row in selected] == [True, True, False]
+    assert len({row["effective_candidate_signature"] for row in selected}) == 3
+    assert plan.public["protocol"] == "e026j-v2-scan-safe-exploratory-fallback"
+    assert plan.public["scan_safe_recommendation_count"] == 2
+    assert plan.public["exploratory_recommendation_count"] == 1
 
 
 def test_inference_plan_materializes_and_deduplicates_paired_srpg_prerequisites():
@@ -247,7 +284,7 @@ def test_inference_plan_materializes_and_deduplicates_paired_srpg_prerequisites(
         item["tools"]["settings"]["srmpgd_min_qr_tolerance"] == 0.80
         for item in adaptive
     )
-    assert plan.public["protocol"] == "e026j-v1-diversified-adaptive-srmpgd"
+    assert plan.public["protocol"] == "e026j-v2-scan-safe-exploratory-fallback"
     assert plan.public["trial_count"] == 10
     assert plan.public["comparison_trial_count"] == 6
     assert plan.public["prerequisite_trial_count"] == 4

@@ -26,7 +26,13 @@ TERMINAL_CAMPAIGN_STATUSES = {
     "interrupted",
 }
 SUCCESSFUL_CAMPAIGN_STATUSES = {"completed", "completed_with_errors"}
-E026J_SELECTION_PROFILES = ("robust", "balanced", "aesthetic_scannable")
+E026J_SELECTION_PROFILES = (
+    "robust",
+    "balanced",
+    "aesthetic_scannable",
+    "balanced_exploratory",
+    "aesthetic_exploratory",
+)
 
 
 def _canonical_json(value: Any) -> str:
@@ -168,27 +174,39 @@ def _select_diversified_recommendations(
     top_k: int,
     excluded_method_ids: Sequence[str] = (),
 ) -> list[tuple[str, Any, str]]:
-    """Select scan-safe, effective and objective-diverse recommendations."""
+    """Select effective and objective-diverse recommendations.
+
+    A scan-safe recommendation is mandatory and always occupies the robust slot.
+    When the advisor exposes fewer than ``top_k`` distinct scan-safe recipes, the
+    missing slots are filled with distinct exploratory recipes.  Their original
+    ``scan_safe=False`` prediction is preserved so that neither the notebook nor
+    downstream reports can present them as validated before QR-Verify runs.
+    """
 
     excluded = set(excluded_method_ids)
-    unique: list[tuple[Any, str]] = []
+    distinct: list[tuple[Any, str]] = []
     effective_seen: set[str] = set()
     for recommendation in ranked:
-        if not recommendation.scan_safe:
-            continue
         if recommendation.candidate.method_id in excluded:
             continue
         effective = effective_candidate_signature(recommendation.candidate)
         if effective in effective_seen:
             continue
         effective_seen.add(effective)
-        unique.append((recommendation, effective))
-    if len(unique) < top_k:
+        distinct.append((recommendation, effective))
+    if len(distinct) < top_k:
         raise RuntimeError(
-            f"only {len(unique)} distinct scan-safe generation recipes for top_k={top_k}"
+            f"only {len(distinct)} distinct effective generation recipes "
+            f"for top_k={top_k}"
+        )
+    scan_safe = [item for item, _ in distinct if item.scan_safe]
+    if not scan_safe:
+        raise RuntimeError(
+            "no distinct scan-safe generation recipe is available; "
+            "refusing to build an inference plan without a robust anchor"
         )
 
-    recommendations = [item for item, _ in unique]
+    recommendations = [item for item, _ in distinct]
     tolerance = _normalized_scores(
         recommendations, lambda item: item.predicted_qr_tolerance
     )
@@ -221,7 +239,7 @@ def _select_diversified_recommendations(
         )
 
     robust = max(
-        recommendations,
+        scan_safe,
         key=lambda item: (
             qr_score(item),
             item.qr_success_lower_bound,
@@ -231,51 +249,86 @@ def _select_diversified_recommendations(
     )
     if top_k == 1:
         return [("robust", robust, effective_candidate_signature(robust.candidate))]
-    remaining = [item for item in recommendations if item is not robust]
-    aesthetic_pick = max(
-        remaining,
-        key=lambda item: (
+    remaining_safe = [item for item in scan_safe if item is not robust]
+    exploratory = [item for item in recommendations if not item.scan_safe]
+
+    def aesthetic_key(item: Any) -> tuple[float, float, float]:
+        return (
             visual_score(item),
             qr_score(item),
             -(item.predicted_saturation_risk or 0.0),
-        ),
-    )
-    if top_k == 2:
-        return [
-            ("robust", robust, effective_candidate_signature(robust.candidate)),
-            (
-                "aesthetic_scannable",
-                aesthetic_pick,
-                effective_candidate_signature(aesthetic_pick.candidate),
-            ),
-        ]
-    remaining = [item for item in remaining if item is not aesthetic_pick]
-    balanced = max(
-        remaining,
-        key=lambda item: (
+        )
+
+    def balanced_key(item: Any) -> tuple[float, float, float]:
+        return (
             0.55 * qr_score(item) + 0.45 * visual_score(item),
             qr_score(item),
             visual_score(item),
-        ),
-    )
+        )
 
-    primary = [
-        ("robust", robust),
-        ("balanced", balanced),
-        ("aesthetic_scannable", aesthetic_pick),
-    ]
-    selected = primary[:top_k]
+    if top_k == 2:
+        if remaining_safe:
+            second_profile = "aesthetic_scannable"
+            second = max(remaining_safe, key=aesthetic_key)
+        else:
+            second_profile = "aesthetic_exploratory"
+            second = max(exploratory, key=aesthetic_key)
+        return [
+            ("robust", robust, effective_candidate_signature(robust.candidate)),
+            (
+                second_profile,
+                second,
+                effective_candidate_signature(second.candidate),
+            ),
+        ]
+
+    selected: list[tuple[str, Any]] = [("robust", robust)]
+    if len(remaining_safe) >= 2:
+        aesthetic_pick = max(remaining_safe, key=aesthetic_key)
+        balanced_pool = [item for item in remaining_safe if item is not aesthetic_pick]
+        balanced = max(balanced_pool, key=balanced_key)
+        selected.extend(
+            [
+                ("balanced", balanced),
+                ("aesthetic_scannable", aesthetic_pick),
+            ]
+        )
+    elif len(remaining_safe) == 1:
+        selected.append(("balanced", remaining_safe[0]))
+        selected.append(
+            ("aesthetic_exploratory", max(exploratory, key=aesthetic_key))
+        )
+    else:
+        balanced = max(exploratory, key=balanced_key)
+        selected.append(("balanced_exploratory", balanced))
+        aesthetic_pool = [item for item in exploratory if item is not balanced]
+        selected.append(
+            ("aesthetic_exploratory", max(aesthetic_pool, key=aesthetic_key))
+        )
+
+    selected = selected[:top_k]
     used = {item.candidate.signature for _, item in selected}
     if top_k > len(selected):
-        for item in recommendations:
+        remaining = [
+            item for item in recommendations if item.candidate.signature not in used
+        ]
+        remaining.sort(
+            key=lambda item: (item.scan_safe, balanced_key(item)), reverse=True
+        )
+        for item in remaining:
             if item.candidate.signature in used:
                 continue
-            selected.append((f"alternate_{len(selected) + 1}", item))
+            profile = (
+                f"alternate_scan_safe_{len(selected) + 1}"
+                if item.scan_safe
+                else f"exploratory_{len(selected) + 1}"
+            )
+            selected.append((profile, item))
             used.add(item.candidate.signature)
             if len(selected) == top_k:
                 break
     effective_by_signature = {
-        item.candidate.signature: effective for item, effective in unique
+        item.candidate.signature: effective for item, effective in distinct
     }
     return [
         (profile, item, effective_by_signature[item.candidate.signature])
@@ -589,7 +642,7 @@ def build_advisor_inference_plan(
         )
 
     plan_core = {
-        "protocol": "e026j-v1-diversified-adaptive-srmpgd",
+        "protocol": "e026j-v2-scan-safe-exploratory-fallback",
         "advisor_sha256": advisor_sha256,
         "payload_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
         "payload_length": len(payload),
@@ -657,6 +710,14 @@ def build_advisor_inference_plan(
         ),
         "prerequisite_trial_count": len(normalized_seeds)
         * sum(item["role"] == "srmpgd_prerequisite" for item in prediction_rows),
+        "scan_safe_recommendation_count": sum(
+            item["role"] == "advisor_recommendation" and item["scan_safe"] is True
+            for item in prediction_rows
+        ),
+        "exploratory_recommendation_count": sum(
+            item["role"] == "advisor_recommendation" and item["scan_safe"] is False
+            for item in prediction_rows
+        ),
         "campaigns": public_campaigns,
     }
     return AdvisorInferencePlan(
