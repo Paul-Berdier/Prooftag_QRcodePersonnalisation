@@ -1358,3 +1358,22 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
 - **Re-test :** `scripts/e025-quality-retest.py` reprend les dix prompts et les
   deux recettes appariées d'E024.
 - **Protocole :** `docs/e025-quality-scoring.md`.
+
+## E026I v1 — inférence du conseiller incomplète — 17 août 2026
+
+- **Archive auditée :** `20260817T103009Z-e026-prompt-parameter-advisor-v1.tar.gz`.
+- **Entraînement :** 7 945 observations utilisables, 170 groupes de prompt, 16 recettes et
+  validation groupée sans fuite de texte ; 7 402 succès contre 543 échecs QR-Verify.
+- **Plan comparatif :** 10 prompts inconnus, top-3 conseillé, baseline Stage 1 et trois seeds,
+  soit 120 résultats attendus.
+- **Incident :** les 75 sélections SR-MPGD ont échoué avant génération, car aucun Stage 2 SRPG
+  strictement apparié n'avait été exécuté plus tôt dans leur campagne.
+- **Images réelles :** 45 seulement : 30 baselines Stage 1 et 15 recommandations SRPG. Les
+  recommandations réellement générées sont 15/15 QR-Verify, contre 21/30 pour la baseline, mais
+  cet échantillon sélectionné ne permet aucune conclusion sur le top-3 complet.
+- **Erreur de rapport :** les moyennes ignoraient les 75 valeurs QR absentes et affichaient 100 %.
+  Sur le plan complet, la complétion technique du top-3 est 15/90 et la couverture est 15/30
+  couples prompt/seed.
+- **Correction :** le protocole `e026i-v2-paired-srmpgd` insère un prérequis SRPG dédupliqué avant
+  toute recette SR-MPGD, exclut ce prérequis de la comparaison et compte les erreurs techniques
+  dans le dénominateur principal. Le nouvel identifiant de plan empêche de reprendre l'état v1.

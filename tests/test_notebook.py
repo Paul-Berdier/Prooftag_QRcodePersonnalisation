@@ -705,6 +705,8 @@ def test_e026_notebook_uses_qr_verify_as_a_calibrated_first_objective():
     assert "GALLERY_COMPARISON_METHODS" in source
     assert "AdvisorInferenceRunner" in source
     assert "build_advisor_inference_plan" in source
+    assert "summarize_advisor_inference_results" in source
+    assert "technical_error_images" in source
     assert "RUN_ADVISOR_INFERENCE = True" in source
     assert "ADVISOR_INFERENCE_TOP_K = 3" in source
     assert "ADVISOR_INFERENCE_SEEDS = (413001, 523001, 631001)" in source

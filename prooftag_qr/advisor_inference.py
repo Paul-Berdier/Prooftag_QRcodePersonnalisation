@@ -94,6 +94,58 @@ def _runtime_method(
     return LabMethod.model_validate(configuration).model_dump(mode="json")
 
 
+def _srpg_prerequisite(
+    candidate: RecipeCandidate,
+    *,
+    runtime_id: str,
+    display_name: str,
+) -> tuple[dict[str, Any], str] | None:
+    """Build the exact Stage 2 source required by an SR-MPGD candidate.
+
+    The laboratory deliberately refuses to run SR-MPGD without an earlier,
+    mathematically matching SRPG state in the same campaign.  Advisor inference
+    therefore materializes that dependency explicitly instead of silently
+    treating the failed SR-MPGD trial as a QR failure.
+    """
+
+    configuration = deepcopy(candidate.configuration)
+    tools = configuration.get("tools") or {}
+    if not tools.get("srmpgd_enabled"):
+        return None
+    if not tools.get("srpg_enabled"):
+        raise ValueError(
+            f"candidate {candidate.method_id} enables SR-MPGD without Stage 2 SRPG"
+        )
+    settings = {
+        key: value
+        for key, value in (tools.get("settings") or {}).items()
+        if not str(key).startswith("srmpgd_")
+    }
+    configuration.update(
+        {
+            "id": runtime_id,
+            "name": display_name[:200],
+            "enabled": True,
+            "output_variant": "srpg",
+        }
+    )
+    configuration["tools"] = {
+        **tools,
+        "srpg_enabled": True,
+        "srmpgd_enabled": False,
+        "settings": settings,
+    }
+    signature_source = deepcopy(configuration)
+    signature_source.pop("id", None)
+    signature_source.pop("name", None)
+    signature_source.pop("description", None)
+    signature = hashlib.sha256(
+        _canonical_json(signature_source).encode("utf-8")
+    ).hexdigest()
+    method = LabMethod.model_validate(configuration).model_dump(mode="json")
+    return method, signature
+
+
 def build_advisor_inference_plan(
     *,
     advisor: E026ParameterAdvisor,
@@ -181,10 +233,51 @@ def build_advisor_inference_plan(
             )
 
         methods = []
+        prerequisite_signatures: set[str] = set()
         selected_signatures = set()
         for recommendation in selected:
             candidate = recommendation.candidate
             selected_signatures.add(candidate.signature)
+            prerequisite_id = (
+                f"e026i_dep_{recommendation.rank:02d}_"
+                f"{_safe_identifier(candidate.method_id, maximum=52)}"
+            )[:100]
+            prerequisite = _srpg_prerequisite(
+                candidate,
+                runtime_id=prerequisite_id,
+                display_name=(
+                    f"E026 paired SRPG prerequisite | {candidate.method_id}"
+                ),
+            )
+            if prerequisite is not None:
+                prerequisite_method, prerequisite_signature = prerequisite
+                if prerequisite_signature not in prerequisite_signatures:
+                    methods.append(prerequisite_method)
+                    prerequisite_signatures.add(prerequisite_signature)
+                    prediction_rows.append(
+                        {
+                            "prompt_id": prompt.id,
+                            "prompt_text": prompt.text,
+                            "plan_method_id": prerequisite_method["id"],
+                            "source_method_id": candidate.method_id,
+                            "role": "srmpgd_prerequisite",
+                            "advisor_rank": recommendation.rank,
+                            "candidate_signature": (
+                                f"srpg-prerequisite:{prerequisite_signature}"
+                            ),
+                            "candidate_observations": candidate.observations,
+                            "scan_safe": None,
+                            "predicted_qr_success": None,
+                            "predicted_qr_success_lower_bound": None,
+                            "predicted_qr_success_uncertainty": None,
+                            "predicted_qr_tolerance": None,
+                            "predicted_clip_aesthetic": None,
+                            "predicted_clip_score": None,
+                            "predicted_hpsv2_1": None,
+                            "predicted_saturation_risk": None,
+                            "predicted_duration_ms": None,
+                        }
+                    )
             runtime_id = (
                 f"e026i_r{recommendation.rank:02d}_"
                 f"{_safe_identifier(candidate.method_id)}"
@@ -278,7 +371,7 @@ def build_advisor_inference_plan(
         )
 
     plan_core = {
-        "protocol": "e026i-v1",
+        "protocol": "e026i-v2-paired-srmpgd",
         "advisor_sha256": advisor_sha256,
         "payload_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
         "payload_length": len(payload),
@@ -339,6 +432,13 @@ def build_advisor_inference_plan(
         "plan_id": plan_id,
         "campaign_count": len(campaigns),
         "trial_count": sum(item["trials"] for item in public_campaigns),
+        "comparison_trial_count": len(normalized_seeds)
+        * sum(
+            item["role"] in {"advisor_recommendation", "fixed_baseline"}
+            for item in prediction_rows
+        ),
+        "prerequisite_trial_count": len(normalized_seeds)
+        * sum(item["role"] == "srmpgd_prerequisite" for item in prediction_rows),
         "campaigns": public_campaigns,
     }
     return AdvisorInferencePlan(
@@ -624,9 +724,13 @@ class AdvisorInferenceRunner:
                     self.state["failed_campaigns"].append(index)
                     self._save_state()
             self.state["status"] = (
-                "completed"
-                if not self.state["failed_campaigns"]
-                else "completed_with_errors"
+                "completed_with_errors"
+                if self.state["failed_campaigns"]
+                or any(
+                    item.get("status") == "completed_with_errors"
+                    for item in self.state["history"]
+                )
+                else "completed"
             )
             self._save_state()
             return self.summary()
@@ -739,3 +843,102 @@ def select_advisor_inference_winners(
             )
         )
     return winners
+
+
+def summarize_advisor_inference_results(
+    entries: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Summarize advisor inference without hiding technical failures.
+
+    Rates whose name does not end in ``_generated`` use every planned result as
+    denominator.  A missing QR-Verify measurement therefore counts as failure,
+    while the companion generated-only rate remains available for diagnosis.
+    SRPG prerequisite trials are operational dependencies and are excluded from
+    the advisor-versus-baseline comparison.
+    """
+
+    comparable = [
+        dict(item)
+        for item in entries
+        if item.get("role") in {"advisor_recommendation", "fixed_baseline"}
+    ]
+    advisor = [item for item in comparable if item.get("role") == "advisor_recommendation"]
+    baseline = [item for item in comparable if item.get("role") == "fixed_baseline"]
+    generated = [item for item in comparable if _finite(item.get("qr_success")) is not None]
+    generated_advisor = [
+        item for item in advisor if _finite(item.get("qr_success")) is not None
+    ]
+    generated_baseline = [
+        item for item in baseline if _finite(item.get("qr_success")) is not None
+    ]
+    rank1 = [item for item in advisor if int(item.get("advisor_rank") or 0) == 1]
+    generated_rank1 = [
+        item for item in rank1 if _finite(item.get("qr_success")) is not None
+    ]
+    successful_advisor = [
+        item for item in generated_advisor if (_finite(item.get("qr_success")) or 0.0) >= 0.5
+    ]
+
+    def success_rate(rows: Sequence[Mapping[str, Any]]) -> float | None:
+        if not rows:
+            return None
+        return sum(
+            1.0 if (_finite(item.get("qr_success")) or 0.0) >= 0.5 else 0.0
+            for item in rows
+        ) / len(rows)
+
+    def mean(rows: Sequence[Mapping[str, Any]], field: str) -> float | None:
+        values = [
+            value
+            for item in rows
+            if (value := _finite(item.get(field))) is not None
+        ]
+        return sum(values) / len(values) if values else None
+
+    coverage: dict[tuple[str, float | None], float] = {}
+    for item in advisor:
+        key = (str(item.get("prompt_id")), _finite(item.get("seed")))
+        coverage[key] = max(
+            coverage.get(key, 0.0),
+            1.0 if (_finite(item.get("qr_success")) or 0.0) >= 0.5 else 0.0,
+        )
+
+    return {
+        "images_planned": len(comparable),
+        "images_measured": len(generated),
+        "technical_error_images": sum(
+            1 for item in comparable if str(item.get("status")) == "error"
+        ),
+        "technical_completion_rate": (
+            len(generated) / len(comparable) if comparable else None
+        ),
+        "prompts_measured": len({str(item.get("prompt_id")) for item in generated}),
+        "rank1_images_planned": len(rank1),
+        "rank1_images_measured": len(generated_rank1),
+        "rank1_technical_completion_rate": (
+            len(generated_rank1) / len(rank1) if rank1 else None
+        ),
+        "rank1_qr_verify_success_rate": success_rate(rank1),
+        "rank1_qr_verify_success_rate_generated": success_rate(generated_rank1),
+        "top_k_images_planned": len(advisor),
+        "top_k_images_measured": len(generated_advisor),
+        "top_k_technical_completion_rate": (
+            len(generated_advisor) / len(advisor) if advisor else None
+        ),
+        "top_k_image_qr_verify_success_rate": success_rate(advisor),
+        "top_k_image_qr_verify_success_rate_generated": success_rate(
+            generated_advisor
+        ),
+        "top_k_prompt_seed_coverage": (
+            sum(coverage.values()) / len(coverage) if coverage else None
+        ),
+        "baseline_qr_verify_success_rate": success_rate(baseline),
+        "baseline_qr_verify_success_rate_generated": success_rate(
+            generated_baseline
+        ),
+        "successful_advisor_clip_aesthetic": mean(
+            successful_advisor, "clip_aesthetic"
+        ),
+        "successful_advisor_clip_score": mean(successful_advisor, "clip_score"),
+        "successful_advisor_hpsv2_1": mean(successful_advisor, "hpsv2_1"),
+    }

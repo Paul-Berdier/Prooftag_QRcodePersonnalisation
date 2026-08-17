@@ -161,7 +161,10 @@ boucle est plus sûre qu'une exploration exhaustive permanente.
 Une recommandation tabulaire ne constitue pas une image. Après l'entraînement, le notebook lance
 donc E026I sur dix textes absents du dataset : cinq prompts simples et cinq atypiques. Chaque
 prompt reçoit son propre top-3 E026, comparé à `diffqrcoder_stage1` avec trois seeds appariées.
-Le budget maximal est de 120 images.
+Le budget comparatif est de 120 images. Lorsqu'une recette conseillée est SR-MPGD, le plan v2
+ajoute d'abord le Stage 2 SRPG strictement apparié exigé par le laboratoire. Ces prérequis sont
+dédupliqués par configuration de Stage 2, ne participent pas au verdict conseiller contre baseline
+et peuvent porter le budget GPU total jusqu'à 150 générations pour le plan actuel.
 
 Les pixels restent générés par DiffQRCoder, Cetus-Mix Whalefall et QR Monster v2. L'expression
 « généré avec E026 » signifie précisément que la recette a été choisie par le conseiller avant
@@ -173,6 +176,11 @@ mesurés. Le verdict rapporte séparément :
 - la couverture prompt/seed lorsqu'au moins une des trois recettes réussit ;
 - le taux de la baseline Stage 1 ;
 - CLIP-Aesthetic, CLIPScore et HPS v2.1 uniquement parmi les recommandations scannables.
+
+Les taux principaux utilisent toutes les images comparatives planifiées comme dénominateur : une
+erreur technique n'est jamais supprimée silencieusement. Les taux suffixés `_generated` décrivent
+uniquement les images effectivement produites et servent au diagnostic. Le rapport publie aussi le
+nombre d'erreurs et le taux de complétion technique.
 
 Le plan est identifié par le hash du conseiller, des prompts, des recettes, des seeds et du
 contexte QR. Son état atomique réside dans `/data/e026-inference/<plan-id>`. Une reprise retrouve
@@ -187,6 +195,21 @@ fichiers `comparison-seed-*.png` et `measured-winners.png` sont les planches de 
 Les prompts E026I restent un holdout et ne sont pas automatiquement ajoutés aux globes
 d'entraînement du même run. Leur réutilisation pour entraîner une version suivante devra être
 accompagnée d'un nouveau jeu de prompts d'évaluation réellement inconnus.
+
+### Incident E026I v1 du 17 août 2026
+
+L'archive `20260817T103009Z-e026-prompt-parameter-advisor-v1` contenait bien 120 lignes, mais
+seulement 45 images : 30 baselines et 15 SRPG. Les 75 recettes SR-MPGD ont été refusées avant
+génération parce que le plan n'avait pas matérialisé leur source SRPG appariée. Les moyennes pandas
+ignoraient ensuite les valeurs absentes et annonçaient à tort 100 % pour le top-K. Les chiffres
+honnêtes sur le plan v1 sont 15/90 recommandations produites et lisibles, 15/30 couples
+prompt/seed couverts, contre 21/30 baselines lisibles. Ces données ne permettent pas de conclure sur
+SR-MPGD ni sur la supériorité du conseiller.
+
+Le protocole `e026i-v2-paired-srmpgd` corrige les deux causes : il insère et déduplique les sources
+SRPG avant SR-MPGD, puis compte toute mesure manquante comme un échec technique dans le taux
+principal. Son changement de protocole produit un nouvel identifiant de plan ; une relance ne peut
+donc pas réutiliser l'état v1 incomplet.
 
 ## Artefacts
 

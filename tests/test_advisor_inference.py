@@ -10,6 +10,7 @@ from prooftag_qr.advisor_inference import (
     build_advisor_inference_plan,
     load_advisor_inference_results,
     select_advisor_inference_winners,
+    summarize_advisor_inference_results,
 )
 from prooftag_qr.parameter_advisor import ParameterRecommendation, RecipeCandidate
 
@@ -41,6 +42,35 @@ def _candidate(identifier: str, index: int) -> RecipeCandidate:
             },
         },
     )
+
+
+def _srmpgd_candidate(identifier: str, index: int, *, gamma: float) -> RecipeCandidate:
+    candidate = _candidate(identifier, index)
+    candidate.configuration.update(
+        {
+            "output_variant": "srmpgd",
+            "generation": {
+                "steps": 40,
+                "guidance_scale": 7.5,
+                "controlnet_scale": 1.35,
+                "strength": 1.0,
+            },
+            "tools": {
+                "srpg_enabled": True,
+                "srmpgd_enabled": True,
+                "settings": {
+                    "srpg_steps": 40,
+                    "srpg_qr_weight": 500.0,
+                    "srpg_perceptual_weight": 2.0,
+                    "diffqrcoder_stage2_strength": 0.65,
+                    "srmpgd_max_iterations": 4,
+                    "srmpgd_step_size": gamma,
+                    "srmpgd_lpips_weight": 0.1,
+                },
+            },
+        }
+    )
+    return candidate
 
 
 class _Advisor:
@@ -133,6 +163,51 @@ def test_inference_plan_rejects_a_prompt_seen_during_training():
             seen_prompt_texts=["the same training prompt."],
             top_k=1,
         )
+
+
+def test_inference_plan_materializes_and_deduplicates_paired_srpg_prerequisites():
+    candidates = [
+        _srmpgd_candidate("srmpgd_gamma_30", 1, gamma=30.0),
+        _srmpgd_candidate("srmpgd_gamma_300", 2, gamma=300.0),
+        _candidate("diffqrcoder_stage1", 3),
+    ]
+    plan = build_advisor_inference_plan(
+        advisor=_Advisor(),
+        candidates=candidates,
+        prompts=[{"id": "unseen", "text": "A silver bicycle in morning fog."}],
+        payload="https://ptag.io/t/e026i",
+        advisor_sha256="c" * 64,
+        seeds=(41, 53),
+        top_k=2,
+    )
+
+    methods = plan.campaigns[0]["methods"]
+    prerequisites = [
+        item
+        for item in methods
+        if item["id"].startswith("e026i_dep_")
+    ]
+    assert len(prerequisites) == 1
+    assert prerequisites[0]["output_variant"] == "srpg"
+    assert prerequisites[0]["tools"]["srpg_enabled"] is True
+    assert prerequisites[0]["tools"]["srmpgd_enabled"] is False
+    assert not any(
+        key.startswith("srmpgd_")
+        for key in prerequisites[0]["tools"]["settings"]
+    )
+    assert [item["output_variant"] for item in methods] == [
+        "srpg",
+        "srmpgd",
+        "srmpgd",
+        "raw",
+    ]
+    assert plan.public["protocol"] == "e026i-v2-paired-srmpgd"
+    assert plan.public["trial_count"] == 8
+    assert plan.public["comparison_trial_count"] == 6
+    assert plan.public["prerequisite_trial_count"] == 2
+    assert sum(
+        row["role"] == "srmpgd_prerequisite" for row in plan.predictions
+    ) == 1
 
 
 def test_inference_runner_resumes_without_resubmitting_completed_campaign(tmp_path):
@@ -273,3 +348,70 @@ def test_inference_results_join_predictions_and_select_scannable_winner(tmp_path
     assert rows[0]["predicted_qr_probability"] == pytest.approx(0.95)
     assert rows[0]["saturation_risk"] == pytest.approx(0.02)
     assert winners[0]["trial_id"] == "t2"
+
+
+def test_inference_summary_counts_missing_measurements_as_technical_failures():
+    rows = [
+        {
+            "prompt_id": "p1",
+            "seed": 1,
+            "role": "advisor_recommendation",
+            "advisor_rank": 1,
+            "status": "accepted",
+            "qr_success": 1.0,
+            "clip_aesthetic": 5.0,
+            "clip_score": 0.6,
+            "hpsv2_1": 0.2,
+        },
+        {
+            "prompt_id": "p1",
+            "seed": 2,
+            "role": "advisor_recommendation",
+            "advisor_rank": 1,
+            "status": "error",
+            "qr_success": None,
+        },
+        {
+            "prompt_id": "p1",
+            "seed": 1,
+            "role": "advisor_recommendation",
+            "advisor_rank": 2,
+            "status": "rejected",
+            "qr_success": 0.0,
+        },
+        {
+            "prompt_id": "p1",
+            "seed": 2,
+            "role": "advisor_recommendation",
+            "advisor_rank": 2,
+            "status": "error",
+            "qr_success": None,
+        },
+        {
+            "prompt_id": "p1",
+            "seed": 1,
+            "role": "fixed_baseline",
+            "advisor_rank": 9,
+            "status": "accepted",
+            "qr_success": 1.0,
+        },
+        {
+            "prompt_id": "p1",
+            "seed": 1,
+            "role": "srmpgd_prerequisite",
+            "advisor_rank": 1,
+            "status": "accepted",
+            "qr_success": 1.0,
+        },
+    ]
+
+    summary = summarize_advisor_inference_results(rows)
+
+    assert summary["images_planned"] == 5
+    assert summary["images_measured"] == 3
+    assert summary["technical_error_images"] == 2
+    assert summary["rank1_qr_verify_success_rate"] == pytest.approx(0.5)
+    assert summary["rank1_qr_verify_success_rate_generated"] == pytest.approx(1.0)
+    assert summary["top_k_image_qr_verify_success_rate"] == pytest.approx(0.25)
+    assert summary["top_k_prompt_seed_coverage"] == pytest.approx(0.5)
+    assert summary["baseline_qr_verify_success_rate"] == pytest.approx(1.0)

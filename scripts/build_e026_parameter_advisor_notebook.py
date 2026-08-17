@@ -107,6 +107,7 @@ from prooftag_qr.advisor_inference import (
     build_advisor_inference_plan,
     load_advisor_inference_results,
     select_advisor_inference_winners,
+    summarize_advisor_inference_results,
 )
 from prooftag_qr.advisor_gallery import (
     download_advisor_gallery,
@@ -717,7 +718,9 @@ if advisor is not None:
         'prompts inconnus': len(ADVISOR_INFERENCE_PROMPTS),
         'top-K conseillé': ADVISOR_INFERENCE_TOP_K,
         'seeds appariées': len(ADVISOR_INFERENCE_SEEDS),
-        'essais réels': inference_plan.public['trial_count'],
+        'images comparatives': inference_plan.public['comparison_trial_count'],
+        'prérequis SRPG': inference_plan.public['prerequisite_trial_count'],
+        'générations GPU totales': inference_plan.public['trial_count'],
         'baseline': ADVISOR_INFERENCE_BASELINE,
     }]))
 
@@ -776,56 +779,35 @@ if advisor is not None:
             'qr_success', 'qr_tolerance', 'clip_aesthetic', 'clip_score',
             'hpsv2_1', 'saturation_risk', 'duration_ms', 'status',
         ]])
-        recommended_frame = inference_frame[
-            inference_frame.role == 'advisor_recommendation'
+        comparison_frame = inference_frame[
+            inference_frame.role.isin(['advisor_recommendation', 'fixed_baseline'])
+        ].copy()
+        recommended_frame = comparison_frame[
+            comparison_frame.role == 'advisor_recommendation'
         ]
-        rank1_frame = recommended_frame[recommended_frame.advisor_rank == 1]
-        baseline_frame = inference_frame[inference_frame.role == 'fixed_baseline']
-        successful_advisor = recommended_frame[recommended_frame.qr_success >= 0.5]
-        prompt_seed_coverage = recommended_frame.groupby(
-            ['prompt_id', 'seed']
-        ).qr_success.max()
-
-        def finite_mean(values):
-            value = float(values.mean())
-            return value if np.isfinite(value) else None
-
-        inference_evaluation = {
-            'images_measured': len(inference_frame),
-            'prompts_measured': int(inference_frame.prompt_id.nunique()),
-            'rank1_qr_verify_success_rate': finite_mean(rank1_frame.qr_success),
-            'top_k_image_qr_verify_success_rate': finite_mean(
-                recommended_frame.qr_success
-            ),
-            'top_k_prompt_seed_coverage': finite_mean(prompt_seed_coverage),
-            'baseline_qr_verify_success_rate': (
-                finite_mean(baseline_frame.qr_success)
-                if not baseline_frame.empty else None
-            ),
-            'successful_advisor_clip_aesthetic': (
-                finite_mean(successful_advisor.clip_aesthetic)
-                if not successful_advisor.empty else None
-            ),
-            'successful_advisor_clip_score': (
-                finite_mean(successful_advisor.clip_score)
-                if not successful_advisor.empty else None
-            ),
-            'successful_advisor_hpsv2_1': (
-                finite_mean(successful_advisor.hpsv2_1)
-                if not successful_advisor.empty else None
-            ),
-        }
+        inference_evaluation = summarize_advisor_inference_results(inference_rows)
         (RUN_DIR / 'advisor-inference-evaluation.json').write_text(
             json.dumps(inference_evaluation, ensure_ascii=False, indent=2),
             encoding='utf-8',
         )
         display(Markdown('### Verdict mesuré du conseiller E026'))
         display(pd.DataFrame([inference_evaluation]).T.rename(columns={0: 'valeur'}))
-        aggregate = inference_frame.groupby(
+        if inference_evaluation['technical_error_images']:
+            display(Markdown(
+                '**ALERTE : le taux principal compte les erreurs techniques comme des '
+                'échecs. Le taux suffixé `_generated` ne porte que sur les images '
+                'effectivement produites et ne doit pas être présenté seul.**'
+            ))
+        aggregate = comparison_frame.groupby(
             ['role', 'advisor_rank', 'source_method_id'], dropna=False
         ).agg(
-            images=('trial_id', 'size'),
-            qr_verify_success=('qr_success', 'mean'),
+            images_planned=('trial_id', 'size'),
+            images_measured=('qr_success', 'count'),
+            technical_errors=('status', lambda values: int((values == 'error').sum())),
+            qr_verify_success=(
+                'qr_success', lambda values: float(values.fillna(0.0).mean())
+            ),
+            qr_verify_success_generated=('qr_success', 'mean'),
             qr_tolerance=('qr_tolerance', 'mean'),
             clip_aesthetic=('clip_aesthetic', 'mean'),
             clip_score=('clip_score', 'mean'),
@@ -859,9 +841,10 @@ if advisor is not None:
         )
         axes[0].grid(alpha=0.25)
 
-        colors = np.where(inference_frame.qr_success >= 0.5, '#22c55e', '#ef4444')
+        generated_frame = comparison_frame[comparison_frame.qr_success.notna()]
+        colors = np.where(generated_frame.qr_success >= 0.5, '#22c55e', '#ef4444')
         axes[1].scatter(
-            inference_frame.qr_tolerance, inference_frame.clip_aesthetic,
+            generated_frame.qr_tolerance, generated_frame.clip_aesthetic,
             c=colors, alpha=0.75, s=42,
         )
         axes[1].set(
@@ -881,7 +864,11 @@ if advisor is not None:
         display(fig)
 
         inference_gallery_dir = RUN_DIR / 'advisor-inference-gallery'
-        downloadable = [row for row in inference_rows if row.get('generation_run_id')]
+        downloadable = [
+            row for row in inference_rows
+            if row.get('role') in {'advisor_recommendation', 'fixed_baseline'}
+            and row.get('generation_run_id')
+        ]
         inference_gallery_entries = download_advisor_gallery(
             downloadable,
             api_url=COLLECTION_API_URL,
