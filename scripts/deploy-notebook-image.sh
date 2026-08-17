@@ -21,6 +21,45 @@ if [[ -n "$(git status --porcelain)" ]]; then
   exit 1
 fi
 
+ready_pod_for_image() {
+  local expected_image="$1"
+  local deadline=$((SECONDS + 180))
+  local pod running_image ready deleting
+  while ((SECONDS < deadline)); do
+    while IFS= read -r pod; do
+      [[ -n "$pod" ]] || continue
+      deleting="$(
+        kubectl -n "$namespace" get pod "$pod" \
+          -o jsonpath='{.metadata.deletionTimestamp}' 2>/dev/null || true
+      )"
+      [[ -z "$deleting" ]] || continue
+      running_image="$(
+        kubectl -n "$namespace" get pod "$pod" \
+          -o "jsonpath={.spec.containers[?(@.name=='${container}')].image}" \
+          2>/dev/null || true
+      )"
+      ready="$(
+        kubectl -n "$namespace" get pod "$pod" \
+          -o 'jsonpath={.status.conditions[?(@.type=="Ready")].status}' \
+          2>/dev/null || true
+      )"
+      if [[ "$running_image" == "$expected_image" && "$ready" == "True" ]]; then
+        printf '%s\n' "$pod"
+        return 0
+      fi
+    done < <(
+      kubectl -n "$namespace" get pods \
+        -l app=prooftag-qr-notebook \
+        --field-selector=status.phase=Running \
+        -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}'
+    )
+    sleep 2
+  done
+  echo "Aucun pod notebook prêt n'exécute l'image attendue $expected_image." >&2
+  kubectl -n "$namespace" get pods -l app=prooftag-qr-notebook -o wide >&2
+  return 1
+}
+
 git_sha="$(git rev-parse HEAD)"
 git_tag="$(git rev-parse --short=12 HEAD)"
 image="${image_repository}:${git_tag}"
@@ -65,13 +104,9 @@ replicas="$(
 if [[ "${replicas:-0}" -gt 0 ]]; then
   kubectl -n "$namespace" rollout status \
     "deployment/${deployment}" --timeout=1200s
-  pod="$(
-    kubectl -n "$namespace" get pod \
-      -l app=prooftag-qr-notebook \
-      -o jsonpath='{.items[0].metadata.name}'
-  )"
+  pod="$(ready_pod_for_image "$image")"
   kubectl -n "$namespace" exec "$pod" -- test -f "$image_notebook"
-  echo "Notebook vérifié dans le pod : $pod:$image_notebook"
+  echo "Notebook vérifié dans le pod prêt : $pod:$image_notebook ($image)"
 fi
 
 echo "Image déployée : $image"

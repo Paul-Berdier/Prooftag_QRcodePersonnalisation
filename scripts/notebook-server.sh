@@ -72,16 +72,52 @@ print_token() {
   printf 'JUPYTER_TARGET=%s:%s\n' "$service_ip" "$service_port"
 }
 
+ready_notebook_pod_for_image() {
+  local expected_image="$1"
+  local deadline=$((SECONDS + 180))
+  local pod running_image ready deleting
+  while ((SECONDS < deadline)); do
+    while IFS= read -r pod; do
+      [[ -n "$pod" ]] || continue
+      deleting="$(
+        kubectl get pod "$pod" -n "$namespace" \
+          -o jsonpath='{.metadata.deletionTimestamp}' 2>/dev/null || true
+      )"
+      [[ -z "$deleting" ]] || continue
+      running_image="$(
+        kubectl get pod "$pod" -n "$namespace" \
+          -o 'jsonpath={.spec.containers[?(@.name=="notebook")].image}' \
+          2>/dev/null || true
+      )"
+      ready="$(
+        kubectl get pod "$pod" -n "$namespace" \
+          -o 'jsonpath={.status.conditions[?(@.type=="Ready")].status}' \
+          2>/dev/null || true
+      )"
+      if [[ "$running_image" == "$expected_image" && "$ready" == "True" ]]; then
+        printf '%s\n' "$pod"
+        return 0
+      fi
+    done < <(
+      kubectl get pods -n "$namespace" \
+        -l app=prooftag-qr-notebook \
+        --field-selector=status.phase=Running \
+        -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}'
+    )
+    sleep 2
+  done
+  echo "Aucun pod notebook prêt n'exécute l'image attendue $expected_image." >&2
+  kubectl get pods -n "$namespace" -l app=prooftag-qr-notebook -o wide >&2
+  return 1
+}
+
 verify_running_notebook() {
   local pod desired_image running_image desired_mode runtime_mode
-  pod="$(
-    kubectl get pod -n "$namespace" -l app=prooftag-qr-notebook \
-      -o jsonpath='{.items[0].metadata.name}'
-  )"
   desired_image="$(
     kubectl get deployment "$notebook_deployment" -n "$namespace" \
       -o jsonpath='{.spec.template.spec.containers[?(@.name=="notebook")].image}'
   )"
+  pod="$(ready_notebook_pod_for_image "$desired_image")"
   running_image="$(
     kubectl get pod "$pod" -n "$namespace" \
       -o jsonpath='{.spec.containers[?(@.name=="notebook")].image}'
@@ -108,7 +144,7 @@ verify_running_notebook() {
     echo "Redeployer avec scripts/deploy-notebook-image.sh avant de relancer." >&2
     return 1
   fi
-  echo "Notebook verifie dans le pod : $pod:$expected_notebook_path" >&2
+  echo "Notebook vérifié dans le pod prêt : $pod:$expected_notebook_path ($running_image)" >&2
 }
 
 restore_previous_state() {

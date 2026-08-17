@@ -715,3 +715,50 @@ def test_e026_notebook_uses_qr_verify_as_a_calibrated_first_objective():
     assert "bash scripts/deploy-app-image.sh" in stack_deployer
     assert "bash scripts/deploy-notebook-image.sh" in stack_deployer
     assert 'bash scripts/notebook-server.sh reset "$notebook"' in stack_deployer
+
+
+def test_deployment_shell_entrypoints_have_no_utf8_bom():
+    paths = [
+        Path("scripts/deploy-app-image.sh"),
+        Path("scripts/deploy-notebook-image.sh"),
+        Path("scripts/notebook-server.sh"),
+        Path("scripts/deploy-e026-notebook.sh"),
+    ]
+    for path in paths:
+        assert not path.read_bytes().startswith(b"\xef\xbb\xbf"), path
+
+
+def test_runtime_verification_selects_ready_pod_for_expected_image():
+    app = Path("scripts/deploy-app-image.sh").read_text(encoding="utf-8")
+    notebook = Path("scripts/deploy-notebook-image.sh").read_text(encoding="utf-8")
+    server = Path("scripts/notebook-server.sh").read_text(encoding="utf-8")
+
+    for path, source in [
+        ("scripts/deploy-app-image.sh", app),
+        ("scripts/deploy-notebook-image.sh", notebook),
+        ("scripts/notebook-server.sh", server),
+    ]:
+        assert ".items[0].metadata.name" not in source, path
+        assert ".metadata.deletionTimestamp" in source, path
+        assert "status.phase=Running" in source, path
+        assert '@.type=="Ready"' in source, path
+        assert '"$running_image" == "$expected_image"' in source, path
+
+    assert "ready_pod_for_image" in app
+    assert "ready_pod_for_image" in notebook
+    assert "ready_notebook_pod_for_image" in server
+
+
+def test_e026_deploys_matching_notebook_before_runtime_and_api():
+    source = Path("scripts/deploy-e026-notebook.sh").read_text(encoding="utf-8")
+    notebook_image = source.index(
+        'bash scripts/deploy-notebook-image.sh "notebooks/${notebook}"'
+    )
+    reset = source.index('bash scripts/notebook-server.sh reset "$notebook"')
+    start = source.index('bash scripts/notebook-server.sh start "$notebook"')
+    app_image = source.index("bash scripts/deploy-app-image.sh")
+
+    assert notebook_image < min(reset, start) < app_image
+    assert 'git_tag="$(git rev-parse --short=12 HEAD)"' in source
+    assert 'deployed_api" != "$expected_api"' in source
+    assert 'deployed_notebook" != "$expected_notebook"' in source
