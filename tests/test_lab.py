@@ -96,6 +96,30 @@ def test_web_lab_exposes_only_the_pinned_diffqrcoder_chain():
     assert robust_srmpgd["tools"]["settings"]["srmpgd_robust_blur_weight"] == 1.0
 
 
+def test_lab_accepts_the_adaptive_srmpgd_qr_tolerance_setting(tmp_path):
+    settings = Settings(data_dir=tmp_path, device="cpu")
+    run_repository = RunRepository(tmp_path / "runs.sqlite3")
+    service = LabService(
+        base_settings=settings,
+        run_repository=run_repository,
+        lab_repository=LabRepository(run_repository.engine),
+        artifact_store=LocalArtifactStore(tmp_path / "artifacts"),
+        validator=object(),
+    )
+    method = LabMethod.model_validate(
+        next(
+            profile
+            for profile in laboratory_profiles()
+            if profile["id"] == "diffqrcoder_srmpgd"
+        )
+    )
+    method.tools.settings["srmpgd_min_qr_tolerance"] = 0.80
+
+    resolved = service._settings_for_method(method)
+
+    assert resolved.srmpgd_min_qr_tolerance == pytest.approx(0.80)
+
+
 def test_srmpgd_reuses_the_matching_srpg_stage2_cache_key(tmp_path):
     settings = Settings(data_dir=tmp_path, device="cpu")
     run_repository = RunRepository(tmp_path / "runs.sqlite3")

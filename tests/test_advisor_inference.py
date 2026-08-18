@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import csv
+import io
 import json
+from urllib.error import HTTPError
 
 import pytest
 
+import prooftag_qr.advisor_inference as advisor_inference_module
 from prooftag_qr.advisor_inference import (
     AdvisorInferenceRunner,
     build_advisor_inference_plan,
@@ -340,6 +343,40 @@ def test_inference_runner_resumes_without_resubmitting_completed_campaign(tmp_pa
     assert first["completed_campaigns"] == 2
     assert first["exports"] == 2
     assert len([item for item in calls if item[0] == "POST"]) == 2
+
+
+def test_inference_runner_surfaces_non_retryable_api_validation_detail(
+    tmp_path,
+    monkeypatch,
+):
+    runner = AdvisorInferenceRunner(
+        plan=_plan(),
+        api_url="http://example.invalid",
+        output_root=tmp_path,
+        poll_seconds=0,
+    )
+    body = io.BytesIO(
+        json.dumps(
+            {"detail": "unsupported tool settings: ['srmpgd_min_qr_tolerance']"}
+        ).encode("utf-8")
+    )
+
+    def reject(*_args, **_kwargs):
+        raise HTTPError(
+            "http://example.invalid/v1/lab/campaigns",
+            422,
+            "Unprocessable Entity",
+            {},
+            body,
+        )
+
+    monkeypatch.setattr(advisor_inference_module, "urlopen", reject)
+
+    with pytest.raises(
+        RuntimeError,
+        match="HTTP 422 POST /v1/lab/campaigns.*srmpgd_min_qr_tolerance",
+    ):
+        runner._request("POST", "/v1/lab/campaigns", {"name": "invalid"})
 
 
 def test_inference_results_join_predictions_and_select_scannable_winner(tmp_path):

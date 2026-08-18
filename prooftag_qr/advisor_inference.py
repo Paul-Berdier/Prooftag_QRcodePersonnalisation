@@ -836,7 +836,22 @@ class AdvisorInferenceRunner:
                 with urlopen(request, timeout=120) as response:
                     body = response.read()
                     return body if raw else json.loads(body.decode("utf-8"))
-            except (HTTPError, URLError, TimeoutError, ConnectionError) as exc:
+            except HTTPError as exc:
+                response_body = exc.read().decode("utf-8", errors="replace")
+                try:
+                    parsed = json.loads(response_body)
+                    detail = parsed.get("detail", parsed)
+                except json.JSONDecodeError:
+                    detail = response_body or exc.reason
+                message = f"HTTP {exc.code} {method} {path}: {detail}"
+                # A validation or authorization error is deterministic. Retrying
+                # the exact same request only hides its useful response body and
+                # delays the notebook by several minutes.
+                if 400 <= exc.code < 500 and exc.code not in {408, 425, 429}:
+                    raise RuntimeError(message) from exc
+                last_error = RuntimeError(message)
+                time.sleep(min(60.0, 2.0 ** min(retry, 5)))
+            except (URLError, TimeoutError, ConnectionError) as exc:
                 last_error = exc
                 time.sleep(min(60.0, 2.0 ** min(retry, 5)))
         raise RuntimeError(f"inference API unavailable after retries: {last_error}")

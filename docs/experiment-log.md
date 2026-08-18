@@ -1406,3 +1406,17 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   enrichir le prochain entraînement.
 - **Protocole :** `e026j-v2-scan-safe-exploratory-fallback`, donc aucun état E026J v1 ambigu ne
   peut être repris silencieusement.
+
+### Correctif de soumission API — 18 août 2026
+
+- **Symptôme :** le plan `e9723869c8603633` était valide (29 recommandations scan-safe et une
+  exploratoire), mais la première soumission `/v1/lab/campaigns` échouait en HTTP 422.
+- **Cause :** `lab.py` contenait deux définitions de `TOOL_SETTING_KEYS`. La définition active
+  omettait `srmpgd_min_qr_tolerance`, alors qu'E026J l'ajoute à `0,80` pour sa porte adaptative.
+- **Correction :** une seule liste d'autorisation subsiste et accepte ce paramètre. Un test passe
+  désormais la méthode SR-MPGD adaptative par la validation réelle de `LabService`.
+- **Diagnostic :** le client d'inférence affiche maintenant le corps `detail` des erreurs HTTP 4xx
+  et ne retente plus huit fois une requête 422 déterministe.
+- **Reprise :** la requête refusée n'avait ni créé de campagne ni incrémenté l'état. Après
+  redéploiement API/notebook du même commit, la cellule 11 peut reprendre le même plan sans effacer
+  `/data/e026j-inference/e9723869c8603633`.
