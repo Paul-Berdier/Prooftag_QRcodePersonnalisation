@@ -1420,3 +1420,21 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
 - **Reprise :** la requête refusée n'avait ni créé de campagne ni incrémenté l'état. Après
   redéploiement API/notebook du même commit, la cellule 11 peut reprendre le même plan sans effacer
   `/data/e026j-inference/e9723869c8603633`.
+
+## E027 — protocole SR-MPGD systématique — 18 août 2026
+
+- **Question :** déterminer si la sortie SR-MPGD doit toujours être livrée lorsque QR-Verify est
+  prioritaire, ou si Stage 1 et Stage 2 doivent rester des candidats.
+- **Plan :** 100 prompts nouveaux, trois seeds, donc 300 contextes et 900 états appariés.
+- **Chaîne :** Stage 1, Stage 2 SRPG puis SR-MPGD robuste dans la même campagne ; le laboratoire
+  vérifie la réutilisation exacte du Stage 1 et du latent Stage 2.
+- **Politiques :** cascade avec arrêt Stage 1, chaîne complète avec sélection lexicographique et
+  SR-MPGD forcé.
+- **Priorité :** payload exact, tolérance QR-Verify, garde de saturation, puis HPS, CLIP-Aesthetic
+  et CLIPScore. Une image esthétique mais non livrable ne peut jamais gagner.
+- **Reprise :** cinq lots persistants sous `/data/e027-holdout/<plan-id>` ; toute absence d'un des
+  trois états compte comme erreur technique.
+- **État :** protocole implémenté, résultats non encore exécutés. Aucune conclusion E027 ne doit
+  être publiée avant la fin des 300 triplets.
+- **Notebook :** `22_e027_srmpgd_policy_holdout.ipynb`.
+- **Protocole :** `docs/e027-srmpgd-policy-holdout.md`.

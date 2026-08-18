@@ -26,6 +26,8 @@ DiffQRCoder et sur l’algorithme décrit dans son papier :
 - CLIP-Aesthetic, CLIPScore et HPS v2.1 comme objectifs esthétiques secondaires ;
 - E026, un conseiller prompt → paramètres entraîné sur les configurations réellement observées ;
 - E026W, une collecte Kubernetes reprenable et bornée à sept jours ;
+- E027, un holdout apparié de 300 contextes qui compare cascade, sélection complète et SR-MPGD
+  forcé avec QR-Verify prioritaire ;
 - PostgreSQL en production, avec migrations Alembic et sauvegardes quotidiennes ;
 - SQLite pour les tests et le développement local ;
 - une base relationnelle contenant runs, tentatives, validations et qualité ;
@@ -135,6 +137,10 @@ Le conseiller E026 et sa collecte autonome d'une semaine sont documentés dans
 [`docs/e026-week-unattended.md`](docs/e026-week-unattended.md).
 Le notebook E026 exécute ensuite E026I : top-3 conseillé contre Stage 1 sur dix prompts inconnus,
 avec reprise, images, QR-Verify, CLIP-Aesthetic, CLIPScore et HPS v2.1.
+
+Le notebook E027 mesure séparément Stage 1, Stage 2 et SR-MPGD sur le même latent, puis rejoue
+trois politiques de livraison sans permettre à l'esthétique de dépasser la porte QR. Protocole :
+[`docs/e027-srmpgd-policy-holdout.md`](docs/e027-srmpgd-policy-holdout.md).
 
 ## Déploiement
 

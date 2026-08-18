@@ -260,6 +260,20 @@ QR-Verify, CLIP-Aesthetic, CLIPScore et HPS dans l'archive. Le notebook ne rempl
 validation finale QR-Verify. Le protocole est dans
 [`../docs/e026-prompt-parameter-advisor.md`](../docs/e026-prompt-parameter-advisor.md).
 
+## E027 — cascade contre SR-MPGD systématique
+
+Le notebook 22 génère 100 prompts inconnus avec trois seeds, soit 300 contextes. Pour chacun, il
+mesure le Stage 1, le Stage 2 apparié et SR-MPGD sur le latent exact du Stage 2. Il compare ensuite
+une cascade rapide, une chaîne complète avec sélection QR-first et une sortie SR-MPGD forcée.
+
+```powershell
+.\scripts\notebook-remote.ps1 -Notebook 22_e027_srmpgd_policy_holdout.ipynb
+```
+
+Lancer **Run > Run All Cells**. La campagne comporte 900 états, reprend après interruption et
+copie toutes les images sous `/workspace/downloads/e027-<plan-id>`. Voir
+[`../docs/e027-srmpgd-policy-holdout.md`](../docs/e027-srmpgd-policy-holdout.md).
+
 Pour remplir ce dataset pendant une absence sans laisser Jupyter ouvert, E026W lance un Job
 Kubernetes CPU reprenable et réserve la RTX à l'API. Le plan borné contient 300 prompts, 16
 recettes, trois seeds et jusqu'à 14 400 essais. Les commandes de démarrage, suivi, reprise et

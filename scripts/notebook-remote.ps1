@@ -22,7 +22,8 @@ param(
         "18_e014d_functional_late_rediffusion.ipynb",
         "19_e014e_mechanism_window_ablation.ipynb",
         "20_e014f_unseen_generalization_cascade.ipynb",
-        "21_e026_prompt_parameter_advisor.ipynb"
+        "21_e026_prompt_parameter_advisor.ipynb",
+        "22_e027_srmpgd_policy_holdout.ipynb"
     )]
     [string]$Notebook = "02_generate_live_on_gpu.ipynb",
     [switch]$Reset,
@@ -129,8 +130,11 @@ try {
                 -Headers $headers -TimeoutSec 1 | Out-Null
             Start-Process $url
             Write-Host "Notebook ouvert sur le PC : $url"
-            if ($Notebook -eq "21_e026_prompt_parameter_advisor.ipynb") {
-                Write-Host "Mode E026 : Jupyter reste sur CPU et l'API conserve la RTX pour generer les donnees."
+            if ($Notebook -in @(
+                "21_e026_prompt_parameter_advisor.ipynb",
+                "22_e027_srmpgd_policy_holdout.ipynb"
+            )) {
+                Write-Host "Mode campagne : Jupyter reste sur CPU et l'API conserve la RTX pour generer les donnees."
             }
             else {
                 Write-Host "Mode generation directe : ce notebook utilise la RTX."

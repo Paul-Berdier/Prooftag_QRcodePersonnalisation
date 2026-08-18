@@ -745,6 +745,7 @@ def test_deployment_shell_entrypoints_have_no_utf8_bom():
         Path("scripts/deploy-notebook-image.sh"),
         Path("scripts/notebook-server.sh"),
         Path("scripts/deploy-e026-notebook.sh"),
+        Path("scripts/deploy-e027-notebook.sh"),
     ]
     for path in paths:
         assert not path.read_bytes().startswith(b"\xef\xbb\xbf"), path
@@ -784,3 +785,37 @@ def test_e026_deploys_matching_notebook_before_runtime_and_api():
     assert 'git_tag="$(git rev-parse --short=12 HEAD)"' in source
     assert 'deployed_api" != "$expected_api"' in source
     assert 'deployed_notebook" != "$expected_notebook"' in source
+
+
+def test_e027_notebook_encodes_paired_qr_first_policy_holdout():
+    path = Path("notebooks/22_e027_srmpgd_policy_holdout.ipynb")
+    source = path.read_text(encoding="utf-8")
+    builder = Path("scripts/build_e027_srmpgd_policy_notebook.py").read_text(
+        encoding="utf-8"
+    )
+    launcher = Path("scripts/notebook-remote.ps1").read_text(encoding="utf-8")
+    server = Path("scripts/notebook-server.sh").read_text(encoding="utf-8")
+    deployer = Path("scripts/deploy-e027-notebook.sh").read_text(encoding="utf-8")
+
+    assert "HOLDOUT_PROMPT_COUNT = 100" in source
+    assert "HOLDOUT_SEEDS = (743001, 857001, 971001)" in source
+    assert "assert plan.public['context_count'] == 300" in source
+    assert "assert plan.public['trial_count'] == 900" in source
+    assert "evaluate_e027_policies" in source
+    assert "full_lexicographic" in source
+    assert "forced_srmpgd" in source
+    assert "e027-policy-report.json" in source
+    assert "e027-pairing-audit.csv" in source
+    assert "e027-gallery" in source
+    assert "QR-Verify reste la seule porte QR finale" in source
+    assert "22_e027_srmpgd_policy_holdout.ipynb" in builder
+    assert "22_e027_srmpgd_policy_holdout.ipynb" in launcher
+    assert "22_e027_srmpgd_policy_holdout.ipynb" in server
+
+    app_image = deployer.index("bash scripts/deploy-app-image.sh")
+    notebook_image = deployer.index(
+        'bash scripts/deploy-notebook-image.sh "notebooks/${notebook}"'
+    )
+    start = deployer.index('bash scripts/notebook-server.sh start "$notebook"')
+    reset = deployer.index('bash scripts/notebook-server.sh reset "$notebook"')
+    assert app_image < notebook_image < min(start, reset)

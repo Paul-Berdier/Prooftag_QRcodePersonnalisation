@@ -14,9 +14,11 @@ if [[ ! "$expected_notebook" =~ ^[A-Za-z0-9_.-]+\.ipynb$ ]]; then
 fi
 expected_notebook_path="/workspace/notebooks/${expected_notebook}"
 advisor_mode=0
-if [[ "$expected_notebook" == "21_e026_prompt_parameter_advisor.ipynb" ]]; then
-  advisor_mode=1
-fi
+case "$expected_notebook" in
+  21_e026_prompt_parameter_advisor.ipynb|22_e027_srmpgd_policy_holdout.ipynb)
+    advisor_mode=1
+    ;;
+esac
 
 replicas_or_zero() {
   kubectl get deployment "$1" -n "$2" -o jsonpath='{.spec.replicas}' 2>/dev/null || printf '0'
