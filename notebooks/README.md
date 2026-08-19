@@ -274,6 +274,22 @@ Lancer **Run > Run All Cells**. La campagne comporte 900 états, reprend après 
 copie toutes les images sous `/workspace/downloads/e027-<plan-id>`. Voir
 [`../docs/e027-srmpgd-policy-holdout.md`](../docs/e027-srmpgd-policy-holdout.md).
 
+## E028 — conseiller hiérarchique par prompt
+
+E028 ne permet plus jamais de livrer Stage 1. Pour trente prompts inconnus et trois seeds, le
+modèle choisit deux Stage 1, deux Stage 2 par source et un SR-MPGD exact par latent. Une chaîne
+fixe fournit le témoin. Le notebook calcule les contrefactuels pour apprendre, puis rejoue la
+production : Stage 2 d'abord, SR-MPGD uniquement en repli sous la porte QR-Verify `0,80`.
+
+```powershell
+.\scripts\notebook-remote.ps1 -Notebook 23_e028_hierarchical_prompt_advisor.ipynb
+```
+
+Le notebook reste sur CPU et délègue les `1 170` générations à l'API GPU. Les résultats sont
+reprenables sous `/data/e028-hierarchical`, l'appariement est vérifié par hashes et toutes les
+images sont indexées dans la galerie. Voir
+[`../docs/e028-hierarchical-prompt-advisor.md`](../docs/e028-hierarchical-prompt-advisor.md).
+
 Pour remplir ce dataset pendant une absence sans laisser Jupyter ouvert, E026W lance un Job
 Kubernetes CPU reprenable et réserve la RTX à l'API. Le plan borné contient 300 prompts, 16
 recettes, trois seeds et jusqu'à 14 400 essais. Les commandes de démarrage, suivi, reprise et

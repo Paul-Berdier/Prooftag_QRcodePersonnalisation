@@ -746,6 +746,7 @@ def test_deployment_shell_entrypoints_have_no_utf8_bom():
         Path("scripts/notebook-server.sh"),
         Path("scripts/deploy-e026-notebook.sh"),
         Path("scripts/deploy-e027-notebook.sh"),
+        Path("scripts/deploy-e028-notebook.sh"),
     ]
     for path in paths:
         assert not path.read_bytes().startswith(b"\xef\xbb\xbf"), path
@@ -811,6 +812,42 @@ def test_e027_notebook_encodes_paired_qr_first_policy_holdout():
     assert "22_e027_srmpgd_policy_holdout.ipynb" in builder
     assert "22_e027_srmpgd_policy_holdout.ipynb" in launcher
     assert "22_e027_srmpgd_policy_holdout.ipynb" in server
+
+    app_image = deployer.index("bash scripts/deploy-app-image.sh")
+    notebook_image = deployer.index(
+        'bash scripts/deploy-notebook-image.sh "notebooks/${notebook}"'
+    )
+    start = deployer.index('bash scripts/notebook-server.sh start "$notebook"')
+    reset = deployer.index('bash scripts/notebook-server.sh reset "$notebook"')
+    assert app_image < notebook_image < min(start, reset)
+
+
+def test_e028_notebook_uses_prompt_advisor_at_every_stage_without_stage1_delivery():
+    path = Path("notebooks/23_e028_hierarchical_prompt_advisor.ipynb")
+    source = path.read_text(encoding="utf-8")
+    builder = Path("scripts/build_e028_hierarchical_advisor_notebook.py").read_text(
+        encoding="utf-8"
+    )
+    launcher = Path("scripts/notebook-remote.ps1").read_text(encoding="utf-8")
+    server = Path("scripts/notebook-server.sh").read_text(encoding="utf-8")
+    deployer = Path("scripts/deploy-e028-notebook.sh").read_text(encoding="utf-8")
+
+    assert "HOLDOUT_PROMPT_COUNT = 30" in source
+    assert "HOLDOUT_SEEDS = (1083001, 1211001, 1327001)" in source
+    assert "STAGE1_TOP_K = 2" in source
+    assert "STAGE2_TOP_K = 2" in source
+    assert "expected_trials == 1170" in source
+    assert "build_e028_hierarchical_plan" in source
+    assert "audit_e028_pairing" in source
+    assert "build_e028_conditional_datasets" in source
+    assert "evaluate_e028_policies" in source
+    assert "Stage 1 n'est jamais un résultat livrable" in source
+    assert "stage1_delivery_allowed" in source
+    assert "e028-pairing-audit.csv" in source
+    assert "e028-gallery" in source
+    assert "23_e028_hierarchical_prompt_advisor.ipynb" in builder
+    assert "23_e028_hierarchical_prompt_advisor.ipynb" in launcher
+    assert "23_e028_hierarchical_prompt_advisor.ipynb" in server
 
     app_image = deployer.index("bash scripts/deploy-app-image.sh")
     notebook_image = deployer.index(

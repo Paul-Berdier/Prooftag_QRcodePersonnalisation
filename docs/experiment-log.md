@@ -1434,7 +1434,30 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   et CLIPScore. Une image esthétique mais non livrable ne peut jamais gagner.
 - **Reprise :** cinq lots persistants sous `/data/e027-holdout/<plan-id>` ; toute absence d'un des
   trois états compte comme erreur technique.
-- **État :** protocole implémenté, résultats non encore exécutés. Aucune conclusion E027 ne doit
-  être publiée avant la fin des 300 triplets.
+- **Résultat reçu :** 300/300 triplets complets. La sélection complète franchit la porte
+  QR-Verify dans `244/300` contextes (`81,3 %`) contre `242/300` (`80,7 %`) pour SR-MPGD forcé.
+  Forcer SR-MPGD n'apporte donc aucun gain mesuré et crée deux régressions de porte.
+- **Correction postérieure :** les politiques E027 pouvaient encore sélectionner Stage 1. Les
+  essais téléphone montrent que ce choix n'est pas livrable ; E028 interdit donc Stage 1 sans
+  réinterpréter QR-Verify comme une probabilité de scan physique.
 - **Notebook :** `22_e027_srmpgd_policy_holdout.ipynb`.
 - **Protocole :** `docs/e027-srmpgd-policy-holdout.md`.
+
+## E028 — conseiller hiérarchique par prompt — 19 août 2026
+
+- **Correction de politique :** Stage 1 est interdit à la livraison, quelle que soit sa valeur
+  QR-Verify ; il reste la source esthétique de Stage 2.
+- **Conseiller :** sélection par prompt à trois niveaux : deux Stage 1, deux Stage 2 par source,
+  puis un SR-MPGD par latent exact. Une chaîne fixe est conservée comme témoin.
+- **Plan :** 30 prompts inconnus × 3 seeds × 13 états = 1 170 générations persistantes.
+- **Production rejouée :** Stage 2 est testé avant SR-MPGD ; le raffinement ne compte comme coût
+  de production que lorsque son parent échoue au payload exact ou à la tolérance `0,80`.
+- **Appariement :** vérification des `run_id`, hashes d'image Stage 1, hashes de latent Stage 2,
+  statut `exact_reuse` et diagnostic backend. Une sortie générée non appariée arrête le notebook.
+- **Apprentissage suivant :** export de datasets conditionnels Stage 2 ← mesures Stage 1 et
+  SR-MPGD ← mesures Stage 2, avec entraînement uniquement si les classes sont identifiables.
+- **Limite :** QR-Verify est une porte logicielle sur fichier, pas une garantie téléphone.
+- **État :** protocole et notebook implémentés ; aucun résultat E028 n'est revendiqué avant
+  l'exécution complète.
+- **Notebook :** `23_e028_hierarchical_prompt_advisor.ipynb`.
+- **Protocole :** `docs/e028-hierarchical-prompt-advisor.md`.

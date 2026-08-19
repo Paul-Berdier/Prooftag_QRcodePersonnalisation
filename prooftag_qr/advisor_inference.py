@@ -1086,6 +1086,37 @@ def load_advisor_inference_results(output_dir: Path) -> list[dict[str, Any]]:
                 "seed": _finite(row.get("seed")),
                 "status": row.get("status"),
                 "generation_run_id": row.get("generation_run_id"),
+                "stage1_reused": _finite(row.get("stage1_reused")),
+                "stage1_source_run_id": row.get("stage1_source_run_id") or None,
+                "stage2_source_run_id": row.get("provenance_stage2_source_run_id")
+                or row.get("stage2_source_run_id")
+                or None,
+                "stage2_source_method_id": row.get(
+                    "provenance_stage2_source_method_id"
+                )
+                or row.get("stage2_source_method_id")
+                or None,
+                "stage2_source_latent_sha256": row.get(
+                    "provenance_stage2_source_latent_sha256"
+                )
+                or row.get("stage2_source_latent_sha256")
+                or None,
+                "stage2_latent_sha256": row.get("provenance_stage2_latent_sha256")
+                or row.get("stage2_latent_sha256")
+                or None,
+                "stage2_pairing_status": row.get("provenance_stage2_pairing_status")
+                or row.get("stage2_pairing_status")
+                or None,
+                "stage2_pairing_exact": _first_finite(
+                    row,
+                    (
+                        "quality_diffqrcoder_stage2_pairing_exact",
+                        "diffqrcoder_stage2_pairing_exact",
+                        "provenance_stage2_pairing_exact",
+                    ),
+                ),
+                "payload_length": _finite(row.get("payload_length")),
+                "error_correction": row.get("error_correction") or None,
                 "qr_success": _first_finite(
                     row, ("quality_qr_verify_any_exact", "exact_payload_match")
                 ),
@@ -1116,10 +1147,14 @@ def load_advisor_inference_results(output_dir: Path) -> list[dict[str, Any]]:
         iteration = _finite(result.get("srmpgd_selected_iteration"))
         requested = result.get("requested_source_output_variant")
         result["srmpgd_effective"] = bool(
-            requested == "srmpgd" and iteration is not None and iteration > 0
+            requested in {"srmpgd", "auto"}
+            and iteration is not None
+            and iteration > 0
         )
         result["srmpgd_noop"] = bool(
-            requested == "srmpgd" and iteration is not None and iteration == 0
+            requested in {"srmpgd", "auto"}
+            and iteration is not None
+            and iteration == 0
         )
         if result["srmpgd_noop"]:
             result["output_variant"] = "srpg"

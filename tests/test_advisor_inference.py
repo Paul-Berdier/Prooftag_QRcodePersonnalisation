@@ -415,6 +415,16 @@ def test_inference_results_join_predictions_and_select_scannable_winner(tmp_path
         "status",
         "seed",
         "generation_run_id",
+        "stage1_reused",
+        "stage1_source_run_id",
+        "provenance_stage2_source_run_id",
+        "provenance_stage2_source_method_id",
+        "provenance_stage2_source_latent_sha256",
+        "provenance_stage2_latent_sha256",
+        "provenance_stage2_pairing_status",
+        "quality_diffqrcoder_stage2_pairing_exact",
+        "payload_length",
+        "error_correction",
         "selected_variant",
         "quality_qr_verify_any_exact",
         "quality_qr_verify_tolerance_score",
@@ -461,6 +471,16 @@ def test_inference_results_join_predictions_and_select_scannable_winner(tmp_path
                 "status": "accepted",
                 "seed": 1,
                 "generation_run_id": "run-2",
+                "stage1_reused": True,
+                "stage1_source_run_id": "run-1",
+                "provenance_stage2_source_run_id": "run-stage2",
+                "provenance_stage2_source_method_id": "stage2",
+                "provenance_stage2_source_latent_sha256": "latent-source",
+                "provenance_stage2_latent_sha256": "latent-current",
+                "provenance_stage2_pairing_status": "exact_reuse",
+                "quality_diffqrcoder_stage2_pairing_exact": 1,
+                "payload_length": 28,
+                "error_correction": "M",
                 "selected_variant": "srmpgd",
                 "quality_qr_verify_any_exact": 1,
                 "quality_qr_verify_tolerance_score": 0.7,
@@ -484,6 +504,13 @@ def test_inference_results_join_predictions_and_select_scannable_winner(tmp_path
     assert rows[1]["output_variant"] == "srpg"
     assert rows[1]["srmpgd_noop"] is True
     assert rows[1]["srmpgd_effective"] is False
+    assert rows[1]["stage1_reused"] == pytest.approx(1.0)
+    assert rows[1]["stage1_source_run_id"] == "run-1"
+    assert rows[1]["stage2_source_run_id"] == "run-stage2"
+    assert rows[1]["stage2_source_latent_sha256"] == "latent-source"
+    assert rows[1]["stage2_latent_sha256"] == "latent-current"
+    assert rows[1]["stage2_pairing_status"] == "exact_reuse"
+    assert rows[1]["stage2_pairing_exact"] == pytest.approx(1.0)
     assert winners[0]["trial_id"] == "t2"
 
 

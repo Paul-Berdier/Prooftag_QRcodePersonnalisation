@@ -603,6 +603,7 @@ class E026ParameterAdvisor:
         payload_length: int | None = None,
         error_correction: str = "M",
         qr_context: Mapping[str, Any] | None = None,
+        context_features: Mapping[str, Any] | None = None,
         scan_probability_threshold: float = 0.80,
         limit: int = 6,
     ) -> list[ParameterRecommendation]:
@@ -614,6 +615,7 @@ class E026ParameterAdvisor:
             **_prompt_features(prompt),
             "error_correction": error_correction,
             **dict(qr_context or {}),
+            **dict(context_features or {}),
         }
         if payload_length is not None:
             context["payload_length"] = float(payload_length)

@@ -28,6 +28,8 @@ DiffQRCoder et sur l’algorithme décrit dans son papier :
 - E026W, une collecte Kubernetes reprenable et bornée à sept jours ;
 - E027, un holdout apparié de 300 contextes qui compare cascade, sélection complète et SR-MPGD
   forcé avec QR-Verify prioritaire ;
+- E028, une cascade hiérarchique conseillée par prompt où Stage 1 n'est jamais livrable et où
+  chaque Stage 2/SR-MPGD réutilise exactement son parent ;
 - PostgreSQL en production, avec migrations Alembic et sauvegardes quotidiennes ;
 - SQLite pour les tests et le développement local ;
 - une base relationnelle contenant runs, tentatives, validations et qualité ;
@@ -141,6 +143,11 @@ avec reprise, images, QR-Verify, CLIP-Aesthetic, CLIPScore et HPS v2.1.
 Le notebook E027 mesure séparément Stage 1, Stage 2 et SR-MPGD sur le même latent, puis rejoue
 trois politiques de livraison sans permettre à l'esthétique de dépasser la porte QR. Protocole :
 [`docs/e027-srmpgd-policy-holdout.md`](docs/e027-srmpgd-policy-holdout.md).
+
+E028 corrige la politique de livraison : Stage 1 reste uniquement une source esthétique. Le
+conseiller choisit les paramètres de Stage 1, de Stage 2 et de SR-MPGD pour chaque prompt, puis
+compare une chaîne fixe, une chaîne top-1 et plusieurs chaînes conseillées. Protocole :
+[`docs/e028-hierarchical-prompt-advisor.md`](docs/e028-hierarchical-prompt-advisor.md).
 
 ## Déploiement
 

@@ -23,7 +23,8 @@ param(
         "19_e014e_mechanism_window_ablation.ipynb",
         "20_e014f_unseen_generalization_cascade.ipynb",
         "21_e026_prompt_parameter_advisor.ipynb",
-        "22_e027_srmpgd_policy_holdout.ipynb"
+        "22_e027_srmpgd_policy_holdout.ipynb",
+        "23_e028_hierarchical_prompt_advisor.ipynb"
     )]
     [string]$Notebook = "02_generate_live_on_gpu.ipynb",
     [switch]$Reset,
@@ -132,7 +133,8 @@ try {
             Write-Host "Notebook ouvert sur le PC : $url"
             if ($Notebook -in @(
                 "21_e026_prompt_parameter_advisor.ipynb",
-                "22_e027_srmpgd_policy_holdout.ipynb"
+                "22_e027_srmpgd_policy_holdout.ipynb",
+                "23_e028_hierarchical_prompt_advisor.ipynb"
             )) {
                 Write-Host "Mode campagne : Jupyter reste sur CPU et l'API conserve la RTX pour generer les donnees."
             }
