@@ -66,7 +66,7 @@ for cell in notebook["cells"]:
         )
         source = source.replace(
             "EXPERIMENT_NAME = 'e028-hierarchical-prompt-advisor-v1'",
-            "EXPERIMENT_NAME = 'e029-srmpgd-exact-raster-recovery-v2'",
+            "EXPERIMENT_NAME = 'e029-srmpgd-exact-raster-recovery-v3'",
         )
         source = source.replace(
             "COLLECTION_PAYLOAD = 'https://ptag.io/t/e028'",

@@ -47,6 +47,12 @@ E029 rejoue une campagne plus petite avant tout nouvel entraînement :
 Le protocole v2 possède un nouvel identifiant de plan. Il ne reprend donc pas les 180 résultats
 E029 v1 dont la sélection `auto` était ambiguë.
 
+E029 v3 lie également le `plan_id` au SHA-256 de l'intégralité des prédictions du conseiller.
+Auparavant, deux exécutions pouvaient sélectionner les mêmes signatures de recettes mais produire
+des probabilités légèrement différentes ; elles entraient alors dans le même dossier et le
+contrôle de reprise refusait justement d'écraser `advisor-predictions.jsonl`. Une variation de
+prédictions crée désormais un nouveau plan au lieu d'une collision.
+
 Les Stage 1 et Stage 2 doivent être régénérés : l'archive E028 contient les PNG et les métriques,
 mais aucun latent `.safetensors`. Un SR-MPGD différentiable ne peut pas être repris fidèlement à
 partir du PNG seul.

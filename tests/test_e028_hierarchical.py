@@ -14,6 +14,9 @@ from prooftag_qr.parameter_advisor import ParameterRecommendation
 
 
 class DeterministicAdvisor:
+    def __init__(self, prediction_offset: float = 0.0):
+        self.prediction_offset = prediction_offset
+
     def recommend(self, *, candidates, limit, **_):
         ranked = []
         for index, candidate in enumerate(candidates):
@@ -34,7 +37,9 @@ class DeterministicAdvisor:
                     qr_success_lower_bound=min(0.97, 0.50 + score / 10.0),
                     predicted_qr_tolerance=min(0.99, 0.60 + score / 10.0),
                     predicted_clip_aesthetic=5.0 + index / 100.0,
-                    predicted_clip_score=0.5 + index / 1000.0,
+                    predicted_clip_score=(
+                        0.5 + index / 1000.0 + self.prediction_offset
+                    ),
                     predicted_hpsv2_1=0.2 + index / 1000.0,
                     predicted_human_aesthetic=None,
                     predicted_human_prompt_fidelity=None,
@@ -108,6 +113,27 @@ def test_e028_plan_uses_prompt_advisor_at_every_stage_and_orders_exact_reuse():
     )
     assert "payload" not in plan.public
     assert plan.public["payload_sha256"]
+    assert len(plan.public["prediction_sha256"]) == 64
+    assert plan.public["protocol"] == (
+        "e028-v3-prediction-bound-forced-srmpgd-chain"
+    )
+
+    changed_predictions = build_e028_hierarchical_plan(
+        advisor=DeterministicAdvisor(prediction_offset=0.001),
+        candidates=[],
+        prompts=[
+            {
+                "id": "e028_test",
+                "text": "A quiet blue glass sculpture under soft gallery light.",
+            }
+        ],
+        payload="https://ptag.io/t/e028-test",
+        advisor_sha256="a" * 64,
+        seeds=(101, 202, 303),
+        stage1_top_k=2,
+        stage2_top_k=2,
+    )
+    assert changed_predictions.plan_id != plan.plan_id
 
 
 def _row(

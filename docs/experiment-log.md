@@ -1487,5 +1487,8 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
 - **E029 v2 :** sortie SR-MPGD forcée, no-op SRPG autorisé, sortie raw interdite, variante réelle
   conservée dans `service_selected_variant` et nouvel identifiant de plan pour empêcher la reprise
   des 180 résultats v1 ambigus.
+- **E029 v3 :** le `plan_id` inclut maintenant `prediction_sha256`. Une variation du modèle qui
+  conserve les mêmes signatures de recettes ne peut plus entrer en collision avec un ancien
+  `advisor-predictions.jsonl` ; elle ouvre automatiquement un nouveau dossier reprenable.
 - **Notebook :** `24_e029_srmpgd_exact_raster_recovery.ipynb`.
 - **Protocole :** `docs/e029-srmpgd-exact-raster-recovery.md`.

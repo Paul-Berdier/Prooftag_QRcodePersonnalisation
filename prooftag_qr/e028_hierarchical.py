@@ -739,9 +739,13 @@ def build_e028_hierarchical_plan(
             }
         )
 
+    prediction_sha256 = hashlib.sha256(
+        _canonical_json(predictions).encode("utf-8")
+    ).hexdigest()
     plan_material = {
-        "protocol": "e028-v2-forced-srmpgd-exact-raster-chain",
+        "protocol": "e028-v3-prediction-bound-forced-srmpgd-chain",
         "advisor_sha256": advisor_sha256,
+        "prediction_sha256": prediction_sha256,
         "payload_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
         "payload_length": len(payload),
         "error_correction": error_correction,
@@ -1158,7 +1162,7 @@ def evaluate_e028_policies(
             "stage1_deliveries": sum(bool(row["stage1_was_delivered"]) for row in rows),
         }
     return {
-        "protocol": "e028-v2-forced-srmpgd-exact-raster-chain",
+        "protocol": "e028-v3-prediction-bound-forced-srmpgd-chain",
         "qr_tolerance_threshold": qr_tolerance_threshold,
         "saturation_threshold": saturation_threshold,
         "contexts": len(groups),
