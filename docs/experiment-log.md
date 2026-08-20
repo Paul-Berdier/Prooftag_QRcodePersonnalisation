@@ -1490,5 +1490,11 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
 - **E029 v3 :** le `plan_id` inclut maintenant `prediction_sha256`. Une variation du modèle qui
   conserve les mêmes signatures de recettes ne peut plus entrer en collision avec un ancien
   `advisor-predictions.jsonl` ; elle ouvre automatiquement un nouveau dossier reprenable.
+- **E029 v4 :** la répétition des mêmes 51 refus a permis d'identifier une collision distincte :
+  le runner retrouvait les campagnes API par leur nom historique, sans lier ce nom au `plan_id`.
+  Les noms distants incluent désormais le plan ; payload et spécification sont vérifiés avant
+  toute reprise. Stage 2/SR-MPGD refusent aussi un cache Stage 1 absent et une campagne
+  `completed_with_errors` est relancée. Les hashes de raster/latent sont exportés pour expliquer
+  chaque éventuel refus au lieu de produire seulement un compteur.
 - **Notebook :** `24_e029_srmpgd_exact_raster_recovery.ipynb`.
 - **Protocole :** `docs/e029-srmpgd-exact-raster-recovery.md`.

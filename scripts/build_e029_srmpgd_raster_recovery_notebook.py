@@ -66,7 +66,7 @@ for cell in notebook["cells"]:
         )
         source = source.replace(
             "EXPERIMENT_NAME = 'e028-hierarchical-prompt-advisor-v1'",
-            "EXPERIMENT_NAME = 'e029-srmpgd-exact-raster-recovery-v3'",
+            "EXPERIMENT_NAME = 'e029-srmpgd-exact-raster-recovery-v4'",
         )
         source = source.replace(
             "COLLECTION_PAYLOAD = 'https://ptag.io/t/e028'",
@@ -93,6 +93,41 @@ for cell in notebook["cells"]:
             "assert plan.public['trial_count'] == expected_trials == 1170",
             "assert plan.public['trial_count'] == expected_trials == 180",
         )
+        method_count_assertion = (
+            "assert all(item['method_count'] == expected_methods "
+            "for item in plan.public['campaigns'])"
+        )
+        source = source.replace(
+            method_count_assertion,
+            """assert all(
+    item['method_count'] == expected_methods
+    for item in plan.public['campaigns']
+)
+assert plan.public['protocol'] == 'e028-v4-plan-bound-strict-pairing-chain'
+assert len(plan.public['prediction_sha256']) == 64
+srmpgd_runtime_methods = [
+    method
+    for campaign in plan.campaigns
+    for method in campaign['methods']
+    if method['tools']['srmpgd_enabled']
+]
+assert srmpgd_runtime_methods
+assert all(method['output_variant'] == 'srmpgd' for method in srmpgd_runtime_methods)
+later_runtime_methods = [
+    method
+    for campaign in plan.campaigns
+    for method in campaign['methods']
+    if method['output_variant'] != 'raw'
+]
+assert later_runtime_methods
+assert all(method['require_exact_stage1_reuse'] for method in later_runtime_methods)
+print('Préflight : protocole v4, plan distant lié et appariement strict actif.')""",
+        )
+        source = source.replace(
+            "    maximum_campaign_attempts=2,\n",
+            "    maximum_campaign_attempts=2,\n"
+            "    reject_campaigns_with_errors=True,\n",
+        )
         source = source.replace("Progression E028", "Progression E029")
         source = source.replace("e028-state-results.csv", "e029-state-results.csv")
         source = source.replace("e028-pairing-audit.csv", "e029-pairing-audit.csv")
@@ -109,6 +144,33 @@ for cell in notebook["cells"]:
         source = source.replace(
             "download_dir = DOWNLOAD_ROOT / f'e028-",
             "download_dir = DOWNLOAD_ROOT / f'e029-",
+        )
+        source = source.replace(
+            """if not invalid_pairing.empty:
+    display(invalid_pairing)
+    raise RuntimeError(
+        f'{len(invalid_pairing)} sorties générées ne prouvent pas leur appariement exact.'
+    )""",
+            """if not invalid_pairing.empty:
+    display(invalid_pairing)
+    failure_summary = (
+        invalid_pairing.groupby(
+            ['pipeline_state', 'output_variant', 'failure_reasons'],
+            dropna=False,
+        )
+        .size()
+        .reset_index(name='count')
+        .sort_values('count', ascending=False)
+    )
+    display(Markdown('### Causes exactes des appariements refusés'))
+    display(failure_summary)
+    failure_summary.to_csv(
+        RUN_DIR / 'e029-pairing-failure-summary.csv', index=False
+    )
+    raise RuntimeError(
+        f'{len(invalid_pairing)} sorties ne prouvent pas leur appariement. '
+        f'Voir {RUN_DIR / "e029-pairing-failure-summary.csv"}.'
+    )""",
         )
 
         marker = "report = evaluate_e028_policies(\n"

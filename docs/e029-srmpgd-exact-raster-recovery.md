@@ -53,13 +53,30 @@ des probabilités légèrement différentes ; elles entraient alors dans le mêm
 contrôle de reprise refusait justement d'écraser `advisor-predictions.jsonl`. Une variation de
 prédictions crée désormais un nouveau plan au lieu d'une collision.
 
+L'exécution v3 a mis au jour un quatrième défaut de reprise : le dossier local utilisait bien le
+nouveau `plan_id`, mais la recherche côté API réutilisait une campagne distante sur son **nom
+historique seulement**. Elle rechargeait ainsi les mêmes 51 sorties v1 dans un dossier v3 neuf.
+E029 v4 corrige ce chemin de bout en bout :
+
+- chaque campagne distante contient désormais `[plan-<plan_id>]` dans son nom ;
+- une campagne existante n'est réutilisée que si son nom, le SHA-256 du payload et sa
+  spécification complète sont identiques ;
+- Stage 2 et SR-MPGD exigent le Stage 1 exact déjà présent dans le cache de la campagne ; aucun
+  Stage 1 de remplacement ne peut être régénéré silencieusement ;
+- `completed_with_errors` provoque une nouvelle tentative et ne valide jamais E029 ;
+- les exports d'une tentative échouée restent disponibles pour diagnostic mais sont exclus des
+  mesures dès qu'une tentative complète l'a remplacée ;
+- les hashes du Stage 1, du latent Stage 2 et du raster SR-MPGD sont exportés et audités ;
+- le protocole v4 produit obligatoirement un nouveau `plan_id`, donc il n'utilise ni l'état local
+  v3 ni ses exports distants pollués.
+
 Les Stage 1 et Stage 2 doivent être régénérés : l'archive E028 contient les PNG et les métriques,
 mais aucun latent `.safetensors`. Un SR-MPGD différentiable ne peut pas être repris fidèlement à
 partir du PNG seul.
 
 Le notebook arrête l'analyse si :
 
-1. la réutilisation Stage 1/Stage 2 n'est pas prouvée ;
+1. la réutilisation Stage 1/Stage 2 n'est pas prouvée par ses identifiants et ses hashes ;
 2. un SR-MPGD sélectionne l'itération zéro avec un hash différent de son Stage 2 parent ;
 3. le marqueur backend d'identité exacte manque.
 

@@ -103,6 +103,8 @@ def test_upstream_srmpgd_iteration_zero_receives_and_returns_exact_stage2_raster
     assert backend.diagnostics()["diffqrcoder_srmpgd_iteration_zero_exact"] == 1.0
     assert backend.debug_metadata()["srmpgd_stage2_image_sha256"] == stage2_hash
     assert backend.debug_metadata()["srmpgd_selected_image_sha256"] == stage2_hash
+    assert backend.provenance()["srmpgd_stage2_image_sha256"] == stage2_hash
+    assert backend.provenance()["srmpgd_selected_image_sha256"] == stage2_hash
 
 
 def test_stage2_state_export_and_import_are_hash_verified():

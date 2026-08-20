@@ -27,6 +27,107 @@ def test_lab_rejects_srmpgd_without_stage2_srpg():
         LabToolConfig(srmpgd_enabled=True)
 
 
+def test_lab_exact_stage1_reuse_contract_rejects_invalid_methods():
+    with pytest.raises(ValidationError, match="requires reuse_stage1=true"):
+        LabMethod(
+            id="strict-stage2",
+            name="Strict Stage 2",
+            output_variant="srpg",
+            reuse_stage1=False,
+            require_exact_stage1_reuse=True,
+            tools={"srpg_enabled": True},
+        )
+    with pytest.raises(ValidationError, match="raw Stage 1 method"):
+        LabMethod(
+            id="strict-stage1",
+            name="Strict Stage 1",
+            output_variant="raw",
+            require_exact_stage1_reuse=True,
+        )
+
+
+def test_lab_exact_stage1_reuse_contract_survives_campaign_roundtrip():
+    campaign = LabCampaignCreate.model_validate(
+        {
+            "name": "strict pairing roundtrip",
+            "payload": "https://example.test/t/strict",
+            "prompts": [{"id": "p1", "text": "blue courtyard"}],
+            "seeds": [51001],
+            "methods": [
+                {
+                    "id": "strict_stage2",
+                    "name": "Strict Stage 2",
+                    "output_variant": "srpg",
+                    "reuse_stage1": True,
+                    "require_exact_stage1_reuse": True,
+                    "tools": {"srpg_enabled": True},
+                }
+            ],
+        }
+    )
+
+    serialized = campaign.model_dump(mode="json")
+
+    assert serialized["methods"][0]["require_exact_stage1_reuse"] is True
+    assert LabCampaignCreate.model_validate(serialized).methods[
+        0
+    ].require_exact_stage1_reuse is True
+
+
+def test_lab_strict_stage2_refuses_to_regenerate_a_missing_stage1(tmp_path, monkeypatch):
+    settings = Settings(data_dir=tmp_path, device="cpu")
+    run_repository = RunRepository(tmp_path / "runs.sqlite3")
+    lab_repository = LabRepository(run_repository.engine)
+    service = LabService(
+        base_settings=settings,
+        run_repository=run_repository,
+        lab_repository=lab_repository,
+        artifact_store=LocalArtifactStore(tmp_path / "artifacts"),
+        validator=object(),
+    )
+
+    class GenerationMustNotRun:
+        backends = {}
+
+        def generate(self, *_args, **_kwargs):
+            raise AssertionError("a strict Stage 2 must not regenerate Stage 1")
+
+    monkeypatch.setattr(service, "_generation_service", lambda _method: GenerationMustNotRun())
+    method = LabMethod.model_validate(
+        {
+            **next(
+                profile
+                for profile in laboratory_profiles()
+                if profile["id"] == "diffqrcoder_srpg"
+            ),
+            "id": "strict_stage2",
+            "require_exact_stage1_reuse": True,
+        }
+    )
+    campaign = service.create_campaign(
+        LabCampaignCreate(
+            name="strict missing Stage 1",
+            payload="https://example.test/t/strict",
+            prompts=[{"id": "p1", "text": "blue courtyard"}],
+            seeds=[51001],
+            methods=[method],
+        )
+    )
+    try:
+        for _ in range(100):
+            stored = lab_repository.get_campaign(campaign["id"])
+            if stored["status"] not in {"queued", "running"}:
+                break
+            time.sleep(0.01)
+        trial = lab_repository.list_trials(campaign["id"])[0]
+    finally:
+        service.shutdown()
+
+    assert stored["status"] == "completed_with_errors"
+    assert trial["status"] == "error"
+    assert "requires the exact matching Stage 1 source" in trial["error"]
+
+
 @pytest.mark.parametrize(
     ("method_id", "tools", "expected"),
     [

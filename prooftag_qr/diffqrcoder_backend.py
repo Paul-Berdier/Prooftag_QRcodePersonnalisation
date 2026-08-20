@@ -168,6 +168,8 @@ class UpstreamDiffQRCoderBackend:
         self._stage2_pairing_status: str | None = None
         self._srmpgd_stop_reason: str | None = None
         self._srmpgd_selected_iteration: int | None = None
+        self._srmpgd_stage2_image_sha256: str | None = None
+        self._srmpgd_selected_image_sha256: str | None = None
 
     def import_stage2_state(self, state: dict) -> None:
         actual_sha256 = _tensor_sha256(state["latent"])
@@ -811,6 +813,12 @@ class UpstreamDiffQRCoderBackend:
         self._debug_metadata["srmpgd_selected_image_sha256"] = (
             selected_image_sha256
         )
+        # Debug metadata is not part of the laboratory CSV export.  Keep the
+        # same hashes in backend provenance so an offline audit can prove an
+        # iteration-zero no-op without depending on locating an aliased parent
+        # row in a possibly retried campaign export.
+        self._srmpgd_stage2_image_sha256 = stage2_image_sha256
+        self._srmpgd_selected_image_sha256 = selected_image_sha256
         return image
 
     def _run_stage2(
@@ -832,6 +840,8 @@ class UpstreamDiffQRCoderBackend:
         self._stage2_pairing_status = "generated_source"
         self._srmpgd_stop_reason = None
         self._srmpgd_selected_iteration = None
+        self._srmpgd_stage2_image_sha256 = None
+        self._srmpgd_selected_image_sha256 = None
         if self._stage2_override is not None:
             cached = self._stage2_override
             self._stage2_override = None
@@ -1060,4 +1070,12 @@ class UpstreamDiffQRCoderBackend:
             values["stage2_pairing_status"] = self._stage2_pairing_status
         if self._srmpgd_stop_reason:
             values["srmpgd_stop_reason"] = self._srmpgd_stop_reason
+        if self._srmpgd_stage2_image_sha256:
+            values["srmpgd_stage2_image_sha256"] = (
+                self._srmpgd_stage2_image_sha256
+            )
+        if self._srmpgd_selected_image_sha256:
+            values["srmpgd_selected_image_sha256"] = (
+                self._srmpgd_selected_image_sha256
+            )
         return values

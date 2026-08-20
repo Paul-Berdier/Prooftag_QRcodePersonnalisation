@@ -740,12 +740,14 @@ class AdvisorInferenceRunner:
         output_root: Path,
         poll_seconds: float = 15.0,
         maximum_campaign_attempts: int = 2,
+        reject_campaigns_with_errors: bool = False,
         progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         self.plan = plan
         self.api_url = api_url.rstrip("/")
         self.poll_seconds = poll_seconds
         self.maximum_campaign_attempts = maximum_campaign_attempts
+        self.reject_campaigns_with_errors = reject_campaigns_with_errors
         self.progress_callback = progress_callback
         self.output_dir = Path(output_root) / plan.plan_id
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -789,10 +791,16 @@ class AdvisorInferenceRunner:
             state = json.loads(self.state_path.read_text(encoding="utf-8"))
             if state.get("plan_id") != self.plan.plan_id:
                 raise RuntimeError("stored inference state belongs to another plan")
+            stored_strict = bool(state.get("reject_campaigns_with_errors", False))
+            if stored_strict != self.reject_campaigns_with_errors:
+                raise RuntimeError(
+                    "stored inference state uses a different campaign error policy"
+                )
             return state
         state = {
-            "version": 1,
+            "version": 2,
             "plan_id": self.plan.plan_id,
+            "reject_campaigns_with_errors": self.reject_campaigns_with_errors,
             "status": "running",
             "completed_campaigns": [],
             "failed_campaigns": [],
@@ -878,9 +886,42 @@ class AdvisorInferenceRunner:
             fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
         handle.close()
 
-    def _find_campaign(self, name: str) -> dict[str, Any] | None:
+    def _campaign_name(self, base_name: str, attempt: int) -> str:
+        """Return a remote campaign name that is unique to this immutable plan."""
+
+        suffix = f" [plan-{self.plan.plan_id}] a{attempt:02d}"
+        maximum_base_length = 200 - len(suffix)
+        if maximum_base_length < 1:
+            raise ValueError("plan id is too long for a laboratory campaign name")
+        normalized_base = str(base_name).strip() or "advisor inference"
+        return f"{normalized_base[:maximum_base_length].rstrip()}{suffix}"
+
+    @staticmethod
+    def _campaign_matches_request(
+        campaign: dict[str, Any], request_payload: dict[str, Any]
+    ) -> bool:
+        """Refuse a same-name campaign whose payload or specification differs."""
+
+        payload = str(request_payload.get("payload") or "")
+        expected_specification = deepcopy(request_payload)
+        expected_specification.pop("payload", None)
+        expected_specification["payload_length"] = len(payload)
+        return bool(
+            campaign.get("name") == request_payload.get("name")
+            and campaign.get("payload_hash")
+            == hashlib.sha256(payload.encode("utf-8")).hexdigest()
+            and campaign.get("specification") == expected_specification
+        )
+
+    def _find_campaign(
+        self, request_payload: dict[str, Any]
+    ) -> dict[str, Any] | None:
         campaigns = self._request("GET", "/v1/lab/campaigns?limit=500")
-        matching = [item for item in campaigns if item.get("name") == name]
+        matching = [
+            item
+            for item in campaigns
+            if self._campaign_matches_request(item, request_payload)
+        ]
         return max(matching, key=lambda item: item.get("created_at", "")) if matching else None
 
     def _wait_for_foreign_campaigns(self, own_id: str | None = None) -> None:
@@ -978,8 +1019,10 @@ class AdvisorInferenceRunner:
                     else:
                         attempt = int(self.state["attempts"].get(str(index), 0)) + 1
                         request_payload = deepcopy(base_request)
-                        request_payload["name"] = f"{base_request['name']} a{attempt:02d}"
-                        existing = self._find_campaign(request_payload["name"])
+                        request_payload["name"] = self._campaign_name(
+                            str(base_request["name"]), attempt
+                        )
+                        existing = self._find_campaign(request_payload)
                         if existing is not None:
                             campaign = existing
                         else:
@@ -1008,7 +1051,11 @@ class AdvisorInferenceRunner:
                         }
                     )
                     self.state["active_campaign"] = None
-                    if status in SUCCESSFUL_CAMPAIGN_STATUSES:
+                    campaign_succeeded = status in SUCCESSFUL_CAMPAIGN_STATUSES and not (
+                        self.reject_campaigns_with_errors
+                        and status == "completed_with_errors"
+                    )
+                    if campaign_succeeded:
                         self.state["completed_campaigns"].append(index)
                         succeeded = True
                     self._save_state()
@@ -1020,9 +1067,12 @@ class AdvisorInferenceRunner:
             self.state["status"] = (
                 "completed_with_errors"
                 if self.state["failed_campaigns"]
-                or any(
-                    item.get("status") == "completed_with_errors"
-                    for item in self.state["history"]
+                or (
+                    not self.reject_campaigns_with_errors
+                    and any(
+                        item.get("status") == "completed_with_errors"
+                        for item in self.state["history"]
+                    )
                 )
                 else "completed"
             )
@@ -1052,10 +1102,35 @@ def load_advisor_inference_results(output_dir: Path) -> list[dict[str, Any]]:
             row = json.loads(line)
             predictions[(row["prompt_id"], row["plan_method_id"])] = row
 
+    allowed_campaign_ids: set[str] | None = None
+    state_path = output_dir / "state.json"
+    if state_path.is_file():
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        completed_indexes = {int(value) for value in state.get("completed_campaigns", [])}
+        strict = bool(state.get("reject_campaigns_with_errors", False))
+        successful_statuses = {"completed"} if strict else SUCCESSFUL_CAMPAIGN_STATUSES
+        final_campaign_by_index: dict[int, str] = {}
+        for item in state.get("history", []):
+            index = int(item.get("index", -1))
+            campaign_id = str(item.get("campaign_id") or "")
+            if (
+                index in completed_indexes
+                and campaign_id
+                and item.get("status") in successful_statuses
+            ):
+                final_campaign_by_index[index] = campaign_id
+        if final_campaign_by_index:
+            allowed_campaign_ids = set(final_campaign_by_index.values())
+
     trials: dict[str, dict[str, Any]] = {}
     for path in sorted((output_dir / "exports").glob("*.csv")):
         with path.open("r", encoding="utf-8", newline="") as stream:
             for row in csv.DictReader(stream):
+                if (
+                    allowed_campaign_ids is not None
+                    and str(row.get("campaign_id")) not in allowed_campaign_ids
+                ):
+                    continue
                 row["_source_file"] = str(path)
                 trials[str(row.get("trial_id"))] = row
 
@@ -1098,6 +1173,9 @@ def load_advisor_inference_results(output_dir: Path) -> list[dict[str, Any]]:
                 "generation_run_id": row.get("generation_run_id"),
                 "stage1_reused": _finite(row.get("stage1_reused")),
                 "stage1_source_run_id": row.get("stage1_source_run_id") or None,
+                "stage1_image_sha256": row.get("provenance_stage1_image_sha256")
+                or row.get("stage1_image_sha256")
+                or None,
                 "stage2_source_run_id": row.get("provenance_stage2_source_run_id")
                 or row.get("stage2_source_run_id")
                 or None,
@@ -1125,6 +1203,16 @@ def load_advisor_inference_results(output_dir: Path) -> list[dict[str, Any]]:
                         "provenance_stage2_pairing_exact",
                     ),
                 ),
+                "srmpgd_stage2_image_sha256": row.get(
+                    "provenance_srmpgd_stage2_image_sha256"
+                )
+                or row.get("srmpgd_stage2_image_sha256")
+                or None,
+                "srmpgd_selected_image_sha256": row.get(
+                    "provenance_srmpgd_selected_image_sha256"
+                )
+                or row.get("srmpgd_selected_image_sha256")
+                or None,
                 "payload_length": _finite(row.get("payload_length")),
                 "error_correction": row.get("error_correction") or None,
                 "qr_success": _first_finite(

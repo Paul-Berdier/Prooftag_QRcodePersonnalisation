@@ -111,11 +111,16 @@ def test_e028_plan_uses_prompt_advisor_at_every_stage_and_orders_exact_reuse():
         for method in campaign["methods"]
         if method["id"].endswith("mpgd")
     )
+    assert all(
+        method["require_exact_stage1_reuse"] == (method["output_variant"] != "raw")
+        for campaign in plan.campaigns
+        for method in campaign["methods"]
+    )
     assert "payload" not in plan.public
     assert plan.public["payload_sha256"]
     assert len(plan.public["prediction_sha256"]) == 64
     assert plan.public["protocol"] == (
-        "e028-v3-prediction-bound-forced-srmpgd-chain"
+        "e028-v4-plan-bound-strict-pairing-chain"
     )
 
     changed_predictions = build_e028_hierarchical_plan(
@@ -226,6 +231,7 @@ def test_e028_pairing_audit_proves_stage1_image_and_stage2_latent_reuse():
             "parent_stage1_method_id": "advisor-s1",
             "stage1_reused": 1.0,
             "stage1_source_run_id": "run-stage1",
+            "stage1_image_sha256": "image-hash",
             "stage2_latent_sha256": "latent-hash",
         }
     )
@@ -237,8 +243,10 @@ def test_e028_pairing_audit_proves_stage1_image_and_stage2_latent_reuse():
             "parent_stage2_method_id": "advisor-s2",
             "stage1_reused": 1.0,
             "stage1_source_run_id": "run-stage1",
+            "stage1_image_sha256": "image-hash",
             "stage2_source_run_id": "run-stage2",
             "stage2_source_latent_sha256": "latent-hash",
+            "stage2_latent_sha256": "latent-hash",
             "stage2_pairing_status": "exact_reuse",
             "stage2_pairing_exact": 1.0,
         }
@@ -250,6 +258,28 @@ def test_e028_pairing_audit_proves_stage1_image_and_stage2_latent_reuse():
     assert next(item for item in audit if item["pipeline_state"] == "srmpgd")[
         "stage2_exact_reuse"
     ]
+
+
+def test_e028_pairing_audit_explains_hash_mismatches():
+    stage1 = _row("advisor-s1", "stage1")
+    stage1.update(
+        {"generation_run_id": "run-stage1", "final_image_sha256": "source-image"}
+    )
+    stage2 = _row("advisor-s2", "stage2")
+    stage2.update(
+        {
+            "generation_run_id": "run-stage2",
+            "parent_stage1_method_id": "advisor-s1",
+            "stage1_reused": 1.0,
+            "stage1_source_run_id": "run-stage1",
+            "stage1_image_sha256": "different-image",
+        }
+    )
+
+    audit = audit_e028_pairing([stage1, stage2])
+
+    assert audit[0]["complete"] is False
+    assert audit[0]["failure_reasons"] == "stage1_hash_mismatch"
 
 
 def test_srmpgd_iteration_zero_audit_requires_the_exact_stage2_raster():
@@ -267,6 +297,8 @@ def test_srmpgd_iteration_zero_audit_requires_the_exact_stage2_raster():
             "stage2_source_run_id": "run-stage2",
             "srmpgd_selected_iteration": 0.0,
             "srmpgd_iteration_zero_exact": 1.0,
+            "srmpgd_stage2_image_sha256": "stage2-pixels",
+            "srmpgd_selected_image_sha256": "stage2-pixels",
             "final_image_sha256": "stage2-pixels",
         }
     )
@@ -277,6 +309,8 @@ def test_srmpgd_iteration_zero_audit_requires_the_exact_stage2_raster():
             "stage2_source_run_id": "run-stage2",
             "srmpgd_selected_iteration": 0.0,
             "srmpgd_iteration_zero_exact": 0.0,
+            "srmpgd_stage2_image_sha256": "stage2-pixels",
+            "srmpgd_selected_image_sha256": "vae-reconstruction",
             "final_image_sha256": "vae-reconstruction",
         }
     )

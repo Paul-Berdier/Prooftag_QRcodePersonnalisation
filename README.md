@@ -151,8 +151,8 @@ compare une chaîne fixe, une chaîne top-1 et plusieurs chaînes conseillées. 
 
 L'audit E028 a ensuite montré qu'un SR-MPGD ayant sélectionné l'itération zéro redécodait malgré
 tout le latent Stage 2 et pouvait changer le raster. E029 impose une identité pixel pour pixel du
-no-op, publie son diagnostic dans les exports et le vérifie sur 180 états appariés avant tout
-réentraînement SR-MPGD. Protocole :
+no-op, lie chaque campagne distante à son `plan_id`, refuse toute régénération silencieuse d'un
+Stage 1 manquant et le vérifie sur 180 états appariés avant tout réentraînement SR-MPGD. Protocole :
 [`docs/e029-srmpgd-exact-raster-recovery.md`](docs/e029-srmpgd-exact-raster-recovery.md).
 
 ## Déploiement

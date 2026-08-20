@@ -873,8 +873,13 @@ def test_e029_notebook_proves_srmpgd_iteration_zero_keeps_exact_stage2_raster():
     assert "STAGE1_TOP_K = 1" in source
     assert "STAGE2_TOP_K = 1" in source
     assert "expected_trials == 180" in source
+    assert "e029-srmpgd-exact-raster-recovery-v4" in source
+    assert "e028-v4-plan-bound-strict-pairing-chain" in source
+    assert "reject_campaigns_with_errors=True" in source
+    assert "require_exact_stage1_reuse" in source
     assert "audit_srmpgd_iteration_zero_raster" in source
     assert "e029-srmpgd-iteration-zero-raster-audit.csv" in source
+    assert "e029-pairing-failure-summary.csv" in source
     assert "No-op SR-MPGD identiques pixel pour pixel" in source
     assert "24_e029_srmpgd_exact_raster_recovery.ipynb" in builder
     assert "24_e029_srmpgd_exact_raster_recovery.ipynb" in launcher

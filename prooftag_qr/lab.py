@@ -915,6 +915,11 @@ class LabService:
                         cached = shared_stage1.get(stage1_key)
                         if cached is not None:
                             stage1_override, stage1_source_run_id = cached
+                        elif method.require_exact_stage1_reuse:
+                            raise RuntimeError(
+                                f"method '{method.id}' requires the exact matching Stage 1 "
+                                "source to run earlier in the same campaign"
+                            )
                     stage2_key = None
                     if method.backend == "controlnet" and method.tools.srpg_enabled:
                         stage2_key = self._stage2_cache_key(

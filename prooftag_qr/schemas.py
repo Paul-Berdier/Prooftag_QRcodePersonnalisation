@@ -142,6 +142,7 @@ class LabMethod(BaseModel):
     enabled: bool = True
     output_variant: Literal["raw", "srpg", "srmpgd", "auto"] = "raw"
     reuse_stage1: bool = True
+    require_exact_stage1_reuse: bool = False
     generation: dict[str, Any] = Field(default_factory=dict)
     model: dict[str, Any] = Field(default_factory=dict)
     tools: LabToolConfig = Field(default_factory=LabToolConfig)
@@ -163,6 +164,18 @@ class LabMethod(BaseModel):
         else:
             output_variant = "raw"
         return {**value, "output_variant": output_variant}
+
+    @model_validator(mode="after")
+    def validate_exact_stage1_reuse_contract(self) -> "LabMethod":
+        if not self.require_exact_stage1_reuse:
+            return self
+        if self.backend != "controlnet":
+            raise ValueError("exact Stage 1 reuse requires the controlnet backend")
+        if not self.reuse_stage1:
+            raise ValueError("exact Stage 1 reuse requires reuse_stage1=true")
+        if self.output_variant == "raw":
+            raise ValueError("a raw Stage 1 method cannot require exact Stage 1 reuse")
+        return self
 
 
 class LabCampaignCreate(BaseModel):

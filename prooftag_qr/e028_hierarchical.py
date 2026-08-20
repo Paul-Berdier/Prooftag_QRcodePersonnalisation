@@ -226,6 +226,10 @@ def _runtime_method(
             "enabled": True,
             "output_variant": output_variant,
             "reuse_stage1": True,
+            # E028/E029 are paired scientific campaigns.  A later stage may
+            # never silently regenerate its own Stage 1 when the intended
+            # source is missing from the in-memory campaign cache.
+            "require_exact_stage1_reuse": output_variant != "raw",
         }
     )
     return LabMethod.model_validate(method).model_dump(mode="json")
@@ -743,7 +747,7 @@ def build_e028_hierarchical_plan(
         _canonical_json(predictions).encode("utf-8")
     ).hexdigest()
     plan_material = {
-        "protocol": "e028-v3-prediction-bound-forced-srmpgd-chain",
+        "protocol": "e028-v4-plan-bound-strict-pairing-chain",
         "advisor_sha256": advisor_sha256,
         "prediction_sha256": prediction_sha256,
         "payload_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
@@ -883,51 +887,100 @@ def audit_e028_pairing(entries: Sequence[Mapping[str, Any]]) -> list[dict[str, A
                 continue
             technically_generated = _generated(row)
             output_contract_valid = _output_contract_valid(row)
-            expected_stage1 = str(row.get("parent_stage1_method_id") or "")
-            expected_stage1_row = by_method.get(expected_stage1)
             source_stage1 = by_run.get(str(row.get("stage1_source_run_id") or ""))
-            expected_stage1_hash = str(
-                (expected_stage1_row or {}).get("final_image_sha256") or ""
-            )
             source_stage1_hash = str(
                 (source_stage1 or {}).get("final_image_sha256") or ""
+            )
+            current_stage1_hash = str(row.get("stage1_image_sha256") or "")
+            expected_stage1 = str(row.get("parent_stage1_method_id") or "")
+            stage1_source_found = source_stage1 is not None
+            stage1_reused_marker = _finite(row.get("stage1_reused")) == 1.0
+            stage1_method_match = bool(
+                source_stage1
+                and source_stage1.get("method_id") == expected_stage1
+            )
+            stage1_hash_match = bool(
+                current_stage1_hash
+                and source_stage1_hash
+                and current_stage1_hash == source_stage1_hash
             )
             stage1_exact = bool(
                 technically_generated
                 and output_contract_valid
-                and source_stage1
-                and _finite(row.get("stage1_reused")) == 1.0
-                and (
-                    source_stage1.get("method_id") == expected_stage1
-                    or (
-                        expected_stage1_hash
-                        and source_stage1_hash == expected_stage1_hash
-                    )
-                )
+                and stage1_source_found
+                and stage1_reused_marker
+                and stage1_hash_match
             )
             stage2_exact = None
+            stage2_source_found = None
+            stage2_status_exact = None
+            stage2_marker_exact = None
+            stage2_latent_present = None
+            stage2_method_match = None
+            stage2_latent_match = None
             if state == "srmpgd":
                 expected_stage2 = str(row.get("parent_stage2_method_id") or "")
-                expected_stage2_row = by_method.get(expected_stage2)
                 source_stage2 = by_run.get(str(row.get("stage2_source_run_id") or ""))
-                expected_latent = str(
-                    (expected_stage2_row or {}).get("stage2_latent_sha256")
-                    or (expected_stage2_row or {}).get("stage2_source_latent_sha256")
+                source_latent = str(
+                    (source_stage2 or {}).get("stage2_latent_sha256")
+                    or (source_stage2 or {}).get("stage2_source_latent_sha256")
                     or ""
                 )
                 reused_latent = str(row.get("stage2_source_latent_sha256") or "")
+                current_latent = str(row.get("stage2_latent_sha256") or "")
+                stage2_source_found = source_stage2 is not None
+                stage2_status_exact = (
+                    str(row.get("stage2_pairing_status")) == "exact_reuse"
+                )
+                stage2_marker_exact = (
+                    _finite(row.get("stage2_pairing_exact")) == 1.0
+                )
+                stage2_latent_present = bool(reused_latent)
+                stage2_method_match = bool(
+                    source_stage2
+                    and source_stage2.get("method_id") == expected_stage2
+                )
+                stage2_latent_match = bool(
+                    source_latent
+                    and reused_latent
+                    and current_latent
+                    and source_latent == reused_latent == current_latent
+                )
                 stage2_exact = bool(
                     technically_generated
                     and output_contract_valid
-                    and source_stage2
-                    and str(row.get("stage2_pairing_status")) == "exact_reuse"
-                    and _finite(row.get("stage2_pairing_exact")) == 1.0
-                    and reused_latent
-                    and (
-                        source_stage2.get("method_id") == expected_stage2
-                        or (expected_latent and reused_latent == expected_latent)
-                    )
+                    and stage2_source_found
+                    and stage2_status_exact
+                    and stage2_marker_exact
+                    and stage2_latent_present
+                    and stage2_latent_match
                 )
+            failures = []
+            for failed, name in [
+                (not output_contract_valid, "output_contract"),
+                (not stage1_source_found, "stage1_source_missing"),
+                (not stage1_reused_marker, "stage1_reused_marker"),
+                (
+                    not current_stage1_hash or not source_stage1_hash,
+                    "stage1_hash_missing",
+                ),
+                (
+                    bool(current_stage1_hash and source_stage1_hash)
+                    and not stage1_hash_match,
+                    "stage1_hash_mismatch",
+                ),
+                (state == "srmpgd" and not stage2_source_found, "stage2_source_missing"),
+                (state == "srmpgd" and not stage2_status_exact, "stage2_status"),
+                (state == "srmpgd" and not stage2_marker_exact, "stage2_marker"),
+                (state == "srmpgd" and not stage2_latent_present, "stage2_latent_missing"),
+                (
+                    state == "srmpgd"
+                    and not stage2_latent_match,
+                    "stage2_latent_mismatch",
+                ),
+            ]:
+                if failed:
+                    failures.append(name)
             audits.append(
                 {
                     "prompt_id": prompt_id,
@@ -938,7 +991,20 @@ def audit_e028_pairing(entries: Sequence[Mapping[str, Any]]) -> list[dict[str, A
                     "output_variant": row.get("output_variant"),
                     "output_contract_valid": output_contract_valid,
                     "stage1_exact_reuse": stage1_exact,
+                    "stage1_source_found": stage1_source_found,
+                    "stage1_reused_marker": stage1_reused_marker,
+                    "stage1_method_match": stage1_method_match,
+                    "stage1_hash_match": stage1_hash_match,
+                    "stage1_image_sha256": current_stage1_hash or None,
+                    "stage1_source_image_sha256": source_stage1_hash or None,
                     "stage2_exact_reuse": stage2_exact,
+                    "stage2_source_found": stage2_source_found,
+                    "stage2_status_exact": stage2_status_exact,
+                    "stage2_marker_exact": stage2_marker_exact,
+                    "stage2_latent_present": stage2_latent_present,
+                    "stage2_method_match": stage2_method_match,
+                    "stage2_latent_match": stage2_latent_match,
+                    "failure_reasons": "|".join(failures),
                     "complete": (
                         stage1_exact and (stage2_exact is not False)
                         if technically_generated
@@ -975,15 +1041,26 @@ def audit_srmpgd_iteration_zero_raster(
             continue
         parent = by_run.get(str(row.get("stage2_source_run_id") or ""))
         parent_hash = str((parent or {}).get("final_image_sha256") or "")
-        selected_hash = str(row.get("final_image_sha256") or "")
+        final_hash = str(row.get("final_image_sha256") or "")
+        backend_stage2_hash = str(
+            row.get("srmpgd_stage2_image_sha256") or ""
+        )
+        backend_selected_hash = str(
+            row.get("srmpgd_selected_image_sha256") or ""
+        )
         backend_marker = _finite(row.get("srmpgd_iteration_zero_exact"))
+        backend_hashes_exact = bool(
+            backend_stage2_hash
+            and backend_selected_hash
+            and final_hash
+            and backend_stage2_hash == backend_selected_hash == final_hash
+        )
+        parent_crosscheck = bool(parent_hash and parent_hash == final_hash)
         exact = bool(
             _generated(row)
             and _output_contract_valid(row)
-            and parent is not None
-            and parent_hash
-            and selected_hash == parent_hash
             and backend_marker == 1.0
+            and backend_hashes_exact
         )
         audits.append(
             {
@@ -993,8 +1070,12 @@ def audit_srmpgd_iteration_zero_raster(
                 "stage2_source_run_id": row.get("stage2_source_run_id"),
                 "parent_stage2_method_id": (parent or {}).get("method_id"),
                 "output_variant": row.get("output_variant"),
-                "stage2_image_sha256": parent_hash or None,
-                "srmpgd_image_sha256": selected_hash or None,
+                "stage2_image_sha256": backend_stage2_hash or None,
+                "srmpgd_image_sha256": backend_selected_hash or None,
+                "final_image_sha256": final_hash or None,
+                "parent_stage2_image_sha256": parent_hash or None,
+                "backend_hashes_exact": backend_hashes_exact,
+                "parent_crosscheck": parent_crosscheck,
                 "backend_iteration_zero_exact": backend_marker,
                 "exact": exact,
             }
@@ -1162,7 +1243,7 @@ def evaluate_e028_policies(
             "stage1_deliveries": sum(bool(row["stage1_was_delivered"]) for row in rows),
         }
     return {
-        "protocol": "e028-v3-prediction-bound-forced-srmpgd-chain",
+        "protocol": "e028-v4-plan-bound-strict-pairing-chain",
         "qr_tolerance_threshold": qr_tolerance_threshold,
         "saturation_threshold": saturation_threshold,
         "contexts": len(groups),

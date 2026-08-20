@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import json
+from copy import deepcopy
 from urllib.error import HTTPError
 
 import pytest
@@ -345,6 +347,116 @@ def test_inference_runner_resumes_without_resubmitting_completed_campaign(tmp_pa
     assert len([item for item in calls if item[0] == "POST"]) == 2
 
 
+def test_strict_inference_runner_retries_campaigns_completed_with_errors(tmp_path):
+    plan = _plan()
+    runner = AdvisorInferenceRunner(
+        plan=plan,
+        api_url="http://example.invalid",
+        output_root=tmp_path,
+        poll_seconds=0,
+        maximum_campaign_attempts=2,
+        reject_campaigns_with_errors=True,
+    )
+    calls = []
+
+    def request(method, path, payload=None, *, raw=False):
+        calls.append((method, path, payload, raw))
+        if path.endswith("?limit=100") or path.endswith("?limit=500"):
+            return []
+        if method == "POST":
+            count = len([item for item in calls if item[0] == "POST"])
+            return {"id": f"campaign-{count}"}
+        if path.endswith("/results.csv"):
+            return b"trial_id,prompt_id,method_id,status\n1,p,m,accepted\n"
+        campaign_number = int(path.rsplit("-", 1)[-1])
+        return {
+            "id": path.rsplit("/", 1)[-1],
+            "status": "completed_with_errors" if campaign_number % 2 else "completed",
+            "completed_trials": 6,
+            "total_trials": 6,
+            "accepted_trials": 5,
+            "trials": [],
+        }
+
+    runner._request = request
+    summary = runner.run()
+
+    assert summary["status"] == "completed"
+    assert summary["completed_campaigns"] == 2
+    assert summary["failed_campaigns"] == []
+    assert len([item for item in calls if item[0] == "POST"]) == 4
+    assert [item["status"] for item in runner.state["history"]] == [
+        "completed_with_errors",
+        "completed",
+        "completed_with_errors",
+        "completed",
+    ]
+    posted_names = [item[2]["name"] for item in calls if item[0] == "POST"]
+    assert all(f"[plan-{plan.plan_id}]" in name for name in posted_names)
+
+
+def test_inference_runner_reuses_only_a_plan_bound_compatible_campaign(tmp_path):
+    plan = _plan()
+    runner = AdvisorInferenceRunner(
+        plan=plan,
+        api_url="http://example.invalid",
+        output_root=tmp_path,
+        poll_seconds=0,
+    )
+    request_payload = deepcopy(plan.campaigns[0])
+    request_payload["name"] = runner._campaign_name(str(request_payload["name"]), 1)
+    payload = str(request_payload["payload"])
+    specification = deepcopy(request_payload)
+    specification.pop("payload")
+    specification["payload_length"] = len(payload)
+    compatible = {
+        "id": "compatible",
+        "name": request_payload["name"],
+        "payload_hash": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
+        "specification": specification,
+        "created_at": "2026-08-20T12:00:00+00:00",
+    }
+    stale_same_name = {
+        **compatible,
+        "id": "stale",
+        "payload_hash": "0" * 64,
+        "created_at": "2026-08-20T13:00:00+00:00",
+    }
+    legacy_other_plan = {
+        **compatible,
+        "id": "legacy",
+        "name": f"{plan.campaigns[0]['name']} a01",
+        "created_at": "2026-08-20T14:00:00+00:00",
+    }
+    runner._request = lambda *_args, **_kwargs: [
+        stale_same_name,
+        legacy_other_plan,
+        compatible,
+    ]
+
+    assert runner._find_campaign(request_payload) == compatible
+
+    runner._request = lambda *_args, **_kwargs: [
+        stale_same_name,
+        legacy_other_plan,
+    ]
+    assert runner._find_campaign(request_payload) is None
+
+
+def test_inference_runner_plan_bound_campaign_name_respects_api_limit(tmp_path):
+    runner = AdvisorInferenceRunner(
+        plan=_plan(),
+        api_url="http://example.invalid",
+        output_root=tmp_path,
+        poll_seconds=0,
+    )
+
+    name = runner._campaign_name("x" * 400, 12)
+
+    assert len(name) == 200
+    assert name.endswith(f"[plan-{runner.plan.plan_id}] a12")
+
+
 def test_inference_runner_surfaces_non_retryable_api_validation_detail(
     tmp_path,
     monkeypatch,
@@ -427,12 +539,15 @@ def test_inference_results_join_predictions_and_select_scannable_winner(tmp_path
         "generation_run_id",
         "stage1_reused",
         "stage1_source_run_id",
+        "provenance_stage1_image_sha256",
         "provenance_stage2_source_run_id",
         "provenance_stage2_source_method_id",
         "provenance_stage2_source_latent_sha256",
         "provenance_stage2_latent_sha256",
         "provenance_stage2_pairing_status",
         "quality_diffqrcoder_stage2_pairing_exact",
+        "provenance_srmpgd_stage2_image_sha256",
+        "provenance_srmpgd_selected_image_sha256",
         "payload_length",
         "error_correction",
         "selected_variant",
@@ -484,12 +599,15 @@ def test_inference_results_join_predictions_and_select_scannable_winner(tmp_path
                 "generation_run_id": "run-2",
                 "stage1_reused": True,
                 "stage1_source_run_id": "run-1",
+                "provenance_stage1_image_sha256": "stage1-hash",
                 "provenance_stage2_source_run_id": "run-stage2",
                 "provenance_stage2_source_method_id": "stage2",
                 "provenance_stage2_source_latent_sha256": "latent-source",
                 "provenance_stage2_latent_sha256": "latent-current",
                 "provenance_stage2_pairing_status": "exact_reuse",
                 "quality_diffqrcoder_stage2_pairing_exact": 1,
+                "provenance_srmpgd_stage2_image_sha256": "stage2-hash",
+                "provenance_srmpgd_selected_image_sha256": "stage2-hash",
                 "payload_length": 28,
                 "error_correction": "M",
                 "selected_variant": "srmpgd",
@@ -536,15 +654,88 @@ def test_inference_results_join_predictions_and_select_scannable_winner(tmp_path
     assert rows[1]["srmpgd_iteration_zero_exact"] == pytest.approx(1.0)
     assert rows[1]["stage1_reused"] == pytest.approx(1.0)
     assert rows[1]["stage1_source_run_id"] == "run-1"
+    assert rows[1]["stage1_image_sha256"] == "stage1-hash"
     assert rows[1]["stage2_source_run_id"] == "run-stage2"
     assert rows[1]["stage2_source_latent_sha256"] == "latent-source"
     assert rows[1]["stage2_latent_sha256"] == "latent-current"
     assert rows[1]["stage2_pairing_status"] == "exact_reuse"
     assert rows[1]["stage2_pairing_exact"] == pytest.approx(1.0)
+    assert rows[1]["srmpgd_stage2_image_sha256"] == "stage2-hash"
+    assert rows[1]["srmpgd_selected_image_sha256"] == "stage2-hash"
     assert rows[2]["output_variant"] == "raw"
     assert rows[2]["service_selected_variant"] == "raw"
     assert rows[2]["srmpgd_noop"] is True
     assert winners[0]["trial_id"] == "t2"
+
+
+def test_inference_results_ignore_failed_attempt_exports_after_strict_retry(tmp_path):
+    output_dir = tmp_path / "strict-plan"
+    exports_dir = output_dir / "exports"
+    exports_dir.mkdir(parents=True)
+    prediction = {
+        "prompt_id": "p1",
+        "prompt_text": "Prompt one",
+        "plan_method_id": "paired-method",
+        "source_method_id": "source",
+        "role": "e028_advisor_stage2",
+        "pipeline_state": "stage2",
+    }
+    (output_dir / "advisor-predictions.jsonl").write_text(
+        json.dumps(prediction) + "\n", encoding="utf-8"
+    )
+    (output_dir / "state.json").write_text(
+        json.dumps(
+            {
+                "completed_campaigns": [0],
+                "reject_campaigns_with_errors": True,
+                "history": [
+                    {
+                        "index": 0,
+                        "campaign_id": "failed-campaign",
+                        "status": "completed_with_errors",
+                    },
+                    {
+                        "index": 0,
+                        "campaign_id": "successful-campaign",
+                        "status": "completed",
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    fields = [
+        "trial_id",
+        "campaign_id",
+        "prompt_id",
+        "method_id",
+        "status",
+        "seed",
+        "selected_variant",
+    ]
+    for filename, campaign_id, trial_id in (
+        ("attempt-01.csv", "failed-campaign", "failed-trial"),
+        ("attempt-02.csv", "successful-campaign", "successful-trial"),
+    ):
+        with (exports_dir / filename).open("w", encoding="utf-8", newline="") as stream:
+            writer = csv.DictWriter(stream, fieldnames=fields)
+            writer.writeheader()
+            writer.writerow(
+                {
+                    "trial_id": trial_id,
+                    "campaign_id": campaign_id,
+                    "prompt_id": "p1",
+                    "method_id": "paired-method",
+                    "status": "accepted",
+                    "seed": 1,
+                    "selected_variant": "srpg",
+                }
+            )
+
+    rows = load_advisor_inference_results(output_dir)
+
+    assert [row["trial_id"] for row in rows] == ["successful-trial"]
+    assert rows[0]["campaign_id"] == "successful-campaign"
 
 
 def test_inference_summary_counts_missing_measurements_as_technical_failures():
