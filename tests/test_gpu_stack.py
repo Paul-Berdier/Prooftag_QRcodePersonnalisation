@@ -414,6 +414,7 @@ def test_paper_srmpgd_receives_the_exact_stage2_latent_even_when_srpg_is_rejecte
 
     def fake_srmpgd(pipeline, initial_latent, target, config, **kwargs):
         observed["latent"] = initial_latent
+        observed["initial_image"] = kwargs["initial_image"]
         observed["callback"] = kwargs["validation_callback"]
         kwargs["preview_callback"](srmpgd_result.image, selected_step)
         return srmpgd_result
@@ -447,6 +448,7 @@ def test_paper_srmpgd_receives_the_exact_stage2_latent_even_when_srpg_is_rejecte
 
     assert names.index("srpg") < names.index("srmpgd")
     assert observed["latent"] is exact_stage2_latent
+    assert observed["initial_image"] is stage2_image
     assert observed["callback"] is validation_callback
     assert "srmpgd_iteration_01" in backend.debug_artifacts()
     assert backend.diagnostics()["srmpgd_selected_iteration"] == 1.0

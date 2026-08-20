@@ -149,6 +149,12 @@ conseiller choisit les paramètres de Stage 1, de Stage 2 et de SR-MPGD pour cha
 compare une chaîne fixe, une chaîne top-1 et plusieurs chaînes conseillées. Protocole :
 [`docs/e028-hierarchical-prompt-advisor.md`](docs/e028-hierarchical-prompt-advisor.md).
 
+L'audit E028 a ensuite montré qu'un SR-MPGD ayant sélectionné l'itération zéro redécodait malgré
+tout le latent Stage 2 et pouvait changer le raster. E029 impose une identité pixel pour pixel du
+no-op, publie son diagnostic dans les exports et le vérifie sur 180 états appariés avant tout
+réentraînement SR-MPGD. Protocole :
+[`docs/e029-srmpgd-exact-raster-recovery.md`](docs/e029-srmpgd-exact-raster-recovery.md).
+
 ## Déploiement
 
 Le projet ne déploie pas de second Prometheus, Grafana, Loki ou MinIO. Voir

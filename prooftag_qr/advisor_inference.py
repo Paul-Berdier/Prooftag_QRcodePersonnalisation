@@ -1083,6 +1083,15 @@ def load_advisor_inference_results(output_dir: Path) -> list[dict[str, Any]]:
                         "diffqrcoder_srmpgd_selected_iteration",
                     ),
                 ),
+                "srmpgd_iteration_zero_exact": _first_finite(
+                    row,
+                    (
+                        "quality_diffqrcoder_srmpgd_iteration_zero_exact",
+                        "diffqrcoder_srmpgd_iteration_zero_exact",
+                        "quality_srmpgd_iteration_zero_exact",
+                        "srmpgd_iteration_zero_exact",
+                    ),
+                ),
                 "seed": _finite(row.get("seed")),
                 "status": row.get("status"),
                 "generation_run_id": row.get("generation_run_id"),

@@ -1,3 +1,4 @@
+import sys
 from types import SimpleNamespace
 
 import numpy as np
@@ -12,6 +13,8 @@ from prooftag_qr.diffqrcoder_backend import (
     _install_partial_schedule,
 )
 from prooftag_qr.qr import generate_diffqrcoder_qr
+from prooftag_qr.quality import image_sha256
+from prooftag_qr.srmpgd import SRMPGDStep
 
 
 def _reference_artwork(size: int = 736) -> Image.Image:
@@ -21,6 +24,85 @@ def _reference_artwork(size: int = 736) -> Image.Image:
     green = np.broadcast_to(y[:, None], (size, size))
     blue = np.full((size, size), 127, dtype=np.uint8)
     return Image.fromarray(np.stack((red, green, blue), axis=2), mode="RGB")
+
+
+def _srmpgd_step_zero() -> SRMPGDStep:
+    return SRMPGDStep(
+        iteration=0,
+        elapsed_s=0.1,
+        scanning_robust_loss=0.2,
+        lpips_loss=0.0,
+        objective=0.2,
+        surrogate_module_error_rate=0.1,
+        actual_module_error_rate=0.1,
+        passed=1,
+        total=2,
+        pass_rate=0.5,
+        strict_all=False,
+        worst_decoder_pass_rate=0.5,
+        worst_scenario_pass_rate=0.5,
+        gradient_rms=None,
+        next_step_rms=None,
+        applied_step_rms=None,
+        step_scale=None,
+        latent_delta_rms=0.0,
+        relative_module_improvement=0.0,
+        mean_absolute_change=0.0,
+        saturation_mean_increase=0.0,
+        high_saturation_ratio_increase=0.0,
+        rgb_clipped_channel_ratio_increase=0.0,
+        aesthetic_guard_passed=True,
+        qr_gain_sufficient=True,
+        eligible_for_selection=True,
+        base_scanning_loss=0.2,
+        blur_scanning_loss=None,
+        downscale_scanning_loss=None,
+        brightness_scanning_loss=None,
+        contrast_scanning_loss=None,
+    )
+
+
+def test_upstream_srmpgd_iteration_zero_receives_and_returns_exact_stage2_raster(
+    monkeypatch,
+):
+    backend = UpstreamDiffQRCoderBackend(
+        Settings(srpg_enabled=True, srmpgd_enabled=True, device="cpu")
+    )
+    stage2_image = _reference_artwork(64)
+    stage2_hash = image_sha256(stage2_image)
+    step = _srmpgd_step_zero()
+    observed = {}
+
+    def fake_run_srmpgd(_pipe, _latent, _blueprint, _config, **kwargs):
+        observed["initial_image"] = kwargs["initial_image"]
+        return SimpleNamespace(
+            image=kwargs["initial_image"].copy(),
+            latent=_latent,
+            steps=(step,),
+            selected_iteration=0,
+            stop_reason="initial_module_error_rate_above_limit",
+            duration_s=0.1,
+            initial_module_error_rate=0.1,
+            final_module_error_rate=0.1,
+        )
+
+    monkeypatch.setattr(backend_module, "run_srmpgd", fake_run_srmpgd)
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace())
+    result = backend._apply_srmpgd(
+        SimpleNamespace(
+            srpg=object(),
+            unet=SimpleNamespace(dtype="float16"),
+        ),
+        object(),
+        stage2_image,
+        SimpleNamespace(),
+    )
+
+    assert observed["initial_image"] is stage2_image
+    assert image_sha256(result) == stage2_hash
+    assert backend.diagnostics()["diffqrcoder_srmpgd_iteration_zero_exact"] == 1.0
+    assert backend.debug_metadata()["srmpgd_stage2_image_sha256"] == stage2_hash
+    assert backend.debug_metadata()["srmpgd_selected_image_sha256"] == stage2_hash
 
 
 def test_stage2_state_export_and_import_are_hash_verified():

@@ -21,7 +21,7 @@ from .qr import (
     module_error_rate,
     repair_qr_modules,
 )
-from .quality import composite_guided_regions, image_change_metrics
+from .quality import composite_guided_regions, image_change_metrics, image_sha256
 from .schemas import GenerationRequest
 from .srmpgd import SRMPGDConfig, SRMPGDStep, run_srmpgd
 from .srpg import SRPGConfig, run_srpg_controlnet_img2img
@@ -595,10 +595,21 @@ class ControlNetBackend(GenerationBackend):
                             self.settings.srpg_functional_pattern_tone_factor
                         ),
                     ),
+                    initial_image=srpg.image,
                     validation_callback=validation_callback,
                     preview_callback=save_srmpgd_preview,
                 )
                 duration = time.perf_counter() - started
+                stage2_image_sha256 = image_sha256(srpg.image)
+                selected_image_sha256 = image_sha256(srmpgd.image)
+                iteration_zero_exact = (
+                    srmpgd.selected_iteration != 0
+                    or selected_image_sha256 == stage2_image_sha256
+                )
+                if not iteration_zero_exact:
+                    raise RuntimeError(
+                        "SR-MPGD iteration zero changed the Stage-2 raster"
+                    )
                 selected_step = next(
                     item
                     for item in srmpgd.steps
@@ -634,6 +645,9 @@ class ControlNetBackend(GenerationBackend):
                         ),
                         "srmpgd_states_evaluated": float(len(srmpgd.steps)),
                         "srmpgd_selected_iteration": float(srmpgd.selected_iteration),
+                        "srmpgd_iteration_zero_exact": float(
+                            iteration_zero_exact
+                        ),
                         "srmpgd_step_size": float(self.settings.srmpgd_step_size),
                         "srmpgd_lpips_weight": float(
                             self.settings.srmpgd_lpips_weight

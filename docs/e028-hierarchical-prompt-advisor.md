@@ -83,6 +83,20 @@ L'ordre final est : payload exact, tolérance QR-Verify, absence de saturation, 
 CLIP-Aesthetic, CLIPScore. Une image sous la porte QR peut être conservée comme donnée
 expérimentale, mais jamais déclarée livrable.
 
+## Résultat et défaut découvert
+
+L'archive `20260819T195411Z-e028-hierarchical-prompt-advisor-v1.tar.gz` contient bien les
+`1 170/1 170` résultats et `900/900` appariements attendus. La chaîne fixe franchit 73 portes sur
+90, le conseiller top-1 67 sur 90 et le meilleur de plusieurs chaînes 75 sur 90. Cette dernière
+politique coûte toutefois 662 unités de génération contre 202 pour la chaîne fixe.
+
+L'audit des pixels a ensuite invalidé l'interprétation SR-MPGD : 335 des 450 raffinements avaient
+sélectionné l'itération zéro, mais l'image avait été redécodée depuis le latent par le VAE. Ces
+sorties ne constituaient donc pas un no-op exact. Le dataset conditionnel SR-MPGD E028 ne doit pas
+être utilisé pour entraîner une politique finale. La correction et la campagne de récupération
+sont décrites dans
+[`e029-srmpgd-exact-raster-recovery.md`](e029-srmpgd-exact-raster-recovery.md).
+
 ## Fichiers produits
 
 - `e028-state-results.csv` : prédictions et mesures de tous les états ;

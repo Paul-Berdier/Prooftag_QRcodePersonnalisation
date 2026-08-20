@@ -169,6 +169,60 @@ def test_srmpgd_keeps_state_zero_when_the_gradient_is_not_finite(monkeypatch):
     assert min(validated_corners[0]) >= 229
 
 
+def test_srmpgd_iteration_zero_keeps_the_exact_stage2_raster(monkeypatch):
+    torch = pytest.importorskip("torch")
+    from prooftag_qr import srmpgd
+    from prooftag_qr.quality import image_sha256
+
+    class FakeVAE(torch.nn.Module):
+        config = SimpleNamespace(scaling_factor=1.0)
+
+        def __init__(self):
+            super().__init__()
+            self.anchor = torch.nn.Parameter(torch.tensor(1.0), requires_grad=False)
+
+        def decode(self, latent, **kwargs):
+            # Deliberately reconstruct something different from the Stage-2 raster.
+            return (torch.zeros_like(latent) * self.anchor,)
+
+    class FakeImageProcessor:
+        def postprocess(self, image, **kwargs):
+            array = (image[0].detach() / 2 + 0.5).permute(1, 2, 0)
+            return [
+                Image.fromarray(
+                    np.rint(array.cpu().numpy() * 255).astype(np.uint8),
+                    mode="RGB",
+                )
+            ]
+
+    class ZeroLPIPS(torch.nn.Module):
+        def forward(self, image, reference):
+            return image.mean().reshape(1, 1, 1, 1) * 0
+
+    monkeypatch.setattr(srmpgd, "_load_lpips", lambda pipeline, device, net: ZeroLPIPS())
+    blueprint = generate_qr("https://example.test/exact-stage2-raster", "M", size=128)
+    stage2_image = blueprint.image.convert("RGB")
+    stage2_hash = image_sha256(stage2_image)
+    validated_hashes = []
+
+    result = srmpgd.run_srmpgd(
+        SimpleNamespace(vae=FakeVAE(), image_processor=FakeImageProcessor()),
+        torch.zeros((1, 3, 128, 128)),
+        blueprint,
+        SRMPGDConfig(max_iterations=3, crop_padding_px=0),
+        initial_image=stage2_image,
+        validation_callback=lambda image, iteration: (
+            validated_hashes.append(image_sha256(image))
+            or {"passed": 2, "total": 2, "strict_all": True}
+        ),
+    )
+
+    assert result.selected_iteration == 0
+    assert result.stop_reason == "strict_validation_passed"
+    assert image_sha256(result.image) == stage2_hash
+    assert validated_hashes == [stage2_hash]
+
+
 def test_srmpgd_does_not_attempt_to_reconstruct_a_stage2_far_from_the_qr(monkeypatch):
     torch = pytest.importorskip("torch")
     from prooftag_qr import srmpgd

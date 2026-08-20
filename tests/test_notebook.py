@@ -747,6 +747,7 @@ def test_deployment_shell_entrypoints_have_no_utf8_bom():
         Path("scripts/deploy-e026-notebook.sh"),
         Path("scripts/deploy-e027-notebook.sh"),
         Path("scripts/deploy-e028-notebook.sh"),
+        Path("scripts/deploy-e029-notebook.sh"),
     ]
     for path in paths:
         assert not path.read_bytes().startswith(b"\xef\xbb\xbf"), path
@@ -848,6 +849,36 @@ def test_e028_notebook_uses_prompt_advisor_at_every_stage_without_stage1_deliver
     assert "23_e028_hierarchical_prompt_advisor.ipynb" in builder
     assert "23_e028_hierarchical_prompt_advisor.ipynb" in launcher
     assert "23_e028_hierarchical_prompt_advisor.ipynb" in server
+
+    app_image = deployer.index("bash scripts/deploy-app-image.sh")
+    notebook_image = deployer.index(
+        'bash scripts/deploy-notebook-image.sh "notebooks/${notebook}"'
+    )
+    start = deployer.index('bash scripts/notebook-server.sh start "$notebook"')
+    reset = deployer.index('bash scripts/notebook-server.sh reset "$notebook"')
+    assert app_image < notebook_image < min(start, reset)
+
+
+def test_e029_notebook_proves_srmpgd_iteration_zero_keeps_exact_stage2_raster():
+    path = Path("notebooks/24_e029_srmpgd_exact_raster_recovery.ipynb")
+    source = path.read_text(encoding="utf-8")
+    builder = Path(
+        "scripts/build_e029_srmpgd_raster_recovery_notebook.py"
+    ).read_text(encoding="utf-8")
+    launcher = Path("scripts/notebook-remote.ps1").read_text(encoding="utf-8")
+    server = Path("scripts/notebook-server.sh").read_text(encoding="utf-8")
+    deployer = Path("scripts/deploy-e029-notebook.sh").read_text(encoding="utf-8")
+
+    assert "HOLDOUT_PROMPT_COUNT = 10" in source
+    assert "STAGE1_TOP_K = 1" in source
+    assert "STAGE2_TOP_K = 1" in source
+    assert "expected_trials == 180" in source
+    assert "audit_srmpgd_iteration_zero_raster" in source
+    assert "e029-srmpgd-iteration-zero-raster-audit.csv" in source
+    assert "No-op SR-MPGD identiques pixel pour pixel" in source
+    assert "24_e029_srmpgd_exact_raster_recovery.ipynb" in builder
+    assert "24_e029_srmpgd_exact_raster_recovery.ipynb" in launcher
+    assert "24_e029_srmpgd_exact_raster_recovery.ipynb" in server
 
     app_image = deployer.index("bash scripts/deploy-app-image.sh")
     notebook_image = deployer.index(

@@ -17,7 +17,7 @@ from .blueprints import canonical_url_match
 from .config import Settings
 from .qart import build_qart_target
 from .qr import QRBlueprint, diffqrcoder_module_error_rate, module_error_rate
-from .quality import image_change_metrics, image_quality_metrics
+from .quality import image_change_metrics, image_quality_metrics, image_sha256
 from .schemas import GenerationRequest
 from .srmpgd import SRMPGDConfig, run_srmpgd
 
@@ -586,6 +586,7 @@ class UpstreamDiffQRCoderBackend:
 
         if not self.settings.srmpgd_enabled:
             return image
+        stage2_image_sha256 = image_sha256(image)
         if not hasattr(pipe, "srpg"):
             from diffqrcoder.srpg import ScanningRobustPerceptualGuidance
 
@@ -663,11 +664,19 @@ class UpstreamDiffQRCoderBackend:
                 quiet_zone_mode="none",
                 functional_pattern_tone_factor=0.0,
             ),
+            initial_image=image,
             scanning_loss=paper_scanning_loss,
             validation_callback=validation_callback,
             preview_callback=preview_srmpgd,
         )
         image = srmpgd.image
+        selected_image_sha256 = image_sha256(image)
+        iteration_zero_exact = (
+            srmpgd.selected_iteration != 0
+            or selected_image_sha256 == stage2_image_sha256
+        )
+        if not iteration_zero_exact:
+            raise RuntimeError("SR-MPGD iteration zero changed the Stage-2 raster")
         self._srmpgd_stop_reason = srmpgd.stop_reason
         self._srmpgd_selected_iteration = srmpgd.selected_iteration
         attempted_steps = list(srmpgd.steps[1:]) or [srmpgd.steps[0]]
@@ -707,6 +716,9 @@ class UpstreamDiffQRCoderBackend:
                 ),
                 "diffqrcoder_srmpgd_selected_iteration": float(
                     srmpgd.selected_iteration
+                ),
+                "diffqrcoder_srmpgd_iteration_zero_exact": float(
+                    iteration_zero_exact
                 ),
                 "diffqrcoder_srmpgd_initial_mer": float(
                     srmpgd.initial_module_error_rate
@@ -793,6 +805,12 @@ class UpstreamDiffQRCoderBackend:
             }
         )
         self._debug_artifacts["srmpgd_selected"] = image.copy()
+        self._debug_metadata["srmpgd_stage2_image_sha256"] = (
+            stage2_image_sha256
+        )
+        self._debug_metadata["srmpgd_selected_image_sha256"] = (
+            selected_image_sha256
+        )
         return image
 
     def _run_stage2(

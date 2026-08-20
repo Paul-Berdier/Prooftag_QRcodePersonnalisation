@@ -15,7 +15,7 @@ fi
 expected_notebook_path="/workspace/notebooks/${expected_notebook}"
 advisor_mode=0
 case "$expected_notebook" in
-  21_e026_prompt_parameter_advisor.ipynb|22_e027_srmpgd_policy_holdout.ipynb|23_e028_hierarchical_prompt_advisor.ipynb)
+  21_e026_prompt_parameter_advisor.ipynb|22_e027_srmpgd_policy_holdout.ipynb|23_e028_hierarchical_prompt_advisor.ipynb|24_e029_srmpgd_exact_raster_recovery.ipynb)
     advisor_mode=1
     ;;
 esac

@@ -436,6 +436,7 @@ def test_inference_results_join_predictions_and_select_scannable_winner(tmp_path
         "total_ms",
         "module_error_rate",
         "quality_diffqrcoder_srmpgd_selected_iteration",
+        "quality_diffqrcoder_srmpgd_iteration_zero_exact",
         "error",
     ]
     with (exports_dir / "results.csv").open("w", encoding="utf-8", newline="") as stream:
@@ -492,6 +493,7 @@ def test_inference_results_join_predictions_and_select_scannable_winner(tmp_path
                 "total_ms": 2000,
                 "module_error_rate": 0.05,
                 "quality_diffqrcoder_srmpgd_selected_iteration": 0,
+                "quality_diffqrcoder_srmpgd_iteration_zero_exact": 1,
             }
         )
 
@@ -504,6 +506,7 @@ def test_inference_results_join_predictions_and_select_scannable_winner(tmp_path
     assert rows[1]["output_variant"] == "srpg"
     assert rows[1]["srmpgd_noop"] is True
     assert rows[1]["srmpgd_effective"] is False
+    assert rows[1]["srmpgd_iteration_zero_exact"] == pytest.approx(1.0)
     assert rows[1]["stage1_reused"] == pytest.approx(1.0)
     assert rows[1]["stage1_source_run_id"] == "run-1"
     assert rows[1]["stage2_source_run_id"] == "run-stage2"

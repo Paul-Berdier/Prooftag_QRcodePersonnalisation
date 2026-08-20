@@ -290,6 +290,20 @@ reprenables sous `/data/e028-hierarchical`, l'appariement est vérifié par hash
 images sont indexées dans la galerie. Voir
 [`../docs/e028-hierarchical-prompt-advisor.md`](../docs/e028-hierarchical-prompt-advisor.md).
 
+## E029 — invariant exact du no-op SR-MPGD
+
+E029 corrige le défaut découvert dans E028 : une itération zéro SR-MPGD redécodait le latent avec
+le VAE et pouvait donc modifier fortement le PNG Stage 2. La campagne courte rejoue 10 prompts,
+3 seeds et 6 états appariés, soit 180 générations, puis exige une identité pixel pour pixel entre
+chaque no-op et son Stage 2 parent.
+
+```powershell
+.\scripts\notebook-remote.ps1 -Notebook 24_e029_srmpgd_exact_raster_recovery.ipynb
+```
+
+Les résultats sont repris sous `/data/e029-srmpgd-raster` et documentés dans
+[`../docs/e029-srmpgd-exact-raster-recovery.md`](../docs/e029-srmpgd-exact-raster-recovery.md).
+
 Pour remplir ce dataset pendant une absence sans laisser Jupyter ouvert, E026W lance un Job
 Kubernetes CPU reprenable et réserve la RTX à l'API. Le plan borné contient 300 prompts, 16
 recettes, trois seeds et jusqu'à 14 400 essais. Les commandes de démarrage, suivi, reprise et

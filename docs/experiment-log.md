@@ -1461,3 +1461,25 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   l'exécution complète.
 - **Notebook :** `23_e028_hierarchical_prompt_advisor.ipynb`.
 - **Protocole :** `docs/e028-hierarchical-prompt-advisor.md`.
+
+## Audit E028 et E029 — no-op SR-MPGD exact — 20 août 2026
+
+- **Archive auditée :** `20260819T195411Z-e028-hierarchical-prompt-advisor-v1.tar.gz` uniquement.
+- **Complétion E028 :** 1 170/1 170 résultats, 1 131 acceptés, 39 rejetés et 900/900 preuves
+  d'appariement Stage 1/Stage 2 valides.
+- **Doublons :** la galerie contient 1 170 entrées mais seulement 490 hashes d'image uniques.
+- **Politiques :** chaîne fixe `73/90` portes (`81,1 %`, coût 202), conseiller top-1 `67/90`
+  (`74,4 %`, coût 205), meilleur de plusieurs chaînes `75/90` (`83,3 %`, coût 662).
+- **Défaut causal :** 335 branches SR-MPGD ont retenu l'itération zéro, mais le raster était
+  redécodé depuis le latent au lieu de réutiliser exactement le PNG Stage 2.
+- **Effet observé non fiable :** sur 450 paires, la tolérance SR-MPGD était meilleure 49 fois,
+  pire 344 fois et inchangée 57 fois ; 12 portes gagnées contre 207 perdues. Les sorties no-op
+  corrompent cette comparaison et ne doivent pas entraîner le conseiller SR-MPGD.
+- **Signal restant :** parmi les 115 raffinements réellement effectifs (`itération > 0`), neuf
+  portes étaient gagnées et une perdue ; le mécanisme mérite donc une mesure corrigée.
+- **Correction E029 :** l'itération zéro conserve le PNG Stage 2 exact, son hash est vérifié dans
+  le backend et dans l'audit exporté. Le latent reste réservé à la loss et aux itérations actives.
+- **Campagne :** 10 prompts × 3 seeds × 6 états = 180 générations appariées. E028 ne contient
+  aucun latent sauvegardé, donc ces Stage 1/Stage 2 doivent être régénérés une fois.
+- **Notebook :** `24_e029_srmpgd_exact_raster_recovery.ipynb`.
+- **Protocole :** `docs/e029-srmpgd-exact-raster-recovery.md`.

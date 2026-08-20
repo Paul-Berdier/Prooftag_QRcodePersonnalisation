@@ -19,7 +19,7 @@ from .qr import (
     module_error_rate,
     prepare_scan_ready_image,
 )
-from .quality import image_change_metrics
+from .quality import image_change_metrics, image_sha256
 
 
 @dataclass(frozen=True, slots=True)
@@ -409,6 +409,7 @@ def run_srmpgd(
     blueprint: QRBlueprint,
     config: SRMPGDConfig,
     *,
+    initial_image: Image.Image | None = None,
     scanning_loss: ScanningLoss | None = None,
     validation_callback: ValidationCallback | None = None,
     preview_callback: PreviewCallback | None = None,
@@ -416,9 +417,11 @@ def run_srmpgd(
     """Optimize the exact clean Stage-2 latent with Eq. 13-14 from DiffQRCoder.
 
     No image is encoded in this function: ``initial_latent`` must be the clean latent returned by
-    Stage-2. The SRL target is the original QR blueprint, whereas LPIPS is measured against the
-    detached image decoded from that same initial latent. Stage-2 SRPG weights are intentionally
-    absent because Eq. 13 defines a separate ``SRL + 0.01 * LPIPS`` objective.
+    Stage-2. ``initial_image`` is the exact Stage-2 raster and is kept as the immutable iteration
+    zero candidate. The latent is still decoded for the differentiable SRL/LPIPS objective, but a
+    VAE reconstruction is never allowed to impersonate an unchanged Stage-2 fallback. Stage-2
+    SRPG weights are intentionally absent because Eq. 13 defines a separate
+    ``SRL + 0.01 * LPIPS`` objective.
     """
     import torch
 
@@ -437,12 +440,21 @@ def run_srmpgd(
     started = time.perf_counter()
 
     with torch.no_grad():
-        reference_decoded, reference_image = _decode_latent(
+        reference_decoded, decoded_reference_image = _decode_latent(
             pipeline,
             working,
             blueprint=blueprint,
             config=config,
         )
+        reference_image = (
+            initial_image.convert("RGB").copy()
+            if initial_image is not None
+            else decoded_reference_image
+        )
+        if reference_image.size != decoded_reference_image.size:
+            raise ValueError(
+                "initial_image and decoded initial_latent must have identical dimensions"
+            )
         if config.crop_padding_px == -1:
             geometry = qr_core_geometry(
                 blueprint,
@@ -501,12 +513,16 @@ def run_srmpgd(
         iteration_stop_reason = None
         with torch.enable_grad():
             working = working.detach().requires_grad_(True)
-            decoded, image = _decode_latent(
+            decoded, decoded_image = _decode_latent(
                 pipeline,
                 working,
                 blueprint=blueprint,
                 config=config,
             )
+            # Iteration zero is the exact raster emitted by Stage 2. Re-decoding its
+            # latent can introduce VAE reconstruction errors and is therefore only
+            # used by the differentiable objective, never as the no-op candidate.
+            image = reference_image.copy() if iteration == 0 else decoded_image
             decoded_core = (
                 crop_tensor_to_qr_core(decoded.float(), geometry)
                 if config.crop_padding_px == -1
@@ -704,6 +720,11 @@ def run_srmpgd(
     selected_step, selected_latent, selected_image = max(
         eligible_states, key=lambda item: _rank_step(item[0])
     )
+    if (
+        selected_step.iteration == 0
+        and image_sha256(selected_image) != image_sha256(reference_image)
+    ):
+        raise RuntimeError("SR-MPGD iteration zero changed the Stage-2 raster")
     return SRMPGDResult(
         image=selected_image,
         latent=selected_latent,

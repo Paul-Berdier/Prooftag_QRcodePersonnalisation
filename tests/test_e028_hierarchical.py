@@ -5,6 +5,7 @@ from dataclasses import replace
 from prooftag_qr.e028_hierarchical import (
     E028_PIPELINE_STATES,
     audit_e028_pairing,
+    audit_srmpgd_iteration_zero_raster,
     build_e028_conditional_datasets,
     build_e028_hierarchical_plan,
     evaluate_e028_policies,
@@ -210,6 +211,46 @@ def test_e028_pairing_audit_proves_stage1_image_and_stage2_latent_reuse():
     assert next(item for item in audit if item["pipeline_state"] == "srmpgd")[
         "stage2_exact_reuse"
     ]
+
+
+def test_srmpgd_iteration_zero_audit_requires_the_exact_stage2_raster():
+    stage2 = _row("advisor-s2", "stage2")
+    stage2.update(
+        {
+            "generation_run_id": "run-stage2",
+            "final_image_sha256": "stage2-pixels",
+        }
+    )
+    exact = _row("advisor-m-exact", "srmpgd")
+    exact.update(
+        {
+            "generation_run_id": "run-m-exact",
+            "stage2_source_run_id": "run-stage2",
+            "srmpgd_selected_iteration": 0.0,
+            "srmpgd_iteration_zero_exact": 1.0,
+            "final_image_sha256": "stage2-pixels",
+        }
+    )
+    reconstructed = _row("advisor-m-redecoded", "srmpgd")
+    reconstructed.update(
+        {
+            "generation_run_id": "run-m-redecoded",
+            "stage2_source_run_id": "run-stage2",
+            "srmpgd_selected_iteration": 0.0,
+            "srmpgd_iteration_zero_exact": 0.0,
+            "final_image_sha256": "vae-reconstruction",
+        }
+    )
+
+    audit = audit_srmpgd_iteration_zero_raster([stage2, exact, reconstructed])
+
+    assert len(audit) == 2
+    assert next(row for row in audit if row["method_id"] == "advisor-m-exact")[
+        "exact"
+    ]
+    assert not next(
+        row for row in audit if row["method_id"] == "advisor-m-redecoded"
+    )["exact"]
 
 
 def test_e028_conditional_datasets_include_measured_parent_features():

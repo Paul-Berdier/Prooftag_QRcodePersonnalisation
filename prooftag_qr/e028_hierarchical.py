@@ -917,6 +917,56 @@ def audit_e028_pairing(entries: Sequence[Mapping[str, Any]]) -> list[dict[str, A
     return audits
 
 
+def audit_srmpgd_iteration_zero_raster(
+    entries: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Prove that an SR-MPGD no-op returns the exact Stage 2 raster.
+
+    The Stage 2 latent is not an exact representation of its PNG: decoding it again can
+    introduce VAE reconstruction errors.  Therefore an SR-MPGD result that selects
+    iteration zero must reuse the original Stage 2 raster, not a fresh VAE decode.
+    """
+
+    by_run = {
+        str(row.get("generation_run_id")): dict(row)
+        for row in entries
+        if row.get("generation_run_id")
+    }
+    audits = []
+    for source in entries:
+        row = dict(source)
+        if str(row.get("pipeline_state")) != "srmpgd":
+            continue
+        iteration = _finite(row.get("srmpgd_selected_iteration"))
+        if iteration != 0.0:
+            continue
+        parent = by_run.get(str(row.get("stage2_source_run_id") or ""))
+        parent_hash = str((parent or {}).get("final_image_sha256") or "")
+        selected_hash = str(row.get("final_image_sha256") or "")
+        backend_marker = _finite(row.get("srmpgd_iteration_zero_exact"))
+        exact = bool(
+            _generated(row)
+            and parent is not None
+            and parent_hash
+            and selected_hash == parent_hash
+            and backend_marker == 1.0
+        )
+        audits.append(
+            {
+                "prompt_id": row.get("prompt_id"),
+                "seed": _finite(row.get("seed")),
+                "method_id": row.get("method_id"),
+                "stage2_source_run_id": row.get("stage2_source_run_id"),
+                "parent_stage2_method_id": (parent or {}).get("method_id"),
+                "stage2_image_sha256": parent_hash or None,
+                "srmpgd_image_sha256": selected_hash or None,
+                "backend_iteration_zero_exact": backend_marker,
+                "exact": exact,
+            }
+        )
+    return audits
+
+
 def evaluate_e028_policies(
     entries: Sequence[Mapping[str, Any]],
     *,
