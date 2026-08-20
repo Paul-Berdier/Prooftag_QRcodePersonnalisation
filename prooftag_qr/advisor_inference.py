@@ -1073,6 +1073,7 @@ def load_advisor_inference_results(output_dir: Path) -> list[dict[str, Any]]:
                 "method_id": row.get("method_id"),
                 "output_variant": row.get("selected_variant")
                 or row.get("output_variant_requested"),
+                "service_selected_variant": row.get("selected_variant") or None,
                 "final_image_sha256": row.get("provenance_final_image_sha256")
                 or row.get("final_image_sha256")
                 or None,
@@ -1166,7 +1167,11 @@ def load_advisor_inference_results(output_dir: Path) -> list[dict[str, Any]]:
             and iteration == 0
         )
         if result["srmpgd_noop"]:
-            result["output_variant"] = "srpg"
+            # Older exports could label an iteration-zero backend result as
+            # ``srmpgd``. Normalize only that legacy label. Never rewrite
+            # ``raw``: it means the surrounding auto selector chose Stage 1.
+            if result["output_variant"] == "srmpgd":
+                result["output_variant"] = "srpg"
     return sorted(
         results,
         key=lambda item: (

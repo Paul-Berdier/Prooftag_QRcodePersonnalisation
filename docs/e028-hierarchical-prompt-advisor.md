@@ -86,9 +86,10 @@ expérimentale, mais jamais déclarée livrable.
 ## Résultat et défaut découvert
 
 L'archive `20260819T195411Z-e028-hierarchical-prompt-advisor-v1.tar.gz` contient bien les
-`1 170/1 170` résultats et `900/900` appariements attendus. La chaîne fixe franchit 73 portes sur
-90, le conseiller top-1 67 sur 90 et le meilleur de plusieurs chaînes 75 sur 90. Cette dernière
-politique coûte toutefois 662 unités de génération contre 202 pour la chaîne fixe.
+`1 170/1 170` résultats. Le rapport initial annonçait 73 portes sur 90 pour la chaîne fixe, 67 sur
+90 pour le conseiller top-1 et 75 sur 90 pour le meilleur de plusieurs chaînes. Ces valeurs sont
+désormais classées **provisoires et non utilisables** : certaines branches SR-MPGD en mode `auto`
+avaient sélectionné Stage 1 brut alors que leur état logique restait étiqueté SR-MPGD.
 
 L'audit des pixels a ensuite invalidé l'interprétation SR-MPGD : 335 des 450 raffinements avaient
 sélectionné l'itération zéro, mais l'image avait été redécodée depuis le latent par le VAE. Ces

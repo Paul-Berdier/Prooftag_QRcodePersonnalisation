@@ -1481,5 +1481,11 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   le backend et dans l'audit exporté. Le latent reste réservé à la loss et aux itérations actives.
 - **Campagne :** 10 prompts × 3 seeds × 6 états = 180 générations appariées. E028 ne contient
   aucun latent sauvegardé, donc ces Stage 1/Stage 2 doivent être régénérés une fois.
+- **E029 v1 :** l'audit a refusé 51 no-op. La cause était une seconde erreur : les méthodes
+  SR-MPGD utilisaient `output_variant=auto`, autorisant le service à sélectionner Stage 1 brut,
+  puis le chargeur rebaptisait ce `raw` en `srpg` à cause de l'itération zéro du backend.
+- **E029 v2 :** sortie SR-MPGD forcée, no-op SRPG autorisé, sortie raw interdite, variante réelle
+  conservée dans `service_selected_variant` et nouvel identifiant de plan pour empêcher la reprise
+  des 180 résultats v1 ambigus.
 - **Notebook :** `24_e029_srmpgd_exact_raster_recovery.ipynb`.
 - **Protocole :** `docs/e029-srmpgd-exact-raster-recovery.md`.

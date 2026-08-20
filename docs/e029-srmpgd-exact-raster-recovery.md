@@ -13,6 +13,12 @@ pas. Sur E028, SR-MPGD améliorait la tolérance QR dans 49 cas, la dégradait d
 inchangée dans 57. La porte de livraison était gagnée dans 12 cas mais perdue dans 207. Ces nombres
 ne mesurent donc pas proprement l'algorithme publié.
 
+La première exécution E029 a révélé un second défaut indépendant : les méthodes SR-MPGD étaient
+encore soumises avec `output_variant=auto`. Le sélecteur de livraison pouvait alors choisir le
+Stage 1 brut au lieu de la sortie post-Stage 2. Le chargeur rebaptisait ensuite ce résultat `srpg`
+si le backend avait retenu l'itération zéro. Les 51 échecs de l'audit E029 v1 correspondaient à
+ce contrat de sortie invalide, et non à une nouvelle reconstruction VAE.
+
 ## Correction
 
 `run_srmpgd` reçoit maintenant le PNG Stage 2 original en plus de son latent :
@@ -22,6 +28,9 @@ ne mesurent donc pas proprement l'algorithme publié.
 - si l'itération zéro gagne, son SHA-256 de pixels doit être identique à celui du Stage 2 ;
 - le backend publie `diffqrcoder_srmpgd_iteration_zero_exact=1` ;
 - une divergence déclenche une erreur au lieu de produire une fausse sortie SRPG.
+- la branche SR-MPGD force désormais `output_variant=srmpgd` ; un no-op effectif `srpg` reste
+  accepté, mais Stage 1 `raw` ne participe plus à la sélection ;
+- les exports conservent `service_selected_variant` et ne rebaptisent jamais une sortie `raw`.
 
 Cette règle est appliquée au backend DiffQRCoder et au backend ControlNet générique.
 
@@ -34,6 +43,9 @@ E029 rejoue une campagne plus petite avant tout nouvel entraînement :
 - une chaîne fixe et une chaîne conseillée ;
 - pour chaque chaîne : Stage 1, Stage 2, SR-MPGD ;
 - 6 états par contexte, donc 180 générations au total.
+
+Le protocole v2 possède un nouvel identifiant de plan. Il ne reprend donc pas les 180 résultats
+E029 v1 dont la sélection `auto` était ambiguë.
 
 Les Stage 1 et Stage 2 doivent être régénérés : l'archive E028 contient les PNG et les métriques,
 mais aucun latent `.safetensors`. Un SR-MPGD différentiable ne peut pas être repris fidèlement à

@@ -251,7 +251,10 @@ def _compose_stage2(stage1: RecipeCandidate, template: RecipeCandidate) -> Recip
 
 def _compose_srmpgd(stage2: RecipeCandidate, template: RecipeCandidate) -> RecipeCandidate:
     configuration = deepcopy(stage2.configuration)
-    configuration["output_variant"] = "auto"
+    # Force the post-Stage-2 branch. In ``auto`` mode the delivery selector also
+    # sees the raw Stage 1 candidate and can return it instead of the SR-MPGD
+    # result, which breaks both the Stage-1 prohibition and raster pairing.
+    configuration["output_variant"] = "srmpgd"
     tools = deepcopy(configuration.get("tools") or {})
     source_tools = template.configuration.get("tools") or {}
     source_settings = source_tools.get("settings") or {}
@@ -538,7 +541,7 @@ def build_e028_hierarchical_plan(
                 fixed_profiles["diffqrcoder_srmpgd_robust"],
                 runtime_id="e028_fixed_srmpgd",
                 name="E028 fixed SR-MPGD",
-                output_variant="auto",
+                output_variant="srmpgd",
             )
             fixed_srmpgd["tools"]["settings"]["srmpgd_min_qr_tolerance"] = float(
                 qr_tolerance_threshold
@@ -685,7 +688,7 @@ def build_e028_hierarchical_plan(
                     srmpgd_recommendation.candidate.configuration,
                     runtime_id=srmpgd_runtime_id,
                     name=f"E028 advisor SR-MPGD {stage1_profile}/{stage2_profile}",
-                    output_variant="auto",
+                    output_variant="srmpgd",
                 )
                 srmpgd_method["tools"]["settings"]["srmpgd_min_qr_tolerance"] = float(
                     qr_tolerance_threshold
@@ -737,7 +740,7 @@ def build_e028_hierarchical_plan(
         )
 
     plan_material = {
-        "protocol": "e028-v1-prompt-advised-exact-hierarchical-chain",
+        "protocol": "e028-v2-forced-srmpgd-exact-raster-chain",
         "advisor_sha256": advisor_sha256,
         "payload_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
         "payload_length": len(payload),
@@ -815,6 +818,22 @@ def _generated(row: Mapping[str, Any] | None) -> bool:
     )
 
 
+def _output_contract_valid(row: Mapping[str, Any] | None) -> bool:
+    """Reject a raw Stage 1 raster masquerading as a later pipeline state."""
+
+    if row is None:
+        return False
+    state = str(row.get("pipeline_state") or "")
+    output = str(row.get("output_variant") or "")
+    if state == "stage1":
+        return output == "raw"
+    if state == "stage2":
+        return output == "srpg"
+    if state == "srmpgd":
+        return output in {"srpg", "srmpgd"}
+    return False
+
+
 def _deliverable(
     row: Mapping[str, Any] | None,
     threshold: float,
@@ -822,6 +841,7 @@ def _deliverable(
 ) -> bool:
     return bool(
         _generated(row)
+        and _output_contract_valid(row)
         and (_finite(row.get("qr_success")) or 0.0) >= 0.5
         and (_finite(row.get("qr_tolerance")) or 0.0) >= threshold
         and (_finite(row.get("saturation_risk")) or 0.0) <= saturation_threshold
@@ -829,7 +849,11 @@ def _deliverable(
 
 
 def _select(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any] | None:
-    values = [dict(row) for row in rows if _generated(row)]
+    values = [
+        dict(row)
+        for row in rows
+        if _generated(row) and _output_contract_valid(row)
+    ]
     return max(values, key=_candidate_rank) if values else None
 
 
@@ -854,6 +878,7 @@ def audit_e028_pairing(entries: Sequence[Mapping[str, Any]]) -> list[dict[str, A
             if state == "stage1":
                 continue
             technically_generated = _generated(row)
+            output_contract_valid = _output_contract_valid(row)
             expected_stage1 = str(row.get("parent_stage1_method_id") or "")
             expected_stage1_row = by_method.get(expected_stage1)
             source_stage1 = by_run.get(str(row.get("stage1_source_run_id") or ""))
@@ -865,6 +890,7 @@ def audit_e028_pairing(entries: Sequence[Mapping[str, Any]]) -> list[dict[str, A
             )
             stage1_exact = bool(
                 technically_generated
+                and output_contract_valid
                 and source_stage1
                 and _finite(row.get("stage1_reused")) == 1.0
                 and (
@@ -888,6 +914,7 @@ def audit_e028_pairing(entries: Sequence[Mapping[str, Any]]) -> list[dict[str, A
                 reused_latent = str(row.get("stage2_source_latent_sha256") or "")
                 stage2_exact = bool(
                     technically_generated
+                    and output_contract_valid
                     and source_stage2
                     and str(row.get("stage2_pairing_status")) == "exact_reuse"
                     and _finite(row.get("stage2_pairing_exact")) == 1.0
@@ -904,6 +931,8 @@ def audit_e028_pairing(entries: Sequence[Mapping[str, Any]]) -> list[dict[str, A
                     "method_id": row.get("method_id"),
                     "pipeline_state": state,
                     "technically_generated": technically_generated,
+                    "output_variant": row.get("output_variant"),
+                    "output_contract_valid": output_contract_valid,
                     "stage1_exact_reuse": stage1_exact,
                     "stage2_exact_reuse": stage2_exact,
                     "complete": (
@@ -946,6 +975,7 @@ def audit_srmpgd_iteration_zero_raster(
         backend_marker = _finite(row.get("srmpgd_iteration_zero_exact"))
         exact = bool(
             _generated(row)
+            and _output_contract_valid(row)
             and parent is not None
             and parent_hash
             and selected_hash == parent_hash
@@ -958,6 +988,7 @@ def audit_srmpgd_iteration_zero_raster(
                 "method_id": row.get("method_id"),
                 "stage2_source_run_id": row.get("stage2_source_run_id"),
                 "parent_stage2_method_id": (parent or {}).get("method_id"),
+                "output_variant": row.get("output_variant"),
                 "stage2_image_sha256": parent_hash or None,
                 "srmpgd_image_sha256": selected_hash or None,
                 "backend_iteration_zero_exact": backend_marker,
@@ -1127,7 +1158,7 @@ def evaluate_e028_policies(
             "stage1_deliveries": sum(bool(row["stage1_was_delivered"]) for row in rows),
         }
     return {
-        "protocol": "e028-v1-prompt-advised-exact-hierarchical-chain",
+        "protocol": "e028-v2-forced-srmpgd-exact-raster-chain",
         "qr_tolerance_threshold": qr_tolerance_threshold,
         "saturation_threshold": saturation_threshold,
         "contexts": len(groups),
@@ -1172,7 +1203,11 @@ def build_e028_conditional_datasets(
         embedding = prompt_embedding_provider(prompt) if prompt_embedding_provider else None
         for row in rows:
             state = str(row.get("pipeline_state"))
-            if state not in records or not _generated(row):
+            if (
+                state not in records
+                or not _generated(row)
+                or not _output_contract_valid(row)
+            ):
                 continue
             parent_id = (
                 row.get("parent_stage1_method_id")
@@ -1180,7 +1215,7 @@ def build_e028_conditional_datasets(
                 else row.get("parent_stage2_method_id")
             )
             parent = by_method.get(str(parent_id))
-            if not _generated(parent):
+            if not _generated(parent) or not _output_contract_valid(parent):
                 continue
             context: dict[str, Any] = {
                 **_prompt_features(prompt),

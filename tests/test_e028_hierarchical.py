@@ -100,6 +100,12 @@ def test_e028_plan_uses_prompt_advisor_at_every_stage_and_orders_exact_reuse():
         for item in advisor_rows
         if item["pipeline_state"] == "srmpgd"
     )
+    assert all(
+        method["output_variant"] == "srmpgd"
+        for campaign in plan.campaigns
+        for method in campaign["methods"]
+        if method["id"].endswith("mpgd")
+    )
     assert "payload" not in plan.public
     assert plan.public["payload_sha256"]
 
@@ -122,6 +128,9 @@ def _row(
         "source_method_id": method_id,
         "role": f"e028_{'fixed' if fixed else 'advisor'}_{state}",
         "pipeline_state": state,
+        "output_variant": (
+            "raw" if state == "stage1" else ("srpg" if state == "stage2" else "srmpgd")
+        ),
         "fixed_control": fixed,
         "chain_id": "fixed" if fixed else chain,
         "generation_run_id": f"run-{method_id}",
@@ -136,7 +145,11 @@ def _row(
         "candidate_configuration": {
             "id": method_id,
             "backend": "controlnet",
-            "output_variant": "raw" if state == "stage1" else state,
+            "output_variant": (
+                "raw"
+                if state == "stage1"
+                else ("srpg" if state == "stage2" else "srmpgd")
+            ),
             "generation": {"steps": 40},
             "model": {},
             "tools": {"settings": {}},
@@ -251,6 +264,25 @@ def test_srmpgd_iteration_zero_audit_requires_the_exact_stage2_raster():
     assert not next(
         row for row in audit if row["method_id"] == "advisor-m-redecoded"
     )["exact"]
+
+
+def test_e028_policy_rejects_raw_stage1_selected_inside_srmpgd_branch():
+    stage2 = _row("advisor-s2", "stage2", qr_success=0.0, tolerance=0.2)
+    raw_masquerading_as_srmpgd = _row(
+        "advisor-m", "srmpgd", qr_success=1.0, tolerance=1.0
+    )
+    raw_masquerading_as_srmpgd["output_variant"] = "raw"
+
+    report = evaluate_e028_policies(
+        [stage2, raw_masquerading_as_srmpgd], qr_tolerance_threshold=0.8
+    )
+
+    decision = next(
+        row for row in report["decisions"] if row["policy"] == "advisor_top1"
+    )
+    assert decision["deliverable"] is False
+    assert decision["selected"] is True
+    assert decision["selected_state"] == "stage2"
 
 
 def test_e028_conditional_datasets_include_measured_parent_features():

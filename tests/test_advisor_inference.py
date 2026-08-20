@@ -403,6 +403,16 @@ def test_inference_results_join_predictions_and_select_scannable_winner(tmp_path
             "predicted_qr_success": 0.90,
             "requested_source_output_variant": "srmpgd",
         },
+        {
+            "prompt_id": "p1",
+            "prompt_text": "Prompt one",
+            "plan_method_id": "e026i_r03_raw",
+            "source_method_id": "raw",
+            "role": "advisor_recommendation",
+            "advisor_rank": 3,
+            "predicted_qr_success": 0.10,
+            "requested_source_output_variant": "srmpgd",
+        },
     ]
     (output_dir / "advisor-predictions.jsonl").write_text(
         "".join(json.dumps(item) + "\n" for item in predictions), encoding="utf-8"
@@ -496,14 +506,31 @@ def test_inference_results_join_predictions_and_select_scannable_winner(tmp_path
                 "quality_diffqrcoder_srmpgd_iteration_zero_exact": 1,
             }
         )
+        writer.writerow(
+            {
+                "trial_id": "t3",
+                "campaign_id": "c1",
+                "prompt_id": "p1",
+                "method_id": "e026i_r03_raw",
+                "status": "rejected",
+                "seed": 1,
+                "generation_run_id": "run-3",
+                "selected_variant": "raw",
+                "quality_qr_verify_any_exact": 0,
+                "quality_qr_verify_tolerance_score": 0.1,
+                "quality_diffqrcoder_srmpgd_selected_iteration": 0,
+                "quality_diffqrcoder_srmpgd_iteration_zero_exact": 1,
+            }
+        )
 
     rows = load_advisor_inference_results(output_dir)
     winners = select_advisor_inference_winners(rows)
 
-    assert len(rows) == 2
+    assert len(rows) == 3
     assert rows[0]["predicted_qr_probability"] == pytest.approx(0.95)
     assert rows[0]["saturation_risk"] == pytest.approx(0.02)
     assert rows[1]["output_variant"] == "srpg"
+    assert rows[1]["service_selected_variant"] == "srmpgd"
     assert rows[1]["srmpgd_noop"] is True
     assert rows[1]["srmpgd_effective"] is False
     assert rows[1]["srmpgd_iteration_zero_exact"] == pytest.approx(1.0)
@@ -514,6 +541,9 @@ def test_inference_results_join_predictions_and_select_scannable_winner(tmp_path
     assert rows[1]["stage2_latent_sha256"] == "latent-current"
     assert rows[1]["stage2_pairing_status"] == "exact_reuse"
     assert rows[1]["stage2_pairing_exact"] == pytest.approx(1.0)
+    assert rows[2]["output_variant"] == "raw"
+    assert rows[2]["service_selected_variant"] == "raw"
+    assert rows[2]["srmpgd_noop"] is True
     assert winners[0]["trial_id"] == "t2"
 
 
