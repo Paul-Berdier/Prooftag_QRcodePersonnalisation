@@ -936,6 +936,9 @@ def test_e030_notebook_rescores_unique_e029_rasters_without_gpu_generation():
     assert "e030-unique-raster-rescore.csv" in source
     assert "e030-policy-summary.csv" in source
     assert "e030-cascade-winners.png" in source
+    assert "error_low = np.maximum(0.0" in source
+    assert "error_high = np.maximum(0.0" in source
+    assert "yerr=np.vstack([error_low, error_high])" in source
     assert "PROOFTAG_GIT_COMMIT" in source
     assert "PROOFTAG_RUNTIME_IMAGE" in source
     assert "bridge_sha256" in source

@@ -524,7 +524,10 @@ def wilson(successes, total, z=1.959963984540054):
     denominator = 1 + z * z / total
     center = (p + z * z / (2 * total)) / denominator
     margin = z * math.sqrt((p * (1 - p) + z * z / (4 * total)) / total) / denominator
-    return max(0.0, center - margin), min(1.0, center + margin)
+    # Floating-point rounding can otherwise put the interval a few ulps on
+    # the wrong side of p (notably when p == 1), which makes Matplotlib reject
+    # the resulting nominally negative error bar.
+    return max(0.0, min(p, center - margin)), min(1.0, max(p, center + margin))
 
 
 summary_rows = []
@@ -570,12 +573,15 @@ axes[0].grid(alpha=0.25)
 
 labels = policy_summary.policy.str.replace('_', ' ')
 axes[1].bar(labels, policy_summary.delivery_rate, color='#16a34a')
+delivery_rate = policy_summary.delivery_rate.to_numpy(dtype=float)
+wilson_low = policy_summary.wilson_95_low.to_numpy(dtype=float)
+wilson_high = policy_summary.wilson_95_high.to_numpy(dtype=float)
+error_low = np.maximum(0.0, delivery_rate - wilson_low)
+error_high = np.maximum(0.0, wilson_high - delivery_rate)
 axes[1].errorbar(
-    range(len(policy_summary)), policy_summary.delivery_rate,
-    yerr=[
-        policy_summary.delivery_rate - policy_summary.wilson_95_low,
-        policy_summary.wilson_95_high - policy_summary.delivery_rate,
-    ], fmt='none', ecolor='black', capsize=5,
+    range(len(policy_summary)), delivery_rate,
+    yerr=np.vstack([error_low, error_high]),
+    fmt='none', ecolor='black', capsize=5,
 )
 axes[1].set_ylim(0, 1.05)
 axes[1].set(ylabel='Taux de livraison conservateur', title='Politiques Stage 2')
