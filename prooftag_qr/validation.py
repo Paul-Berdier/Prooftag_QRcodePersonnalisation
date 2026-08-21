@@ -15,6 +15,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,7 @@ import numpy as np
 from PIL import Image, ImageEnhance, ImageFilter
 
 from .domain import ValidationRecord
+from .quality import image_sha256 as canonical_image_sha256
 
 
 def compare_validation_to_reference(
@@ -263,6 +265,8 @@ class QRVerifyDecoder(Decoder):
     """
 
     name = "qr_verify"
+    engine_version = "qr-verify@0.2.0"
+    preset_count = 37
 
     def __init__(
         self,
@@ -346,10 +350,13 @@ class QRVerifyDecoder(Decoder):
         if not response.get("ok"):
             raise RuntimeError(f"qr-verify bridge failed: {response.get('error')}")
         attempts = response.get("attempts")
-        if response.get("engine") != "qr-verify@0.2.0" or not isinstance(attempts, list):
+        if response.get("engine") != self.engine_version or not isinstance(attempts, list):
             raise RuntimeError("qr-verify bridge returned an invalid protocol response")
-        if len(attempts) != 37:
-            raise RuntimeError(f"qr-verify returned {len(attempts)} presets instead of 37")
+        if len(attempts) != self.preset_count:
+            raise RuntimeError(
+                f"qr-verify returned {len(attempts)} presets instead of "
+                f"{self.preset_count}"
+            )
         return attempts
 
     def decode(self, image: Image.Image) -> str:
@@ -368,6 +375,391 @@ class QRVerifyDecoder(Decoder):
             process.wait(timeout=2)
         except Exception:
             process.kill()
+
+
+CONSERVATIVE_QR_VERIFY_SCORING_VERSION = "qr-verify-conservative-v1"
+
+
+def image_raster_sha256(image: Image.Image) -> str:
+    """Return the project's canonical decoded-raster hash.
+
+    Reusing :func:`prooftag_qr.quality.image_sha256` is intentional: cache
+    evidence must compare directly with ``provenance_final_image_sha256``.
+    """
+
+    return canonical_image_sha256(image)
+
+
+@dataclass(frozen=True, slots=True)
+class ConservativeQRVerifyScore:
+    """Repeat-level evidence and a fail-closed QR-Verify aggregate.
+
+    ``conservative_tolerance_score`` counts only presets which decode the exact
+    payload in *every* repetition.  It is deliberately no greater than the
+    minimum one-shot score and cannot benefit from different lucky presets in
+    different repetitions.
+    """
+
+    image_sha256: str
+    payload_sha256: str
+    cache_key: str
+    engine_version: str
+    implementation_sha256: str
+    scoring_version: str
+    repetitions: int
+    preset_count: int
+    direct_exact_all_repetitions: bool
+    each_repetition_any_exact: bool
+    consistent_any_exact: bool
+    conservative_exact_presets: int
+    conservative_tolerance_score: float
+    minimum_tolerance_score: float
+    mean_tolerance_score: float
+    maximum_tolerance_score: float
+    unstable_preset_count: int
+    stable_preset_count: int
+    runs: tuple[dict[str, Any], ...]
+    created_at_utc: str
+    cache_hit: bool = False
+    cache_path: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "image_sha256": self.image_sha256,
+            "payload_sha256": self.payload_sha256,
+            "cache_key": self.cache_key,
+            "engine_version": self.engine_version,
+            "implementation_sha256": self.implementation_sha256,
+            "scoring_version": self.scoring_version,
+            "repetitions": self.repetitions,
+            "preset_count": self.preset_count,
+            "direct_exact_all_repetitions": self.direct_exact_all_repetitions,
+            "each_repetition_any_exact": self.each_repetition_any_exact,
+            "consistent_any_exact": self.consistent_any_exact,
+            "conservative_exact_presets": self.conservative_exact_presets,
+            "conservative_tolerance_score": self.conservative_tolerance_score,
+            "minimum_tolerance_score": self.minimum_tolerance_score,
+            "mean_tolerance_score": self.mean_tolerance_score,
+            "maximum_tolerance_score": self.maximum_tolerance_score,
+            "unstable_preset_count": self.unstable_preset_count,
+            "stable_preset_count": self.stable_preset_count,
+            "runs": [dict(run) for run in self.runs],
+            "created_at_utc": self.created_at_utc,
+            "cache_hit": self.cache_hit,
+            "cache_path": self.cache_path,
+        }
+
+
+class ConservativeQRVerifyScorer:
+    """Run QR-Verify repeatedly and persist one conservative raster verdict.
+
+    Cache identity is content-addressed: canonical RGB raster hash, payload
+    hash, engine version, scoring version and repetition count.  Raw decoded
+    payloads are never persisted; only their hashes and exact-match booleans
+    are retained for audit.
+    """
+
+    def __init__(
+        self,
+        decoder: QRVerifyDecoder | None = None,
+        *,
+        repetitions: int = 3,
+        cache_dir: str | Path | None = None,
+        engine_version: str | None = None,
+        implementation_sha256: str | None = None,
+        scoring_version: str = CONSERVATIVE_QR_VERIFY_SCORING_VERSION,
+    ) -> None:
+        if repetitions < 2:
+            raise ValueError("conservative QR-Verify scoring requires at least 2 repetitions")
+        self.decoder = decoder or QRVerifyDecoder()
+        self.repetitions = int(repetitions)
+        self.engine_version = str(
+            engine_version
+            or getattr(self.decoder, "engine_version", QRVerifyDecoder.engine_version)
+        )
+        self.implementation_sha256 = str(
+            implementation_sha256 or self._implementation_sha256()
+        )
+        self.scoring_version = str(scoring_version)
+        if not all(
+            (self.engine_version, self.implementation_sha256, self.scoring_version)
+        ):
+            raise ValueError(
+                "QR-Verify engine, implementation and scoring versions must be non-empty"
+            )
+        configured_cache = cache_dir
+        if configured_cache is None:
+            configured_cache = os.environ.get("PROOFTAG_QR_QR_VERIFY_CACHE_DIR")
+        self.cache_dir = Path(configured_cache) if configured_cache else None
+        self._lock = threading.Lock()
+
+    def score(
+        self,
+        image: Image.Image,
+        expected_payload: str,
+    ) -> ConservativeQRVerifyScore:
+        if not expected_payload:
+            raise ValueError("expected_payload must be non-empty")
+        image_sha256 = image_raster_sha256(image)
+        payload_sha256 = hashlib.sha256(expected_payload.encode("utf-8")).hexdigest()
+        identity = {
+            "image_sha256": image_sha256,
+            "payload_sha256": payload_sha256,
+            "engine_version": self.engine_version,
+            "implementation_sha256": self.implementation_sha256,
+            "scoring_version": self.scoring_version,
+            "repetitions": self.repetitions,
+            "preset_count": int(
+                getattr(self.decoder, "preset_count", QRVerifyDecoder.preset_count)
+            ),
+        }
+        cache_key = hashlib.sha256(
+            json.dumps(identity, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        cache_path = self._cache_path(cache_key)
+        with self._lock:
+            cached = self._read_cache(cache_path, identity, cache_key)
+            if cached is not None:
+                return cached
+
+            runs: list[dict[str, Any]] = []
+            expected_presets: tuple[str, ...] | None = None
+            exact_by_preset: dict[str, list[bool]] = defaultdict(list)
+            for repetition in range(1, self.repetitions + 1):
+                attempts = self.decoder.decode_presets(image)
+                run = self._normalize_run(
+                    attempts,
+                    expected_payload=expected_payload,
+                    repetition=repetition,
+                )
+                preset_names = tuple(item["preset"] for item in run["preset_results"])
+                if expected_presets is None:
+                    expected_presets = preset_names
+                elif preset_names != expected_presets:
+                    raise RuntimeError(
+                        "qr-verify preset order or membership changed between repetitions"
+                    )
+                for item in run["preset_results"]:
+                    exact_by_preset[item["preset"]].append(
+                        bool(item["exact_payload_match"])
+                    )
+                runs.append(run)
+
+            preset_count = len(expected_presets or ())
+            stable_exact = {
+                preset
+                for preset, values in exact_by_preset.items()
+                if len(values) == self.repetitions and all(values)
+            }
+            unstable = sum(
+                1 for values in exact_by_preset.values() if len(set(values)) > 1
+            )
+            tolerance_scores = [float(run["tolerance_score"]) for run in runs]
+            result = ConservativeQRVerifyScore(
+                image_sha256=image_sha256,
+                payload_sha256=payload_sha256,
+                cache_key=cache_key,
+                engine_version=self.engine_version,
+                implementation_sha256=self.implementation_sha256,
+                scoring_version=self.scoring_version,
+                repetitions=self.repetitions,
+                preset_count=preset_count,
+                direct_exact_all_repetitions=all(
+                    bool(run["direct_exact"]) for run in runs
+                ),
+                each_repetition_any_exact=all(
+                    bool(run["any_exact"]) for run in runs
+                ),
+                consistent_any_exact=bool(stable_exact),
+                conservative_exact_presets=len(stable_exact),
+                conservative_tolerance_score=(
+                    len(stable_exact) / preset_count if preset_count else 0.0
+                ),
+                minimum_tolerance_score=min(tolerance_scores, default=0.0),
+                mean_tolerance_score=(
+                    sum(tolerance_scores) / len(tolerance_scores)
+                    if tolerance_scores
+                    else 0.0
+                ),
+                maximum_tolerance_score=max(tolerance_scores, default=0.0),
+                unstable_preset_count=unstable,
+                stable_preset_count=preset_count - unstable,
+                runs=tuple(runs),
+                created_at_utc=datetime.now(UTC).isoformat(),
+                cache_hit=False,
+                cache_path=str(cache_path) if cache_path else None,
+            )
+            self._write_cache(cache_path, identity, result)
+            return result
+
+    def close(self) -> None:
+        self.decoder.close()
+
+    def _implementation_sha256(self) -> str:
+        """Fingerprint the executable bridge and its pinned dependency lock."""
+        digest = hashlib.sha256()
+        digest.update(self.engine_version.encode("utf-8"))
+        bridge_path = getattr(self.decoder, "bridge_path", None)
+        files: list[Path] = []
+        if bridge_path:
+            bridge = Path(bridge_path)
+            files.extend((bridge, bridge.parent / "package-lock.json"))
+        for path in files:
+            if path.is_file():
+                digest.update(path.name.encode("utf-8"))
+                digest.update(path.read_bytes())
+        return digest.hexdigest()
+
+    def _normalize_run(
+        self,
+        attempts: list[dict[str, Any]],
+        *,
+        expected_payload: str,
+        repetition: int,
+    ) -> dict[str, Any]:
+        if not isinstance(attempts, list):
+            raise RuntimeError("qr-verify attempts must be a list")
+        expected_count = int(
+            getattr(self.decoder, "preset_count", QRVerifyDecoder.preset_count)
+        )
+        if len(attempts) != expected_count:
+            raise RuntimeError(
+                f"qr-verify returned {len(attempts)} presets instead of {expected_count}"
+            )
+        preset_results: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for attempt in attempts:
+            preset = str(attempt.get("preset") or "")
+            if not preset or preset in seen:
+                raise RuntimeError("qr-verify returned an empty or duplicate preset id")
+            seen.add(preset)
+            decoded = str(attempt.get("text") or "")
+            preset_results.append(
+                {
+                    "preset": preset,
+                    "exact_payload_match": decoded == expected_payload,
+                    "decoded": bool(decoded),
+                    "decoded_sha256": (
+                        hashlib.sha256(decoded.encode("utf-8")).hexdigest()
+                        if decoded
+                        else None
+                    ),
+                    "decoder_error": (
+                        str(attempt.get("error"))[:500]
+                        if attempt.get("error")
+                        else None
+                    ),
+                    "latency_ms": float(attempt.get("latency_ms") or 0.0),
+                }
+            )
+        exact_count = sum(item["exact_payload_match"] for item in preset_results)
+        direct = next(
+            (
+                bool(item["exact_payload_match"])
+                for item in preset_results
+                if item["preset"] == "original"
+            ),
+            None,
+        )
+        if direct is None:
+            raise RuntimeError("qr-verify did not return the original preset")
+        return {
+            "repetition": repetition,
+            "direct_exact": direct,
+            "any_exact": exact_count > 0,
+            "exact_preset_count": exact_count,
+            "tolerance_score": exact_count / len(preset_results),
+            "preset_results": preset_results,
+        }
+
+    def _cache_path(self, cache_key: str) -> Path | None:
+        if self.cache_dir is None:
+            return None
+        return self.cache_dir / cache_key[:2] / f"{cache_key}.json"
+
+    def _read_cache(
+        self,
+        path: Path | None,
+        identity: dict[str, Any],
+        cache_key: str,
+    ) -> ConservativeQRVerifyScore | None:
+        if path is None or not path.is_file():
+            return None
+        try:
+            document = json.loads(path.read_text(encoding="utf-8"))
+            if document.get("identity") != identity:
+                return None
+            raw = document["result"]
+            if raw.get("cache_key") != cache_key:
+                return None
+            if any(
+                raw.get(field) != identity[field]
+                for field in (
+                    "image_sha256",
+                    "payload_sha256",
+                    "engine_version",
+                    "implementation_sha256",
+                    "scoring_version",
+                    "repetitions",
+                    "preset_count",
+                )
+            ):
+                return None
+            runs = tuple(raw["runs"])
+            if len(runs) != self.repetitions:
+                return None
+            return ConservativeQRVerifyScore(
+                image_sha256=str(raw["image_sha256"]),
+                payload_sha256=str(raw["payload_sha256"]),
+                cache_key=str(raw["cache_key"]),
+                engine_version=str(raw["engine_version"]),
+                implementation_sha256=str(raw["implementation_sha256"]),
+                scoring_version=str(raw["scoring_version"]),
+                repetitions=int(raw["repetitions"]),
+                preset_count=int(raw["preset_count"]),
+                direct_exact_all_repetitions=bool(
+                    raw["direct_exact_all_repetitions"]
+                ),
+                each_repetition_any_exact=bool(raw["each_repetition_any_exact"]),
+                consistent_any_exact=bool(raw["consistent_any_exact"]),
+                conservative_exact_presets=int(raw["conservative_exact_presets"]),
+                conservative_tolerance_score=float(
+                    raw["conservative_tolerance_score"]
+                ),
+                minimum_tolerance_score=float(raw["minimum_tolerance_score"]),
+                mean_tolerance_score=float(raw["mean_tolerance_score"]),
+                maximum_tolerance_score=float(raw["maximum_tolerance_score"]),
+                unstable_preset_count=int(raw["unstable_preset_count"]),
+                stable_preset_count=int(raw["stable_preset_count"]),
+                runs=runs,
+                created_at_utc=str(raw["created_at_utc"]),
+                cache_hit=True,
+                cache_path=str(path),
+            )
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError, OSError):
+            return None
+
+    def _write_cache(
+        self,
+        path: Path | None,
+        identity: dict[str, Any],
+        result: ConservativeQRVerifyScore,
+    ) -> None:
+        if path is None:
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        document = {
+            "identity": identity,
+            "result": result.to_dict(),
+        }
+        # Keep the atomic sibling name short enough for Windows MAX_PATH even
+        # when pytest or a notebook uses a deeply nested cache directory.
+        temporary = path.with_name(f".tmp-{uuid.uuid4().hex[:12]}")
+        temporary.write_text(
+            json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        temporary.replace(path)
 
 
 def available_decoders() -> list[Decoder]:

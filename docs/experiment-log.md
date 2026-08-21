@@ -1498,3 +1498,24 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   chaque éventuel refus au lieu de produire seulement un compteur.
 - **Notebook :** `24_e029_srmpgd_exact_raster_recovery.ipynb`.
 - **Protocole :** `docs/e029-srmpgd-exact-raster-recovery.md`.
+
+## Résultats E029 v4 et passage hors GPU à E030 — 20 août 2026
+
+- **E029 v4 complet :** 180/180 états, 120/120 appariements exacts et 54/54 no-op SR-MPGD
+  identiques pixel pour pixel à leur Stage 2.
+- **Résultat fonctionnel :** Stage 2 fixe franchit la porte dans 27/30 contextes contre 23/30 pour
+  le conseiller. SR-MPGD conserve 54 fois l'itération zéro, modifie six rasters et ne sauve aucune
+  porte.
+- **Résultat visuel :** les anciens artefacts SR-MPGD ont disparu, mais Stage 2 rend encore la
+  grille très visible et perd parfois le sujet du prompt. SR-MPGD n'apporte aucun gain visuel
+  discernable.
+- **Défaut de mesure :** onze groupes de rasters identiques ont reçu plusieurs scores QR-Verify.
+  Une mesure unique ne peut plus servir de vérité d'entraînement ou de décision près du seuil.
+- **Décision :** aucune nouvelle campagne GPU et aucun nouveau conseiller avant stabilisation de
+  QR-Verify. Stage 1 et SR-MPGD sont retirés de la cascade de livraison par défaut.
+- **E030 :** cinq répétitions par raster, intersection des 37 presets, cache par contenu, puis
+  replay Stage 2 fixe → Stage 2 alternatif → nouvelle seed. Le notebook est entièrement CPU,
+  reprend après coupure et n'altère ni vLLM ni l'API.
+- **Résultats verrouillés :** `docs/e029-results-2026-08-20.md`.
+- **Notebook :** `25_e030_reliable_qrverify_cascade.ipynb`.
+- **Protocole :** `docs/e030-reliable-qrverify-cascade.md`.

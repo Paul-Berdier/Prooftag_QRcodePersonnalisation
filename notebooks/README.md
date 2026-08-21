@@ -304,6 +304,20 @@ chaque no-op et son Stage 2 parent.
 Les résultats sont repris sous `/data/e029-srmpgd-raster` et documentés dans
 [`../docs/e029-srmpgd-exact-raster-recovery.md`](../docs/e029-srmpgd-exact-raster-recovery.md).
 
+## E030 — QR-Verify répétable, sans génération
+
+E030 reprend les 180 images E029 déjà présentes sur le PVC, déduplique leurs rasters, exécute cinq
+fois les 37 presets QR-Verify et rejoue quatre cascades Stage 2. Il ne charge aucun modèle de
+diffusion, ne contacte pas l'API et ne modifie aucune charge GPU.
+
+```powershell
+.\scripts\notebook-remote.ps1 -Notebook 25_e030_reliable_qrverify_cascade.ipynb
+```
+
+Le cache et les résultats sont reprenables sous `/data/e030-reliable-qrverify`. Stage 1 et
+SR-MPGD sont explicitement inéligibles à la livraison. Voir
+[`../docs/e030-reliable-qrverify-cascade.md`](../docs/e030-reliable-qrverify-cascade.md).
+
 Pour remplir ce dataset pendant une absence sans laisser Jupyter ouvert, E026W lance un Job
 Kubernetes CPU reprenable et réserve la RTX à l'API. Le plan borné contient 300 prompts, 16
 recettes, trois seeds et jusqu'à 14 400 essais. Les commandes de démarrage, suivi, reprise et

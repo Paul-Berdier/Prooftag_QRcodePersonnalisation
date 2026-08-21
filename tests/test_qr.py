@@ -17,13 +17,16 @@ from prooftag_qr.qr import (
     repair_qr_modules,
     restore_quiet_zone,
 )
+from prooftag_qr.quality import image_sha256
 from prooftag_qr.validation import (
+    ConservativeQRVerifyScorer,
     Decoder,
     OpenCVDecoder,
     QRValidator,
     QRVerifyDecoder,
     WeChatQRCodeDecoder,
     compare_validation_to_reference,
+    image_raster_sha256,
 )
 
 
@@ -115,6 +118,151 @@ def test_qr_verify_rejects_a_decoded_but_wrong_payload():
     assert len(records) == 37
     assert all(record.success for record in records)
     assert not any(record.exact_payload_match for record in records)
+
+
+class _VaryingQRVerifyDecoder(QRVerifyDecoder):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def decode_presets(self, image: Image.Image):
+        del image
+        exact_by_call = [
+            {"original", "preset_1", "preset_2"},
+            {"original", "preset_1"},
+            {"preset_1", "preset_2"},
+        ]
+        exact = exact_by_call[self.calls % len(exact_by_call)]
+        self.calls += 1
+        return [
+            {
+                "preset": "original" if index == 0 else f"preset_{index}",
+                "text": (
+                    "https://ptag.io/t/repeated"
+                    if ("original" if index == 0 else f"preset_{index}") in exact
+                    else ""
+                ),
+                "latency_ms": 0.1,
+            }
+            for index in range(37)
+        ]
+
+
+def test_conservative_cache_uses_the_canonical_provenance_raster_hash():
+    image = Image.new("RGB", (65, 63), (12, 34, 56))
+
+    assert image_raster_sha256(image) == image_sha256(image)
+
+
+def test_conservative_qr_verify_intersects_repeated_preset_results(tmp_path):
+    decoder = _VaryingQRVerifyDecoder()
+    scorer = ConservativeQRVerifyScorer(
+        decoder,
+        repetitions=3,
+        cache_dir=tmp_path,
+    )
+
+    score = scorer.score(
+        Image.new("RGB", (64, 64), "white"),
+        "https://ptag.io/t/repeated",
+    )
+
+    assert decoder.calls == 3
+    assert [run["exact_preset_count"] for run in score.runs] == [3, 2, 2]
+    assert score.direct_exact_all_repetitions is False
+    assert score.each_repetition_any_exact is True
+    assert score.consistent_any_exact is True
+    assert score.conservative_exact_presets == 1
+    assert score.conservative_tolerance_score == pytest.approx(1 / 37)
+    assert score.minimum_tolerance_score == pytest.approx(2 / 37)
+    assert score.mean_tolerance_score == pytest.approx(7 / (3 * 37))
+    assert score.maximum_tolerance_score == pytest.approx(3 / 37)
+    assert score.unstable_preset_count == 2
+    assert score.stable_preset_count == 35
+    assert score.cache_hit is False
+    assert score.cache_path is not None
+    assert Path(score.cache_path).is_file()
+    assert "https://ptag.io/t/repeated" not in Path(score.cache_path).read_text(
+        encoding="utf-8"
+    )
+    assert all(
+        "text" not in result
+        for run in score.runs
+        for result in run["preset_results"]
+    )
+
+
+class _CacheMustPreventDecode(QRVerifyDecoder):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def decode_presets(self, image: Image.Image):
+        del image
+        self.calls += 1
+        raise AssertionError("identical raster should have been served from cache")
+
+
+def test_conservative_qr_verify_cache_is_reused_by_raster_payload_and_version(tmp_path):
+    image = Image.new("RGB", (64, 64), "white")
+    payload = "https://ptag.io/t/repeated"
+    first = ConservativeQRVerifyScorer(
+        _VaryingQRVerifyDecoder(),
+        repetitions=3,
+        cache_dir=tmp_path,
+    ).score(image, payload)
+    decoder = _CacheMustPreventDecode()
+    second = ConservativeQRVerifyScorer(
+        decoder,
+        repetitions=3,
+        cache_dir=tmp_path,
+    ).score(image.copy(), payload)
+
+    assert decoder.calls == 0
+    assert second.cache_hit is True
+    assert second.cache_key == first.cache_key
+    assert second.image_sha256 == first.image_sha256
+    assert second.payload_sha256 == first.payload_sha256
+    assert second.conservative_tolerance_score == first.conservative_tolerance_score
+    assert second.runs == first.runs
+
+
+def test_conservative_qr_verify_cache_key_changes_with_raster_payload_and_version(tmp_path):
+    decoder = _VaryingQRVerifyDecoder()
+    image = Image.new("RGB", (64, 64), "white")
+    payload = "https://ptag.io/t/repeated"
+    first = ConservativeQRVerifyScorer(
+        decoder,
+        repetitions=3,
+        cache_dir=tmp_path,
+        engine_version="qr-verify@test-a",
+    ).score(image, payload)
+    second = ConservativeQRVerifyScorer(
+        decoder,
+        repetitions=3,
+        cache_dir=tmp_path,
+        engine_version="qr-verify@test-b",
+    ).score(image, payload)
+    changed_payload = ConservativeQRVerifyScorer(
+        decoder,
+        repetitions=3,
+        cache_dir=tmp_path,
+        engine_version="qr-verify@test-a",
+    ).score(image, f"{payload}-other")
+    changed_raster = ConservativeQRVerifyScorer(
+        decoder,
+        repetitions=3,
+        cache_dir=tmp_path,
+        engine_version="qr-verify@test-a",
+    ).score(Image.new("RGB", (64, 64), "black"), payload)
+
+    assert decoder.calls == 12
+    assert len(
+        {
+            first.cache_key,
+            second.cache_key,
+            changed_payload.cache_key,
+            changed_raster.cache_key,
+        }
+    ) == 4
 
 
 def test_diffqrcoder_reference_uses_the_public_integer_geometry():

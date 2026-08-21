@@ -110,7 +110,12 @@ persistée sous `/data/e029-srmpgd-raster/<plan-id>` et l'archive finale est cop
 
 ## Décision après E029
 
-On ne réentraîne pas le conseiller SR-MPGD sur les libellés E028 corrompus. Si l'invariant E029
-passe, ses données et les futures campagnes corrigées pourront remplacer progressivement ces
-observations. La campagne large ne sera relancée qu'après examen du taux de porte gagné/perdu et
-des planches visuelles E029.
+E029 v4 a passé ses invariants sur 180/180 états, mais SR-MPGD n'a sauvé aucune porte et le
+conseiller a obtenu 23/30 livrables logiciels contre 27/30 pour la recette fixe. On ne réentraîne
+pas le conseiller SR-MPGD sur les libellés E028 corrompus et on ne relance pas cette campagne sous
+une autre étiquette. Les chiffres, anomalies et décisions verrouillées sont consignés dans
+[`e029-results-2026-08-20.md`](e029-results-2026-08-20.md).
+
+La prochaine étape E030 est hors GPU : répétition et cache QR-Verify par hash de raster, rescoring
+des 99 images uniques, puis comparaison d'un second Stage 2 comme secours à la place du SR-MPGD
+systématique.

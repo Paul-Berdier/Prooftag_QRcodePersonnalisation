@@ -75,8 +75,15 @@ image_revision="$(
   docker image inspect "$image" \
     --format '{{index .Config.Labels "org.opencontainers.image.revision"}}'
 )"
+image_digest="$(
+  docker image inspect "$image" --format '{{.Id}}'
+)"
 if [[ "$image_revision" != "$git_sha" ]]; then
   echo "Révision de l'image inattendue : $image_revision != $git_sha" >&2
+  exit 1
+fi
+if [[ ! "$image_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+  echo "Digest de l'image inattendu : $image_digest" >&2
   exit 1
 fi
 echo "Notebook vérifié pendant le build : $image_notebook"
@@ -85,6 +92,11 @@ docker save "$image" | sudo k3s ctr images import -
 
 kubectl -n "$namespace" set image "deployment/${deployment}" \
   "${container}=${image}"
+kubectl -n "$namespace" set env "deployment/${deployment}" \
+  --containers="$container" \
+  "PROOFTAG_GIT_COMMIT=${git_sha}" \
+  "PROOFTAG_RUNTIME_IMAGE=${image}" \
+  "PROOFTAG_RUNTIME_IMAGE_DIGEST=${image_digest}"
 kubectl -n "$namespace" annotate "deployment/${deployment}" \
   "prooftag.io/git-revision=${git_sha}" --overwrite
 
@@ -92,8 +104,28 @@ deployed_image="$(
   kubectl -n "$namespace" get "deployment/${deployment}" \
     -o "jsonpath={.spec.template.spec.containers[?(@.name=='${container}')].image}"
 )"
-if [[ "$deployed_image" != "$image" ]]; then
-  echo "Image du Deployment inattendue : $deployed_image != $image" >&2
+deployed_commit="$(
+  kubectl -n "$namespace" get "deployment/${deployment}" \
+    -o "jsonpath={.spec.template.spec.containers[?(@.name=='${container}')].env[?(@.name=='PROOFTAG_GIT_COMMIT')].value}"
+)"
+deployed_runtime_image="$(
+  kubectl -n "$namespace" get "deployment/${deployment}" \
+    -o "jsonpath={.spec.template.spec.containers[?(@.name=='${container}')].env[?(@.name=='PROOFTAG_RUNTIME_IMAGE')].value}"
+)"
+deployed_runtime_digest="$(
+  kubectl -n "$namespace" get "deployment/${deployment}" \
+    -o "jsonpath={.spec.template.spec.containers[?(@.name=='${container}')].env[?(@.name=='PROOFTAG_RUNTIME_IMAGE_DIGEST')].value}"
+)"
+if [[ "$deployed_image" != "$image" || "$deployed_runtime_image" != "$image" ]]; then
+  echo "Image du Deployment inattendue : $deployed_image / $deployed_runtime_image != $image" >&2
+  exit 1
+fi
+if [[ "$deployed_runtime_digest" != "$image_digest" ]]; then
+  echo "Digest du Deployment inattendu : $deployed_runtime_digest != $image_digest" >&2
+  exit 1
+fi
+if [[ "$deployed_commit" != "$git_sha" ]]; then
+  echo "Commit du Deployment inattendu : $deployed_commit != $git_sha" >&2
   exit 1
 fi
 
@@ -109,7 +141,7 @@ if [[ "${replicas:-0}" -gt 0 ]]; then
   echo "Notebook vérifié dans le pod prêt : $pod:$image_notebook ($image)"
 fi
 
-echo "Image déployée : $image"
+echo "Image déployée : $image ($image_digest)"
 echo "Ouvrir depuis le PC :"
 if [[ "${replicas:-0}" -gt 0 ]]; then
   echo ".\\scripts\\notebook-remote.ps1 -Reset -Notebook $(basename "$expected_notebook")"

@@ -748,6 +748,7 @@ def test_deployment_shell_entrypoints_have_no_utf8_bom():
         Path("scripts/deploy-e027-notebook.sh"),
         Path("scripts/deploy-e028-notebook.sh"),
         Path("scripts/deploy-e029-notebook.sh"),
+        Path("scripts/deploy-e030-notebook.sh"),
     ]
     for path in paths:
         assert not path.read_bytes().startswith(b"\xef\xbb\xbf"), path
@@ -892,3 +893,77 @@ def test_e029_notebook_proves_srmpgd_iteration_zero_keeps_exact_stage2_raster():
     start = deployer.index('bash scripts/notebook-server.sh start "$notebook"')
     reset = deployer.index('bash scripts/notebook-server.sh reset "$notebook"')
     assert app_image < notebook_image < min(start, reset)
+
+
+def test_e030_notebook_rescores_unique_e029_rasters_without_gpu_generation():
+    path = Path("notebooks/25_e030_reliable_qrverify_cascade.ipynb")
+    source = path.read_text(encoding="utf-8")
+    builder_path = Path("scripts/build_e030_reliable_qrverify_notebook.py")
+    builder = builder_path.read_text(encoding="utf-8")
+    launcher = Path("scripts/notebook-remote.ps1").read_text(encoding="utf-8")
+    server = Path("scripts/notebook-server.sh").read_text(encoding="utf-8")
+    deployer = Path("scripts/deploy-e030-notebook.sh").read_text(encoding="utf-8")
+    image_deployer = Path("scripts/deploy-notebook-image.sh").read_text(
+        encoding="utf-8"
+    )
+    dockerfile = Path("Dockerfile.notebook").read_text(encoding="utf-8")
+
+    assert "e030-reliable-qrverify-cascade-v1" in source
+    assert "discover_e029_export_directory" in source
+    assert "PERSISTENT_E029_ROOTS" in source
+    assert "discover_e029_archive" in source
+    assert "SOURCE_ARCHIVE" in source
+    assert "selective_extract_e029_archive" in source
+    assert "validate_e029_export" in source
+    assert "validate_rescore_journal_rows" in source
+    assert "expected_raster_sha256_by_source" in source
+    assert "image_raster_sha256" in source
+    assert "EXPECTED_PAYLOAD = os.environ.get" in source
+    assert "manifest_payload_length" in source
+    assert "ConservativeQRVerifyScorer" in source
+    assert "QR_VERIFY_REPETITIONS = 5" in source
+    assert "implementation_sha256" in source
+    assert "def strict_bool(value)" in source
+    assert "fixed_control_bool" in source
+    assert "fixed_control.astype(bool)" not in source
+    assert "e030-rescore-results.jsonl" in source
+    assert "os.fsync" in source
+    assert "fixed_advisor_then_seed_retry" in source
+    assert "select_stage2_cascade" in source
+    assert "ConservativeDeliveryGate" in source
+    assert "stage1_was_delivered" in source
+    assert "srmpgd_was_requested" in source
+    assert "e030-unique-raster-rescore.csv" in source
+    assert "e030-policy-summary.csv" in source
+    assert "e030-cascade-winners.png" in source
+    assert "PROOFTAG_GIT_COMMIT" in source
+    assert "PROOFTAG_RUNTIME_IMAGE" in source
+    assert "bridge_sha256" in source
+    assert "artifact_checksums" in source
+    assert "archive_sha256" in source
+    assert "extractall" not in source
+    assert "AdvisorInferenceRunner" not in source
+    assert "COLLECTION_API_URL" not in source
+    assert "torch.cuda" not in source
+    assert path.name in launcher
+    assert path.name in server
+    assert "offline_mode=1" in server
+    assert 'desired_mode="offline-cpu"' in server
+    assert "bash scripts/deploy-app-image.sh" not in deployer
+    notebook_image = deployer.index(
+        'bash scripts/deploy-notebook-image.sh "notebooks/${notebook}"'
+    )
+    start = deployer.index('bash scripts/notebook-server.sh start "$notebook"')
+    reset = deployer.index('bash scripts/notebook-server.sh reset "$notebook"')
+    assert notebook_image < min(start, reset)
+    assert "PROOFTAG_GIT_COMMIT=${git_sha}" in image_deployer
+    assert "PROOFTAG_RUNTIME_IMAGE=${image}" in image_deployer
+    assert "PROOFTAG_RUNTIME_IMAGE_DIGEST=${image_digest}" in image_deployer
+    assert "PROOFTAG_RUNTIME_IMAGE_DIGEST" in source
+    assert "FROM node:22.15.0-bookworm-slim AS qr-verify-builder" in dockerfile
+    assert "assert len(a)==37" in dockerfile
+
+    before = path.read_bytes()
+    namespace = {"__name__": "__main__", "__file__": str(builder_path)}
+    exec(compile(builder, str(builder_path), "exec"), namespace)
+    assert path.read_bytes() == before

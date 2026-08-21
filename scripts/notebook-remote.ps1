@@ -25,7 +25,8 @@ param(
         "21_e026_prompt_parameter_advisor.ipynb",
         "22_e027_srmpgd_policy_holdout.ipynb",
         "23_e028_hierarchical_prompt_advisor.ipynb",
-        "24_e029_srmpgd_exact_raster_recovery.ipynb"
+        "24_e029_srmpgd_exact_raster_recovery.ipynb",
+        "25_e030_reliable_qrverify_cascade.ipynb"
     )]
     [string]$Notebook = "02_generate_live_on_gpu.ipynb",
     [switch]$Reset,
@@ -139,6 +140,9 @@ try {
                 "24_e029_srmpgd_exact_raster_recovery.ipynb"
             )) {
                 Write-Host "Mode campagne : Jupyter reste sur CPU et l'API conserve la RTX pour generer les donnees."
+            }
+            elseif ($Notebook -eq "25_e030_reliable_qrverify_cascade.ipynb") {
+                Write-Host "Mode analyse hors ligne : CPU uniquement, aucune generation et aucune charge GPU modifiee."
             }
             else {
                 Write-Host "Mode generation directe : ce notebook utilise la RTX."

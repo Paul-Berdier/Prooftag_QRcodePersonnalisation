@@ -14,9 +14,14 @@ if [[ ! "$expected_notebook" =~ ^[A-Za-z0-9_.-]+\.ipynb$ ]]; then
 fi
 expected_notebook_path="/workspace/notebooks/${expected_notebook}"
 advisor_mode=0
+offline_mode=0
 case "$expected_notebook" in
   21_e026_prompt_parameter_advisor.ipynb|22_e027_srmpgd_policy_holdout.ipynb|23_e028_hierarchical_prompt_advisor.ipynb|24_e029_srmpgd_exact_raster_recovery.ipynb)
     advisor_mode=1
+    ;;
+  25_e030_reliable_qrverify_cascade.ipynb)
+    advisor_mode=1
+    offline_mode=1
     ;;
 esac
 
@@ -30,7 +35,9 @@ wait_for_pods_to_stop() {
 
 configure_notebook_runtime() {
   local patch
-  if [[ "$advisor_mode" -eq 1 ]]; then
+  if [[ "$offline_mode" -eq 1 ]]; then
+    patch='{"spec":{"template":{"metadata":{"annotations":{"prooftag.io/notebook-mode":"offline-cpu"}},"spec":{"runtimeClassName":null,"containers":[{"name":"notebook","resources":{"$patch":"replace","requests":{"cpu":"1","memory":"2Gi"},"limits":{"cpu":"4","memory":"8Gi"}}}]}}}}'
+  elif [[ "$advisor_mode" -eq 1 ]]; then
     patch='{"spec":{"template":{"metadata":{"annotations":{"prooftag.io/notebook-mode":"advisor-cpu"}},"spec":{"runtimeClassName":null,"containers":[{"name":"notebook","resources":{"$patch":"replace","requests":{"cpu":"1","memory":"2Gi"},"limits":{"cpu":"4","memory":"8Gi"}}}]}}}}'
   else
     patch='{"spec":{"template":{"metadata":{"annotations":{"prooftag.io/notebook-mode":"generation-gpu"}},"spec":{"runtimeClassName":"nvidia","containers":[{"name":"notebook","resources":{"$patch":"replace","requests":{"cpu":"2","memory":"8Gi","nvidia.com/gpu":"1"},"limits":{"cpu":"12","memory":"32Gi","nvidia.com/gpu":"1"}}}]}}}}'
@@ -40,6 +47,10 @@ configure_notebook_runtime() {
 }
 
 prepare_runtime() {
+  if [[ "$offline_mode" -eq 1 ]]; then
+    configure_notebook_runtime
+    return
+  fi
   kubectl scale deployment/vllm -n vllm --replicas=0 >/dev/null
   wait_for_pods_to_stop vllm vllm
   configure_notebook_runtime
@@ -125,7 +136,9 @@ verify_running_notebook() {
       -o jsonpath='{.spec.containers[?(@.name=="notebook")].image}'
   )"
   desired_mode="generation-gpu"
-  if [[ "$advisor_mode" -eq 1 ]]; then
+  if [[ "$offline_mode" -eq 1 ]]; then
+    desired_mode="offline-cpu"
+  elif [[ "$advisor_mode" -eq 1 ]]; then
     desired_mode="advisor-cpu"
   fi
   runtime_mode="$(

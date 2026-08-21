@@ -30,6 +30,9 @@ DiffQRCoder et sur l’algorithme décrit dans son papier :
   forcé avec QR-Verify prioritaire ;
 - E028, une cascade hiérarchique conseillée par prompt où Stage 1 n'est jamais livrable et où
   chaque Stage 2/SR-MPGD réutilise exactement son parent ;
+- E029 v4, qui a clos les défauts d'appariement et montré que SR-MPGD ne sauvait aucune porte ;
+- E030, un rescoring CPU répétable qui compare Stage 2 fixe, alternatif et nouvelles seeds sans
+  relancer la diffusion ;
 - PostgreSQL en production, avec migrations Alembic et sauvegardes quotidiennes ;
 - SQLite pour les tests et le développement local ;
 - une base relationnelle contenant runs, tentatives, validations et qualité ;
@@ -154,6 +157,13 @@ tout le latent Stage 2 et pouvait changer le raster. E029 impose une identité p
 no-op, lie chaque campagne distante à son `plan_id`, refuse toute régénération silencieuse d'un
 Stage 1 manquant et le vérifie sur 180 états appariés avant tout réentraînement SR-MPGD. Protocole :
 [`docs/e029-srmpgd-exact-raster-recovery.md`](docs/e029-srmpgd-exact-raster-recovery.md).
+
+E029 a finalement montré que Stage 2 fixe livre 27/30 contextes logiciels, contre 23/30 pour le
+conseiller, et que SR-MPGD ne sauve aucune porte. E030 ne relance donc aucune diffusion : il
+rescanne cinq fois chaque raster E029 unique, stabilise QR-Verify par intersection des presets et
+compare une cascade Stage 2 fixe → Stage 2 alternatif → nouvelle seed. Résultats E029 :
+[`docs/e029-results-2026-08-20.md`](docs/e029-results-2026-08-20.md). Protocole E030 :
+[`docs/e030-reliable-qrverify-cascade.md`](docs/e030-reliable-qrverify-cascade.md).
 
 ## Déploiement
 
