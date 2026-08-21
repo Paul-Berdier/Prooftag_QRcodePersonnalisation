@@ -150,6 +150,22 @@ def test_gpu_dependencies_are_pinned_to_public_diffqrcoder():
     assert 'PROOFTAG_QR_DIFFQRCODER_UPSTREAM_ENABLED: "true"' in manifest
     assert "monster-labs/control_v1p_sd15_qrcode_monster" in manifest
     assert "PROOFTAG_QR_CONTROLNET_MODEL_SUBFOLDER: v2" in manifest
+    assert (
+        "PROOFTAG_QR_BASE_MODEL_REVISION: "
+        "f914b3679760c1c3baea6bb1815867bf1c9c92a4"
+    ) in manifest
+    assert (
+        "PROOFTAG_QR_BASE_MODEL_CONFIG_REVISION: "
+        "451f4fe16113bff5a5d2269ed5ad43b0592e9a14"
+    ) in manifest
+    assert (
+        "PROOFTAG_QR_BASE_MODEL_CONFIG_ID: "
+        "stable-diffusion-v1-5/stable-diffusion-v1-5"
+    ) in manifest
+    assert (
+        "PROOFTAG_QR_CONTROLNET_MODEL_REVISION: "
+        "560fb7b15d0badb409f8cd578a2bfe63bd4b8046"
+    ) in manifest
     assert 'PROOFTAG_QR_DIFFQRCODER_QR_VERSION: "3"' in manifest
     assert 'PROOFTAG_QR_DIFFQRCODER_QR_MASK_PATTERN: "4"' in manifest
     assert 'PROOFTAG_QR_DIFFQRCODER_QR_MODULE_SIZE: "20"' in manifest
@@ -177,6 +193,85 @@ def test_single_file_base_model_detection_supports_cetus_safetensors():
     )
     assert _is_single_file_base_model("C:/models/model.ckpt?download=true")
     assert not _is_single_file_base_model("stable-diffusion-v1-5/stable-diffusion-v1-5")
+
+
+def test_controlnet_loader_pins_controlnet_and_single_file_config_revisions(
+    monkeypatch,
+):
+    observed = {}
+
+    class FakeControlNet:
+        @classmethod
+        def from_pretrained(cls, model_id, **kwargs):
+            observed["controlnet"] = (model_id, kwargs)
+            return object()
+
+    class FakePipeline:
+        @classmethod
+        def from_single_file(cls, model_id, **kwargs):
+            observed["pipeline"] = (model_id, kwargs)
+            return SimpleNamespace(
+                scheduler=SimpleNamespace(config={}),
+                set_progress_bar_config=lambda **_: None,
+                to=lambda *_: None,
+            )
+
+    class FakeScheduler:
+        @classmethod
+        def from_config(cls, config):
+            return SimpleNamespace(config=config)
+
+    fake_torch = SimpleNamespace(
+        cuda=SimpleNamespace(is_available=lambda: True),
+        float16="float16",
+    )
+    fake_diffusers = SimpleNamespace(
+        ControlNetModel=FakeControlNet,
+        DDIMScheduler=FakeScheduler,
+        DPMSolverMultistepScheduler=FakeScheduler,
+        StableDiffusionControlNetImg2ImgPipeline=FakePipeline,
+        StableDiffusionControlNetPipeline=FakePipeline,
+    )
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "diffusers", fake_diffusers)
+    monkeypatch.setitem(
+        sys.modules,
+        "huggingface_hub",
+        SimpleNamespace(
+            hf_hub_download=lambda **kwargs: observed.setdefault(
+                "checkpoint_download", kwargs
+            )
+            and "C:/cache/model.safetensors",
+            snapshot_download=lambda **kwargs: observed.setdefault(
+                "config_download", kwargs
+            )
+            and "C:/cache/sd15-config",
+        ),
+    )
+    settings = Settings(
+        device="cuda",
+        base_model_id=(
+            "https://huggingface.co/example/model/resolve/main/model.safetensors"
+        ),
+        base_model_revision="base-revision",
+        base_model_config_revision="config-revision",
+        controlnet_model_id="example/controlnet",
+        controlnet_model_revision="controlnet-revision",
+    )
+
+    backend = ControlNetBackend(settings)
+    backend._load()
+
+    assert observed["controlnet"][1]["revision"] == "controlnet-revision"
+    assert observed["checkpoint_download"]["revision"] == "base-revision"
+    assert observed["config_download"]["revision"] == "config-revision"
+    assert observed["pipeline"][0] == "C:/cache/model.safetensors"
+    assert observed["pipeline"][1]["config"] == "C:/cache/sd15-config"
+    assert "revision" not in observed["pipeline"][1]
+    assert backend.provenance()["base_model_revision"] == "base-revision"
+    assert backend.provenance()["controlnet_model_revision"] == (
+        "controlnet-revision"
+    )
 
 
 def test_guided_rediffusion_rejects_an_excessive_scheduler():

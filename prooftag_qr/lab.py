@@ -18,7 +18,11 @@ from .backends import build_backends
 from .config import Settings
 from .domain import RunRecord
 from .lab_repository import LabRepository
-from .quality_scoring import CLIPQualityScorer
+from .quality_scoring import (
+    CLIPQualityScorer,
+    QualityProvenanceError,
+    quality_scorer_from_settings,
+)
 from .repository import RunRepository
 from .schemas import GenerationRequest, LabCampaignCreate, LabMethod
 from .service import GenerationService
@@ -28,12 +32,17 @@ logger = logging.getLogger(__name__)
 
 DIFFQRCODER_BASE_MODEL = (
     "https://huggingface.co/fp16-guy/Cetus-Mix_Whalefall_fp16_cleaned/"
-    "blob/main/cetusMix_Whalefall2_fp16.safetensors"
+    "resolve/f914b3679760c1c3baea6bb1815867bf1c9c92a4/"
+    "cetusMix_Whalefall2_fp16.safetensors"
 )
 DIFFQRCODER_MODEL_SETTINGS = {
     "base_model_id": DIFFQRCODER_BASE_MODEL,
+    "base_model_revision": "f914b3679760c1c3baea6bb1815867bf1c9c92a4",
+    "base_model_config_id": "stable-diffusion-v1-5/stable-diffusion-v1-5",
+    "base_model_config_revision": "451f4fe16113bff5a5d2269ed5ad43b0592e9a14",
     "controlnet_model_id": "monster-labs/control_v1p_sd15_qrcode_monster",
     "controlnet_model_subfolder": "v2",
+    "controlnet_model_revision": "560fb7b15d0badb409f8cd578a2bfe63bd4b8046",
     "controlnet_conditioning_profile": "binary",
     "controlnet_pipeline_mode": "text2img",
     "diffqrcoder_upstream_enabled": True,
@@ -52,8 +61,12 @@ GENERATION_KEYS = {
 }
 MODEL_SETTING_KEYS = {
     "base_model_id",
+    "base_model_revision",
+    "base_model_config_id",
+    "base_model_config_revision",
     "controlnet_model_id",
     "controlnet_model_subfolder",
+    "controlnet_model_revision",
     "controlnet_conditioning_profile",
     "controlnet_pipeline_mode",
     "diffqrcoder_upstream_enabled",
@@ -785,6 +798,16 @@ class LabService:
         self._lock = threading.RLock()
         self._quality_scorer: CLIPQualityScorer | None = None
 
+    def quality_scoring_provenance(self) -> dict[str, Any]:
+        scorer = self._quality_scorer
+        if scorer is None:
+            scorer = quality_scorer_from_settings(
+                self.base_settings,
+                device="cpu",
+                scorer_class=CLIPQualityScorer,
+            )
+        return scorer.provenance()
+
     def start(self) -> None:
         self.lab_repository.mark_running_interrupted()
 
@@ -1058,21 +1081,61 @@ class LabService:
         started = time.perf_counter()
         try:
             if self._quality_scorer is None:
-                self._quality_scorer = CLIPQualityScorer(
-                    self.base_settings.model_cache_dir,
+                self._quality_scorer = quality_scorer_from_settings(
+                    self.base_settings,
                     device="cpu",
-                    hps_enabled=self.base_settings.lab_hps_scoring_enabled,
+                    scorer_class=CLIPQualityScorer,
                 )
             image = self.artifact_store.load_image(run.image_path)
             scores = asdict(self._quality_scorer.score(image, prompt))
+            provenance = self._quality_scorer.provenance()
+            clip_provenance = provenance["clip"]
+            aesthetic_provenance = provenance["clip_aesthetic"]
+            hps_provenance = provenance["hpsv2_1"]
+            if clip_provenance["revision_verified"] is not True:
+                raise QualityProvenanceError("CLIP effective revision was not verified")
+            if aesthetic_provenance["sha256_verified"] is not True:
+                raise QualityProvenanceError("aesthetic weights SHA-256 was not verified")
+            if self.base_settings.lab_hps_scoring_enabled and (
+                hps_provenance["package_verified"] is not True
+                or hps_provenance["checkpoint_verified"] is not True
+            ):
+                raise QualityProvenanceError("HPS package/checkpoint was not verified")
             run.quality_metrics.update(
                 {name: value for name, value in scores.items() if value is not None}
             )
+            run.provenance.update(
+                {
+                    "quality_clip_model_id": str(clip_provenance["model_id"]),
+                    "quality_clip_model_revision": str(
+                        clip_provenance["effective_revision"]
+                    ),
+                    "quality_aesthetic_weights_sha256": str(
+                        aesthetic_provenance["effective_sha256"]
+                    ),
+                    "quality_hps_package_version": str(
+                        hps_provenance["effective_package_version"] or "disabled"
+                    ),
+                    "quality_hps_source_revision": str(
+                        hps_provenance["effective_source_revision"] or "disabled"
+                    ),
+                    "quality_hps_checkpoint_revision": str(
+                        hps_provenance["requested_checkpoint_revision"]
+                    ),
+                    "quality_hps_checkpoint_sha256": str(
+                        hps_provenance["effective_checkpoint_sha256"] or "disabled"
+                    ),
+                }
+            )
             self.run_repository.save(run)
             metrics.LAB_QUALITY_SCORES.labels("success").inc()
-        except Exception:
+        except Exception as exc:
             metrics.LAB_QUALITY_SCORES.labels("error").inc()
             logger.exception("lab_quality_scoring_failed", extra={"run_id": run.id})
+            if isinstance(exc, QualityProvenanceError) or (
+                self.base_settings.lab_quality_scoring_fail_closed
+            ):
+                raise
         finally:
             metrics.LAB_QUALITY_SCORE_DURATION.observe(time.perf_counter() - started)
 

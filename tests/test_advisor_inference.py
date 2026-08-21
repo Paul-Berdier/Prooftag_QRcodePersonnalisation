@@ -20,6 +20,7 @@ from prooftag_qr.advisor_inference import (
     summarize_advisor_inference_results,
 )
 from prooftag_qr.parameter_advisor import ParameterRecommendation, RecipeCandidate
+from prooftag_qr.policy import ConservativeDeliveryGate, assess_stage2_candidate
 
 
 def _candidate(identifier: str, index: int) -> RecipeCandidate:
@@ -326,7 +327,11 @@ def test_inference_runner_resumes_without_resubmitting_completed_campaign(tmp_pa
         if method == "POST":
             return {"id": f"campaign-{len([item for item in calls if item[0] == 'POST'])}"}
         if path.endswith("/results.csv"):
-            return b"trial_id,prompt_id,method_id,status\n1,p,m,accepted\n"
+            campaign_id = path.split("/")[-2]
+            return (
+                "trial_id,campaign_id,prompt_id,method_id,status\n"
+                f"1,{campaign_id},p,m,accepted\n"
+            ).encode()
         return {
             "id": path.rsplit("/", 1)[-1],
             "status": "completed",
@@ -367,7 +372,11 @@ def test_strict_inference_runner_retries_campaigns_completed_with_errors(tmp_pat
             count = len([item for item in calls if item[0] == "POST"])
             return {"id": f"campaign-{count}"}
         if path.endswith("/results.csv"):
-            return b"trial_id,prompt_id,method_id,status\n1,p,m,accepted\n"
+            campaign_id = path.split("/")[-2]
+            return (
+                "trial_id,campaign_id,prompt_id,method_id,status\n"
+                f"1,{campaign_id},p,m,accepted\n"
+            ).encode()
         campaign_number = int(path.rsplit("-", 1)[-1])
         return {
             "id": path.rsplit("/", 1)[-1],
@@ -440,7 +449,8 @@ def test_inference_runner_reuses_only_a_plan_bound_compatible_campaign(tmp_path)
         stale_same_name,
         legacy_other_plan,
     ]
-    assert runner._find_campaign(request_payload) is None
+    with pytest.raises(RuntimeError, match="campaign name collision"):
+        runner._find_campaign(request_payload)
 
 
 def test_inference_runner_plan_bound_campaign_name_respects_api_limit(tmp_path):
@@ -455,6 +465,68 @@ def test_inference_runner_plan_bound_campaign_name_respects_api_limit(tmp_path):
 
     assert len(name) == 200
     assert name.endswith(f"[plan-{runner.plan.plan_id}] a12")
+
+
+def test_inference_runner_refetches_a_corrupt_completed_export_without_gpu_resubmit(
+    tmp_path,
+):
+    plan = _plan()
+    runner = AdvisorInferenceRunner(
+        plan=plan,
+        api_url="http://example.invalid",
+        output_root=tmp_path,
+        poll_seconds=0,
+    )
+    calls = []
+
+    def request(method, path, payload=None, *, raw=False):
+        calls.append((method, path, payload, raw))
+        if path.endswith("?limit=100") or path.endswith("?limit=500"):
+            return []
+        if method == "POST":
+            count = len([item for item in calls if item[0] == "POST"])
+            return {"id": f"campaign-{count}"}
+        if path.endswith("/results.csv"):
+            campaign_id = path.split("/")[-2]
+            return (
+                "trial_id,campaign_id,prompt_id,method_id,status\n"
+                f"1,{campaign_id},p,m,accepted\n"
+            ).encode()
+        return {
+            "id": path.rsplit("/", 1)[-1],
+            "status": "completed",
+            "completed_trials": 6,
+            "total_trials": 6,
+            "accepted_trials": 6,
+            "trials": [],
+        }
+
+    runner._request = request
+    runner.run()
+    export = sorted(runner.exports_dir.glob("*.csv"))[0]
+    export.write_text("truncated", encoding="utf-8")
+    posts_before = len([item for item in calls if item[0] == "POST"])
+    exports_before = len([item for item in calls if item[1].endswith("/results.csv")])
+
+    summary = runner.run()
+
+    assert summary["status"] == "completed"
+    assert len([item for item in calls if item[0] == "POST"]) == posts_before
+    assert len([item for item in calls if item[1].endswith("/results.csv")]) == (
+        exports_before + 1
+    )
+    assert runner._valid_export(export, "campaign-1")
+
+
+def test_inference_runner_rejects_an_export_from_another_campaign(tmp_path):
+    path = tmp_path / "wrong.csv"
+    path.write_text(
+        "trial_id,campaign_id,prompt_id,method_id,status\n"
+        "1,other-campaign,p,m,accepted\n",
+        encoding="utf-8",
+    )
+
+    assert not AdvisorInferenceRunner._valid_export(path, "expected-campaign")
 
 
 def test_inference_runner_surfaces_non_retryable_api_validation_detail(
@@ -647,6 +719,10 @@ def test_inference_results_join_predictions_and_select_scannable_winner(tmp_path
     assert len(rows) == 3
     assert rows[0]["predicted_qr_probability"] == pytest.approx(0.95)
     assert rows[0]["saturation_risk"] == pytest.approx(0.02)
+    assert rows[0]["high_saturation_pixel_ratio"] == pytest.approx(0.01)
+    assert rows[0]["rgb_clipped_channel_ratio"] == pytest.approx(0.02)
+    assert rows[0]["saturation_metrics_present"] is True
+    assert rows[0]["saturation_metric_count"] == 2
     assert rows[1]["output_variant"] == "srpg"
     assert rows[1]["service_selected_variant"] == "srmpgd"
     assert rows[1]["srmpgd_noop"] is True
@@ -665,7 +741,76 @@ def test_inference_results_join_predictions_and_select_scannable_winner(tmp_path
     assert rows[2]["output_variant"] == "raw"
     assert rows[2]["service_selected_variant"] == "raw"
     assert rows[2]["srmpgd_noop"] is True
+    assert rows[2]["saturation_risk"] is None
+    assert rows[2]["high_saturation_pixel_ratio"] is None
+    assert rows[2]["rgb_clipped_channel_ratio"] is None
+    assert rows[2]["saturation_metrics_present"] is False
+    assert rows[2]["saturation_metric_count"] == 0
     assert winners[0]["trial_id"] == "t2"
+
+
+def test_missing_saturation_metrics_remain_unknown_and_fail_the_delivery_gate(
+    tmp_path,
+):
+    output_dir = tmp_path / "missing-saturation"
+    exports_dir = output_dir / "exports"
+    exports_dir.mkdir(parents=True)
+    image_hash = "a" * 64
+    prediction = {
+        "prompt_id": "p1",
+        "prompt_text": "Prompt one",
+        "plan_method_id": "stage2-method",
+        "source_method_id": "stage2-source",
+        "role": "e031_fixed_seed_a_stage2",
+        "pipeline_state": "stage2",
+    }
+    (output_dir / "advisor-predictions.jsonl").write_text(
+        json.dumps(prediction) + "\n", encoding="utf-8"
+    )
+    fields = [
+        "trial_id",
+        "campaign_id",
+        "prompt_id",
+        "method_id",
+        "status",
+        "selected_variant",
+        "provenance_final_image_sha256",
+        "quality_qr_verify_any_exact",
+        "quality_qr_verify_tolerance_score",
+        "quality_high_saturation_pixel_ratio",
+        "quality_rgb_clipped_channel_ratio",
+    ]
+    with (exports_dir / "results.csv").open("w", encoding="utf-8", newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=fields)
+        writer.writeheader()
+        writer.writerow(
+            {
+                "trial_id": "t1",
+                "campaign_id": "c1",
+                "prompt_id": "p1",
+                "method_id": "stage2-method",
+                "status": "accepted",
+                "selected_variant": "srpg",
+                "provenance_final_image_sha256": image_hash,
+                "quality_qr_verify_any_exact": 1,
+                "quality_qr_verify_tolerance_score": 0.95,
+            }
+        )
+
+    row = load_advisor_inference_results(output_dir)[0]
+    assessment = assess_stage2_candidate(
+        row,
+        ConservativeDeliveryGate(
+            qr_tolerance_threshold=0.80,
+            saturation_threshold=0.05,
+            minimum_qr_observations=1,
+        ),
+    )
+
+    assert row["saturation_risk"] is None
+    assert row["saturation_metrics_present"] is False
+    assert assessment.deliverable is False
+    assert "missing_saturation_risk" in assessment.rejection_reasons
 
 
 def test_inference_results_ignore_failed_attempt_exports_after_strict_retry(tmp_path):

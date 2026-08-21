@@ -12,7 +12,7 @@ from prooftag_qr.config import Settings
 from prooftag_qr.domain import RunRecord
 from prooftag_qr.lab import LabService, laboratory_profiles
 from prooftag_qr.lab_repository import LabRepository
-from prooftag_qr.quality_scoring import CLIPQualityScore
+from prooftag_qr.quality_scoring import CLIPQualityScore, QualityProvenanceError
 from prooftag_qr.repository import RunRepository
 from prooftag_qr.schemas import LabCampaignCreate, LabMethod, LabToolConfig
 
@@ -25,6 +25,18 @@ def test_lab_rejects_conflicting_stage2_tools():
 def test_lab_rejects_srmpgd_without_stage2_srpg():
     with pytest.raises(ValidationError, match="requires Stage 2 SRPG"):
         LabToolConfig(srmpgd_enabled=True)
+
+
+def test_quality_configuration_rejects_unpaired_hps_and_mutable_weights():
+    with pytest.raises(ValidationError, match="HPS scoring requires"):
+        Settings(lab_hps_scoring_enabled=True, lab_clip_scoring_enabled=False)
+    with pytest.raises(ValidationError, match="mutable branch"):
+        Settings(
+            quality_aesthetic_weights_url=(
+                "https://raw.githubusercontent.com/LAION-AI/"
+                "aesthetic-predictor/refs/heads/main/model.pth"
+            )
+        )
 
 
 def test_lab_exact_stage1_reuse_contract_rejects_invalid_methods():
@@ -557,6 +569,10 @@ def test_lab_persists_cpu_quality_scores_without_using_the_generation_gpu(
         def __init__(self, *args, **kwargs):
             assert kwargs["device"] == "cpu"
             assert kwargs["hps_enabled"] is True
+            assert kwargs["model_revision"] == settings.quality_clip_model_revision
+            assert kwargs["aesthetic_weights_sha256"] == (
+                settings.quality_aesthetic_weights_sha256
+            )
 
         def score(self, image, prompt):
             assert image.size == (64, 64)
@@ -567,6 +583,31 @@ def test_lab_persists_cpu_quality_scores_without_using_the_generation_gpu(
                 clip_aesthetic=6.4,
                 hpsv2_1=0.314,
             )
+
+        def provenance(self):
+            return {
+                "clip": {
+                    "model_id": settings.quality_clip_model_id,
+                    "effective_revision": settings.quality_clip_model_revision,
+                    "revision_verified": True,
+                },
+                "clip_aesthetic": {
+                    "effective_sha256": settings.quality_aesthetic_weights_sha256,
+                    "sha256_verified": True,
+                },
+                "hpsv2_1": {
+                    "effective_package_version": settings.quality_hps_package_version,
+                    "effective_source_revision": settings.quality_hps_source_revision,
+                    "package_verified": True,
+                    "requested_checkpoint_revision": (
+                        settings.quality_hps_checkpoint_revision
+                    ),
+                    "effective_checkpoint_sha256": (
+                        settings.quality_hps_checkpoint_sha256
+                    ),
+                    "checkpoint_verified": True,
+                },
+            }
 
     monkeypatch.setattr(lab_module, "CLIPQualityScorer", FakeScorer)
     service = LabService(
@@ -587,6 +628,59 @@ def test_lab_persists_cpu_quality_scores_without_using_the_generation_gpu(
     assert stored.quality_metrics["clip_score"] == pytest.approx(1.05)
     assert stored.quality_metrics["clip_aesthetic"] == pytest.approx(6.4)
     assert stored.quality_metrics["hpsv2_1"] == pytest.approx(0.314)
+    assert stored.provenance["quality_clip_model_revision"] == (
+        settings.quality_clip_model_revision
+    )
+    assert stored.provenance["quality_hps_checkpoint_sha256"] == (
+        settings.quality_hps_checkpoint_sha256
+    )
+
+
+def test_lab_never_swallows_a_quality_provenance_mismatch(tmp_path, monkeypatch):
+    settings = Settings(
+        data_dir=tmp_path,
+        model_cache_dir=tmp_path / "models",
+        lab_clip_scoring_enabled=True,
+        device="cpu",
+    )
+    run_repository = RunRepository(tmp_path / "runs.sqlite3")
+    artifact_store = LocalArtifactStore(tmp_path / "artifacts")
+    run = RunRecord(
+        id="run-provenance-mismatch",
+        created_at=datetime.now(UTC),
+        completed_at=datetime.now(UTC),
+        status="accepted",
+        backend="controlnet",
+        prompt="pinned model",
+        payload_hash="b" * 64,
+        seed=8,
+    )
+    run.image_path = artifact_store.save_image(
+        run.id,
+        Image.new("RGB", (32, 32), "white"),
+    )
+    run_repository.save(run)
+
+    class MismatchedScorer:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def score(self, image, prompt):
+            raise QualityProvenanceError("wrong CLIP revision")
+
+    monkeypatch.setattr(lab_module, "CLIPQualityScorer", MismatchedScorer)
+    service = LabService(
+        base_settings=settings,
+        run_repository=run_repository,
+        lab_repository=LabRepository(run_repository.engine),
+        artifact_store=artifact_store,
+        validator=object(),
+    )
+    try:
+        with pytest.raises(QualityProvenanceError, match="wrong CLIP revision"):
+            service._score_quality(run, run.prompt)
+    finally:
+        service.shutdown()
 
 
 def test_lab_reuses_the_exact_stage1_and_forces_each_research_output(

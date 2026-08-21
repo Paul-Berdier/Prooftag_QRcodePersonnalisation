@@ -71,6 +71,11 @@ def _first_finite(row: Mapping[str, Any], names: Sequence[str]) -> float | None:
     return None
 
 
+def _negative_saturation_rank(value: Any) -> float:
+    risk = _finite(value)
+    return -risk if risk is not None else -math.inf
+
+
 @dataclass(frozen=True, slots=True)
 class AdvisorInferencePlan:
     plan_id: str
@@ -760,12 +765,26 @@ class AdvisorInferenceRunner:
         self.state = self._load_state()
 
     @staticmethod
-    def _atomic_json(path: Path, value: Any) -> None:
+    def _atomic_text(path: Path, value: str) -> None:
         temporary = path.with_suffix(path.suffix + ".tmp")
-        temporary.write_text(
-            json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8"
+        with temporary.open("w", encoding="utf-8", newline="") as stream:
+            stream.write(value)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        if os.name != "nt":
+            directory = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+
+    @classmethod
+    def _atomic_json(cls, path: Path, value: Any) -> None:
+        cls._atomic_text(
+            path,
+            json.dumps(value, ensure_ascii=False, indent=2),
         )
-        temporary.replace(path)
 
     def _write_or_verify_plan(self) -> None:
         if self.plan_path.exists():
@@ -782,9 +801,7 @@ class AdvisorInferenceRunner:
             if self.predictions_path.read_text(encoding="utf-8") != prediction_text:
                 raise RuntimeError("stored advisor predictions differ from the plan")
         else:
-            temporary = self.predictions_path.with_suffix(".jsonl.tmp")
-            temporary.write_text(prediction_text, encoding="utf-8")
-            temporary.replace(self.predictions_path)
+            self._atomic_text(self.predictions_path, prediction_text)
 
     def _load_state(self) -> dict[str, Any]:
         if self.state_path.exists():
@@ -917,11 +934,20 @@ class AdvisorInferenceRunner:
         self, request_payload: dict[str, Any]
     ) -> dict[str, Any] | None:
         campaigns = self._request("GET", "/v1/lab/campaigns?limit=500")
-        matching = [
+        same_name = [
             item
             for item in campaigns
+            if item.get("name") == request_payload.get("name")
+        ]
+        matching = [
+            item
+            for item in same_name
             if self._campaign_matches_request(item, request_payload)
         ]
+        if same_name and not matching:
+            raise RuntimeError(
+                "remote campaign name collision with a different payload or specification"
+            )
         return max(matching, key=lambda item: item.get("created_at", "")) if matching else None
 
     def _wait_for_foreign_campaigns(self, own_id: str | None = None) -> None:
@@ -945,15 +971,87 @@ class AdvisorInferenceRunner:
         path = self.exports_dir / (
             f"prompt-{index + 1:02d}-attempt-{attempt:02d}-{campaign_id}.csv"
         )
-        if path.is_file() and path.stat().st_size > 0:
+        if self._valid_export(path, campaign_id):
             return path
         body = self._request(
             "GET", f"/v1/lab/campaigns/{campaign_id}/results.csv", raw=True
         )
         temporary = path.with_suffix(".csv.tmp")
-        temporary.write_bytes(body)
-        temporary.replace(path)
+        with temporary.open("wb") as stream:
+            stream.write(body)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        if not self._valid_export(path, campaign_id):
+            raise RuntimeError(f"campaign {campaign_id} returned an invalid CSV export")
         return path
+
+    @staticmethod
+    def _valid_export(path: Path, campaign_id: str) -> bool:
+        if not path.is_file() or path.stat().st_size <= 0:
+            return False
+        try:
+            with path.open("r", encoding="utf-8", newline="") as stream:
+                reader = csv.DictReader(stream)
+                required_fields = {
+                    "trial_id",
+                    "campaign_id",
+                    "prompt_id",
+                    "method_id",
+                    "status",
+                }
+                if not reader.fieldnames or not required_fields.issubset(reader.fieldnames):
+                    return False
+                rows = list(reader)
+        except (OSError, UnicodeDecodeError, csv.Error):
+            return False
+        if not rows:
+            return False
+        return all(row.get("campaign_id") == campaign_id for row in rows)
+
+    def _completed_campaign_record(self, index: int) -> dict[str, Any] | None:
+        successful = (
+            {"completed"}
+            if self.reject_campaigns_with_errors
+            else SUCCESSFUL_CAMPAIGN_STATUSES
+        )
+        for item in reversed(self.state.get("history", [])):
+            if (
+                int(item.get("index", -1)) == index
+                and item.get("status") in successful
+            ):
+                return item
+        return None
+
+    def _completed_export_is_valid(self, index: int) -> bool:
+        item = self._completed_campaign_record(index)
+        if item is None:
+            return False
+        campaign_id = str(item.get("campaign_id") or "")
+        export_path = Path(str(item.get("export_path") or ""))
+        return bool(campaign_id) and self._valid_export(export_path, campaign_id)
+
+    def _repair_completed_export(self, index: int) -> bool:
+        """Recover a missing/corrupt local CSV without regenerating GPU output."""
+
+        item = self._completed_campaign_record(index)
+        if item is None:
+            return False
+        campaign_id = str(item.get("campaign_id") or "")
+        attempt = int(item.get("attempt", 0))
+        if not campaign_id or attempt < 1:
+            return False
+        export_path = self._export(index, attempt, campaign_id)
+        item["export_path"] = str(export_path)
+        self._save_state()
+        self._notify(
+            "completed_export_recovered",
+            index=index,
+            attempt=attempt,
+            campaign_id=campaign_id,
+            export_path=str(export_path),
+        )
+        return True
 
     def _wait_campaign(self, index: int, attempt: int, campaign_id: str) -> dict[str, Any]:
         last_progress = None
@@ -1006,7 +1104,14 @@ class AdvisorInferenceRunner:
         try:
             for index, base_request in enumerate(self.plan.campaigns):
                 if index in self.state["completed_campaigns"]:
-                    continue
+                    if self._completed_export_is_valid(index):
+                        continue
+                    self._notify("invalid_completed_export", index=index)
+                    if self._repair_completed_export(index):
+                        continue
+                    raise RuntimeError(
+                        f"completed campaign {index} has no recoverable export provenance"
+                    )
                 succeeded = False
                 while (
                     int(self.state["attempts"].get(str(index), 0))
@@ -1016,6 +1121,19 @@ class AdvisorInferenceRunner:
                     if active and int(active["index"]) == index:
                         attempt = int(active["attempt"])
                         campaign_id = str(active["campaign_id"])
+                        request_payload = deepcopy(base_request)
+                        request_payload["name"] = self._campaign_name(
+                            str(base_request["name"]), attempt
+                        )
+                        active_remote = self._request(
+                            "GET", f"/v1/lab/campaigns/{campaign_id}"
+                        )
+                        if not self._campaign_matches_request(
+                            active_remote, request_payload
+                        ):
+                            raise RuntimeError(
+                                "active remote campaign differs from the persisted request"
+                            )
                     else:
                         attempt = int(self.state["attempts"].get(str(index), 0)) + 1
                         request_payload = deepcopy(base_request)
@@ -1140,6 +1258,20 @@ def load_advisor_inference_results(output_dir: Path) -> list[dict[str, Any]]:
         prediction = predictions.get(key)
         if prediction is None:
             continue
+        high_saturation_pixel_ratio = _finite(
+            row.get("quality_high_saturation_pixel_ratio")
+        )
+        rgb_clipped_channel_ratio = _finite(
+            row.get("quality_rgb_clipped_channel_ratio")
+        )
+        saturation_measurements = [
+            value
+            for value in (
+                high_saturation_pixel_ratio,
+                rgb_clipped_channel_ratio,
+            )
+            if value is not None
+        ]
         results.append(
             {
                 **prediction,
@@ -1224,14 +1356,12 @@ def load_advisor_inference_results(output_dir: Path) -> list[dict[str, Any]]:
                 "clip_aesthetic": _finite(row.get("quality_clip_aesthetic")),
                 "clip_score": _finite(row.get("quality_clip_score")),
                 "hpsv2_1": _finite(row.get("quality_hpsv2_1")),
-                "saturation_risk": max(
-                    value
-                    for value in (
-                        _finite(row.get("quality_high_saturation_pixel_ratio")),
-                        _finite(row.get("quality_rgb_clipped_channel_ratio")),
-                        0.0,
-                    )
-                    if value is not None
+                "high_saturation_pixel_ratio": high_saturation_pixel_ratio,
+                "rgb_clipped_channel_ratio": rgb_clipped_channel_ratio,
+                "saturation_metrics_present": bool(saturation_measurements),
+                "saturation_metric_count": len(saturation_measurements),
+                "saturation_risk": (
+                    max(saturation_measurements) if saturation_measurements else None
                 ),
                 "duration_ms": _first_finite(row, ("total_ms", "generation_ms")),
                 "module_error_rate": _finite(row.get("module_error_rate")),
@@ -1291,7 +1421,7 @@ def select_advisor_inference_winners(
                     item.get("hpsv2_1") or -math.inf,
                     item.get("clip_aesthetic") or -math.inf,
                     item.get("clip_score") or -math.inf,
-                    -(item.get("saturation_risk") or 0.0),
+                    _negative_saturation_rank(item.get("saturation_risk")),
                     item.get("role") == "advisor_recommendation",
                     -(item.get("advisor_rank") or 999),
                 ),
@@ -1336,7 +1466,7 @@ def deduplicate_advisor_inference_results(
                 metric(item, "hpsv2_1", -math.inf),
                 metric(item, "clip_aesthetic", -math.inf),
                 metric(item, "clip_score", -math.inf),
-                -metric(item, "saturation_risk", 0.0),
+                _negative_saturation_rank(item.get("saturation_risk")),
                 -metric(item, "advisor_rank", 999.0),
             ),
         )

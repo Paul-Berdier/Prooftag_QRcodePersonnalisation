@@ -15,6 +15,7 @@ from . import metrics
 from .config import Settings
 from .controlnet_models import control_image_for_profile
 from .guidance import LatentRefinementConfig, refine_candidate_latent
+from .model_sources import resolve_single_file_sources
 from .qr import (
     QRBlueprint,
     module_error_breakdown,
@@ -149,6 +150,10 @@ class ControlNetBackend(GenerationBackend):
                     "torch_dtype": dtype,
                     "cache_dir": self.settings.model_cache_dir,
                 }
+                if self.settings.controlnet_model_revision:
+                    controlnet_arguments["revision"] = (
+                        self.settings.controlnet_model_revision
+                    )
                 if self.settings.controlnet_model_subfolder:
                     controlnet_arguments["subfolder"] = self.settings.controlnet_model_subfolder
                 controlnet = ControlNetModel.from_pretrained(
@@ -166,10 +171,17 @@ class ControlNetBackend(GenerationBackend):
                     "cache_dir": self.settings.model_cache_dir,
                     "safety_checker": None,
                 }
+                if self.settings.base_model_revision and not _is_single_file_base_model(
+                    self.settings.base_model_id
+                ):
+                    pipeline_arguments["revision"] = self.settings.base_model_revision
                 if _is_single_file_base_model(self.settings.base_model_id):
+                    checkpoint_path, config_path = resolve_single_file_sources(
+                        self.settings
+                    )
                     pipe = pipeline_class.from_single_file(
-                        self.settings.base_model_id,
-                        config="stable-diffusion-v1-5/stable-diffusion-v1-5",
+                        checkpoint_path,
+                        config=config_path,
                         use_safetensors=self.settings.base_model_id.lower().split(
                             "?", 1
                         )[0].endswith(".safetensors"),
@@ -217,6 +229,17 @@ class ControlNetBackend(GenerationBackend):
                 },
             )
         return self._pipeline
+
+    def provenance(self) -> dict[str, str]:
+        return {
+            "base_model_id": self.settings.base_model_id,
+            "base_model_revision": self.settings.base_model_revision,
+            "base_model_config_id": self.settings.base_model_config_id,
+            "base_model_config_revision": self.settings.base_model_config_revision,
+            "controlnet_model_id": self.settings.controlnet_model_id,
+            "controlnet_model_subfolder": self.settings.controlnet_model_subfolder,
+            "controlnet_model_revision": self.settings.controlnet_model_revision,
+        }
 
     def generate(
         self, request: GenerationRequest, blueprint: QRBlueprint, seed: int

@@ -22,5 +22,6 @@ benchmark-results/
 /tmp/audit-e029-v4-*/
 /tmp/pdfs/
 /tmp/upstream-diffqrcoder/
+/tmp/
 coverage.xml
 .coverage

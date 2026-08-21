@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import re
 from importlib.metadata import PackageNotFoundError, version
 from typing import TYPE_CHECKING
 
@@ -7,7 +9,39 @@ if TYPE_CHECKING:
     from .config import Settings
 
 
-def runtime_info(settings: Settings | None = None) -> dict:
+def runtime_deployment_identity() -> dict[str, str | bool | None]:
+    """Read the immutable deployment identity injected by the deploy script."""
+    commit = os.environ.get("PROOFTAG_GIT_COMMIT")
+    image = os.environ.get("PROOFTAG_RUNTIME_IMAGE")
+    digest = os.environ.get("PROOFTAG_RUNTIME_IMAGE_DIGEST")
+    if commit is None and image is None and digest is None:
+        return {
+            "configured": False,
+            "git_commit": None,
+            "image": None,
+            "image_digest": None,
+        }
+    if not commit or not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise RuntimeError("PROOFTAG_GIT_COMMIT must be a full lowercase Git SHA")
+    if not image or len(image) > 512 or re.search(r"\s", image):
+        raise RuntimeError("PROOFTAG_RUNTIME_IMAGE must be a non-empty image reference")
+    if not digest or not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
+        raise RuntimeError(
+            "PROOFTAG_RUNTIME_IMAGE_DIGEST must be a lowercase sha256 digest"
+        )
+    return {
+        "configured": True,
+        "git_commit": commit,
+        "image": image,
+        "image_digest": digest,
+    }
+
+
+def runtime_info(
+    settings: Settings | None = None,
+    *,
+    quality_scoring_provenance: dict | None = None,
+) -> dict:
     packages = {}
     for package in (
         "torch",
@@ -17,18 +51,35 @@ def runtime_info(settings: Settings | None = None) -> dict:
         "accelerate",
         "huggingface-hub",
         "lpips",
+        "hpsv2",
     ):
         try:
             packages[package] = version(package)
         except PackageNotFoundError:
             packages[package] = None
 
-    result = {"packages": packages, "cuda_available": False}
+    result = {
+        "packages": packages,
+        "cuda_available": False,
+        "deployment_identity": runtime_deployment_identity(),
+    }
     if settings is not None:
+        if quality_scoring_provenance is None:
+            from .quality_scoring import quality_scorer_from_settings
+
+            quality_scoring_provenance = quality_scorer_from_settings(
+                settings,
+                device="cpu",
+            ).provenance()
+        result["quality_scoring"] = quality_scoring_provenance
         result["generation_config"] = {
             "base_model_id": settings.base_model_id,
+            "base_model_revision": settings.base_model_revision,
+            "base_model_config_id": settings.base_model_config_id,
+            "base_model_config_revision": settings.base_model_config_revision,
             "controlnet_model_id": settings.controlnet_model_id,
             "controlnet_model_subfolder": settings.controlnet_model_subfolder,
+            "controlnet_model_revision": settings.controlnet_model_revision,
             "controlnet_conditioning_profile": settings.controlnet_conditioning_profile,
             "controlnet_pipeline_mode": settings.controlnet_pipeline_mode,
             "validation_min_pass_rate": settings.validation_min_pass_rate,

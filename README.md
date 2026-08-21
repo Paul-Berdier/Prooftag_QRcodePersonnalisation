@@ -165,6 +165,16 @@ compare une cascade Stage 2 fixe → Stage 2 alternatif → nouvelle seed. Résu
 [`docs/e029-results-2026-08-20.md`](docs/e029-results-2026-08-20.md). Protocole E030 :
 [`docs/e030-reliable-qrverify-cascade.md`](docs/e030-reliable-qrverify-cascade.md).
 
+E030 confirme 8/10 livrables pour le Stage 2 fixe et 10/10 avec soit le secours advisor, soit une
+nouvelle seed, mais son échantillon est rétrospectif et les dix gagnants montrent encore une grille
+QR très visible. E031 est donc le premier holdout prospectif de cette séquence : 40 prompts
+nouveaux, trois branches Stage 2 appariées, 5 × 37 mesures QR-Verify, une porte stricte 36/37 et
+une revue humaine aveugle. Les 120 Stage 1 sont des parents internes non évalués et jamais
+livrables ; SR-MPGD n'est pas exécuté dans E031.
+Résultats E030 : [`docs/e030-results-2026-08-21.md`](docs/e030-results-2026-08-21.md).
+Protocole E031 :
+[`docs/e031-prospective-stage2-holdout.md`](docs/e031-prospective-stage2-holdout.md).
+
 ## Déploiement
 
 Le projet ne déploie pas de second Prometheus, Grafana, Loki ou MinIO. Voir

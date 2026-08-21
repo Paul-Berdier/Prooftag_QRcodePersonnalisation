@@ -107,6 +107,119 @@ def test_upstream_srmpgd_iteration_zero_receives_and_returns_exact_stage2_raster
     assert backend.provenance()["srmpgd_selected_image_sha256"] == stage2_hash
 
 
+def test_upstream_provenance_records_all_pinned_model_revisions():
+    backend = UpstreamDiffQRCoderBackend(
+        Settings(
+            base_model_revision="base-revision",
+            base_model_config_revision="config-revision",
+            controlnet_model_revision="controlnet-revision",
+        )
+    )
+
+    provenance = backend.provenance()
+
+    assert provenance["base_model_revision"] == "base-revision"
+    assert provenance["base_model_config_id"] == (
+        "stable-diffusion-v1-5/stable-diffusion-v1-5"
+    )
+    assert provenance["base_model_config_revision"] == "config-revision"
+    assert provenance["controlnet_model_revision"] == "controlnet-revision"
+
+
+def test_upstream_loader_passes_pinned_huggingface_revisions(monkeypatch):
+    observed = {}
+
+    class FakeComponent:
+        def requires_grad_(self, _enabled):
+            return self
+
+        def eval(self):
+            return self
+
+    class FakeControlNetModel:
+        @classmethod
+        def from_pretrained(cls, model_id, **kwargs):
+            observed["controlnet"] = (model_id, kwargs)
+            return FakeComponent()
+
+    class FakePipeline:
+        @classmethod
+        def from_single_file(cls, model_id, **kwargs):
+            observed["pipeline"] = (model_id, kwargs)
+            return SimpleNamespace(
+                scheduler=SimpleNamespace(config={}),
+                _callback_tensor_inputs=[],
+                unet=FakeComponent(),
+                controlnet=kwargs["controlnet"],
+                vae=FakeComponent(),
+                text_encoder=FakeComponent(),
+                set_progress_bar_config=lambda **_: None,
+                to=lambda *_: None,
+            )
+
+    class FakeScheduler:
+        @classmethod
+        def from_config(cls, config):
+            return SimpleNamespace(config=config)
+
+    fake_torch = SimpleNamespace(
+        cuda=SimpleNamespace(is_available=lambda: True),
+        float16="float16",
+    )
+    monkeypatch.setattr(
+        backend_module, "_patch_upstream_perceptual_gradient", lambda: None
+    )
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(
+        sys.modules,
+        "diffqrcoder",
+        SimpleNamespace(DiffQRCoderPipeline=FakePipeline),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "diffusers",
+        SimpleNamespace(
+            ControlNetModel=FakeControlNetModel,
+            DDIMScheduler=FakeScheduler,
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "huggingface_hub",
+        SimpleNamespace(
+            hf_hub_download=lambda **kwargs: observed.setdefault(
+                "checkpoint_download", kwargs
+            )
+            and "C:/cache/model.safetensors",
+            snapshot_download=lambda **kwargs: observed.setdefault(
+                "config_download", kwargs
+            )
+            and "C:/cache/sd15-config",
+        ),
+    )
+    backend = UpstreamDiffQRCoderBackend(
+        Settings(
+            device="cuda",
+            base_model_id=(
+                "https://huggingface.co/example/model/resolve/main/model.safetensors"
+            ),
+            base_model_revision="base-revision",
+            base_model_config_revision="config-revision",
+            controlnet_model_id="example/controlnet",
+            controlnet_model_revision="controlnet-revision",
+        )
+    )
+
+    backend._load()
+
+    assert observed["controlnet"][1]["revision"] == "controlnet-revision"
+    assert observed["checkpoint_download"]["revision"] == "base-revision"
+    assert observed["config_download"]["revision"] == "config-revision"
+    assert observed["pipeline"][0] == "C:/cache/model.safetensors"
+    assert observed["pipeline"][1]["config"] == "C:/cache/sd15-config"
+    assert "revision" not in observed["pipeline"][1]
+
+
 def test_stage2_state_export_and_import_are_hash_verified():
     torch = pytest.importorskip("torch")
     latent = torch.arange(16, dtype=torch.float16).reshape(1, 1, 4, 4)

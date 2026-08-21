@@ -6,7 +6,8 @@ expected_notebook="${2:-21_e026_prompt_parameter_advisor.ipynb}"
 namespace="${PROOFTAG_QR_NAMESPACE:-qr-core}"
 api_deployment="${PROOFTAG_QR_DEPLOYMENT:-prooftag-qr}"
 notebook_deployment="${PROOFTAG_QR_NOTEBOOK_DEPLOYMENT:-prooftag-qr-notebook}"
-state_file="${TMPDIR:-/tmp}/prooftag-qr-notebook-previous-state"
+state_dir="${XDG_STATE_HOME:-${HOME}/.local/state}/prooftag-qr"
+state_file="${PROOFTAG_NOTEBOOK_STATE_FILE:-${state_dir}/notebook-previous-state}"
 
 if [[ ! "$expected_notebook" =~ ^[A-Za-z0-9_.-]+\.ipynb$ ]]; then
   echo "Nom de notebook invalide : $expected_notebook" >&2
@@ -16,7 +17,7 @@ expected_notebook_path="/workspace/notebooks/${expected_notebook}"
 advisor_mode=0
 offline_mode=0
 case "$expected_notebook" in
-  21_e026_prompt_parameter_advisor.ipynb|22_e027_srmpgd_policy_holdout.ipynb|23_e028_hierarchical_prompt_advisor.ipynb|24_e029_srmpgd_exact_raster_recovery.ipynb)
+  21_e026_prompt_parameter_advisor.ipynb|22_e027_srmpgd_policy_holdout.ipynb|23_e028_hierarchical_prompt_advisor.ipynb|24_e029_srmpgd_exact_raster_recovery.ipynb|26_e031_prospective_stage2_holdout.ipynb)
     advisor_mode=1
     ;;
   25_e030_reliable_qrverify_cascade.ipynb)
@@ -27,6 +28,47 @@ esac
 
 replicas_or_zero() {
   kubectl get deployment "$1" -n "$2" -o jsonpath='{.spec.replicas}' 2>/dev/null || printf '0'
+}
+
+prepare_state_directory() {
+  install -d -m 700 "$(dirname "$state_file")"
+}
+
+write_previous_state() {
+  local api_replicas="$1"
+  local vllm_replicas="$2"
+  local temporary
+  if [[ ! "$api_replicas" =~ ^[0-9]+$ || ! "$vllm_replicas" =~ ^[0-9]+$ ]]; then
+    echo "État de réplica invalide : api=$api_replicas vllm=$vllm_replicas" >&2
+    return 1
+  fi
+  prepare_state_directory
+  temporary="$(mktemp "$(dirname "$state_file")/.notebook-previous-state.XXXXXX")"
+  chmod 600 "$temporary"
+  printf 'api_replicas=%s\nvllm_replicas=%s\n' \
+    "$api_replicas" "$vllm_replicas" > "$temporary"
+  mv -f -- "$temporary" "$state_file"
+}
+
+read_previous_state() {
+  api_replicas=1
+  vllm_replicas=0
+  [[ -f "$state_file" ]] || return 0
+  local key value
+  while IFS='=' read -r key value; do
+    [[ "$value" =~ ^[0-9]+$ ]] || {
+      echo "État notebook invalide dans $state_file : $key=$value" >&2
+      return 1
+    }
+    case "$key" in
+      api_replicas) api_replicas="$value" ;;
+      vllm_replicas) vllm_replicas="$value" ;;
+      *)
+        echo "Clé d'état notebook inconnue dans $state_file : $key" >&2
+        return 1
+        ;;
+    esac
+  done < "$state_file"
 }
 
 wait_for_pods_to_stop() {
@@ -163,12 +205,9 @@ verify_running_notebook() {
 }
 
 restore_previous_state() {
-  local api_replicas=1
-  local vllm_replicas=0
-  if [[ -f "$state_file" ]]; then
-    # shellcheck disable=SC1090
-    source "$state_file"
-  fi
+  local api_replicas
+  local vllm_replicas
+  read_previous_state
   kubectl scale "deployment/${notebook_deployment}" -n "$namespace" --replicas=0 >/dev/null
   wait_for_pods_to_stop "$namespace" prooftag-qr-notebook
   kubectl scale "deployment/${api_deployment}" -n "$namespace" \
@@ -193,7 +232,7 @@ case "$command_name" in
     fi
     api_replicas="$(replicas_or_zero "$api_deployment" "$namespace")"
     vllm_replicas="$(replicas_or_zero vllm vllm)"
-    printf 'api_replicas=%q\nvllm_replicas=%q\n' "$api_replicas" "$vllm_replicas" > "$state_file"
+    write_previous_state "$api_replicas" "$vllm_replicas"
     rollback() {
       echo "Échec du notebook, restauration de l'état GPU précédent" >&2
       restore_previous_state

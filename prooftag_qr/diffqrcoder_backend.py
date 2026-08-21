@@ -15,6 +15,7 @@ from PIL import Image
 from . import metrics
 from .blueprints import canonical_url_match
 from .config import Settings
+from .model_sources import resolve_single_file_sources
 from .qart import build_qart_target
 from .qr import QRBlueprint, diffqrcoder_module_error_rate, module_error_rate
 from .quality import image_change_metrics, image_quality_metrics, image_sha256
@@ -225,20 +226,30 @@ class UpstreamDiffQRCoderBackend:
                     "torch_dtype": torch.float16,
                     "cache_dir": self.settings.model_cache_dir,
                 }
+                if self.settings.controlnet_model_revision:
+                    controlnet_arguments["revision"] = (
+                        self.settings.controlnet_model_revision
+                    )
                 if self.settings.controlnet_model_subfolder:
                     controlnet_arguments["subfolder"] = self.settings.controlnet_model_subfolder
                 controlnet = ControlNetModel.from_pretrained(
                     self.settings.controlnet_model_id,
                     **controlnet_arguments,
                 )
+                checkpoint_path, config_path = resolve_single_file_sources(
+                    self.settings
+                )
+                pipeline_arguments = {
+                    "config": config_path,
+                    "controlnet": controlnet,
+                    "torch_dtype": torch.float16,
+                    "cache_dir": self.settings.model_cache_dir,
+                    "safety_checker": None,
+                    "use_safetensors": True,
+                }
                 pipe = DiffQRCoderPipeline.from_single_file(
-                    self.settings.base_model_id,
-                    config="stable-diffusion-v1-5/stable-diffusion-v1-5",
-                    controlnet=controlnet,
-                    torch_dtype=torch.float16,
-                    cache_dir=self.settings.model_cache_dir,
-                    safety_checker=None,
-                    use_safetensors=True,
+                    checkpoint_path,
+                    **pipeline_arguments,
                 )
                 pipe.scheduler = DDIMScheduler.from_config(pipe.scheduler.config)
                 pipe._callback_tensor_inputs = list(
@@ -1056,8 +1067,12 @@ class UpstreamDiffQRCoderBackend:
     def provenance(self) -> dict[str, str]:
         values = {
             "base_model_id": self.settings.base_model_id,
+            "base_model_revision": self.settings.base_model_revision,
+            "base_model_config_id": self.settings.base_model_config_id,
+            "base_model_config_revision": self.settings.base_model_config_revision,
             "controlnet_model_id": self.settings.controlnet_model_id,
             "controlnet_model_subfolder": self.settings.controlnet_model_subfolder,
+            "controlnet_model_revision": self.settings.controlnet_model_revision,
             "diffqrcoder_revision": self.settings.diffqrcoder_revision,
         }
         if self._stage2_latent_sha256:

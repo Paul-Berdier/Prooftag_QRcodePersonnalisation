@@ -40,6 +40,7 @@ RUN apt-get update \
 WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY prooftag_qr ./prooftag_qr
+COPY docs/e031-prospective-stage2-holdout.md ./docs/e031-prospective-stage2-holdout.md
 RUN pip install --upgrade pip \
     && pip install '.[notebook,optimizer]' \
     && pip install \
@@ -52,7 +53,7 @@ RUN pip install --upgrade pip \
 
 RUN qart help >/dev/null \
     && node -e "const p=require('/opt/prooftag-qr-verify/node_modules/qr-verify/package.json'); if(p.version!=='0.2.0') process.exit(1); console.log('qr-verify version OK:', p.version)" \
-    && python -c "import importlib.metadata, sentencepiece, zxingcpp, kornia; from google.protobuf import __version__ as protobuf_version; from prooftag_qr.qr import generate_diffqrcoder_qr; from prooftag_qr.validation import QRVerifyDecoder; p='https://ptag.io/t/notebook-build'; d=QRVerifyDecoder(); a=d.decode_presets(generate_diffqrcoder_qr(p).image); d.close(); assert len(a)==37 and all(x['text']==p for x in a); print('Notebook dependency stack and qr-verify OK:', '$QART_COMMIT', importlib.metadata.version('zxing-cpp'), kornia.__version__, sentencepiece.__version__, protobuf_version)"
+    && python -c "import importlib.metadata, inspect, pathlib, sentencepiece, zxingcpp, kornia; from google.protobuf import __version__ as protobuf_version; from prooftag_qr.qr import generate_diffqrcoder_qr; from prooftag_qr.validation import ConservativeQRVerifyScorer, QRVerifyDecoder; p='https://ptag.io/t/notebook-build'; d=QRVerifyDecoder(); a=d.decode_presets(generate_diffqrcoder_qr(p).image); d.close(); scorer=pathlib.Path(inspect.getfile(ConservativeQRVerifyScorer)).resolve(); bridge=pathlib.Path('/opt/prooftag-qr-verify/bridge.mjs'); lock=bridge.with_name('package-lock.json'); protocol=pathlib.Path('/app/docs/e031-prospective-stage2-holdout.md'); assert len(a)==37 and all(x['text']==p for x in a); assert scorer.is_file() and bridge.is_file() and lock.is_file() and protocol.is_file(); print('Notebook dependency stack and qr-verify OK:', '$QART_COMMIT', importlib.metadata.version('zxing-cpp'), kornia.__version__, sentencepiece.__version__, protobuf_version)"
 
 RUN git clone https://github.com/jwliao1209/DiffQRCoder.git /opt/DiffQRCoder \
     && git -C /opt/DiffQRCoder checkout "$DIFFQRCODER_COMMIT" \

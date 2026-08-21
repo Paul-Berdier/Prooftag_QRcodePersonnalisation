@@ -51,12 +51,27 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     assert runtime.status_code == 200
     assert "torch" in runtime.json()["packages"]
     assert "cuda_available" in runtime.json()
+    assert runtime.json()["deployment_identity"]["configured"] is False
     assert runtime.json()["generation_config"]["latent_refinement_enabled"] is False
     assert runtime.json()["generation_config"]["guided_rediffusion_enabled"] is False
     assert runtime.json()["generation_config"]["srmpgd_enabled"] is False
     assert runtime.json()["generation_config"]["srmpgd_max_step_rms"] == 0.02
     assert runtime.json()["generation_config"]["srmpgd_max_total_delta_rms"] == 0.06
     assert runtime.json()["generation_config"]["srmpgd_max_lpips_loss"] == 0.15
+    assert "base_model_revision" in runtime.json()["generation_config"]
+    assert "base_model_config_id" in runtime.json()["generation_config"]
+    assert "base_model_config_revision" in runtime.json()["generation_config"]
+    assert "controlnet_model_revision" in runtime.json()["generation_config"]
+    quality_provenance = runtime.json()["quality_scoring"]
+    assert quality_provenance["clip"]["requested_revision"] == (
+        "092a3b7e31726acc3a0207eea00f6040ac8b03a7"
+    )
+    assert quality_provenance["clip_aesthetic"]["expected_sha256"] == (
+        "c7b14cead230694acc7b9447974d3cad78003c72da032e402a303b6c2429e85f"
+    )
+    assert quality_provenance["hpsv2_1"]["requested_checkpoint_revision"] == (
+        "697403c78157020a1ae59d23f111aa58ced35b0a"
+    )
 
     lab_page = client.get("/lab")
     assert lab_page.status_code == 200
@@ -82,6 +97,15 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     }
     scoring = schema.json()["quality_scoring"]
     assert scoring["acceptance_effect"] == "none"
+    assert scoring["provenance"]["clip"]["requested_revision"] == (
+        "092a3b7e31726acc3a0207eea00f6040ac8b03a7"
+    )
+    assert scoring["metrics"]["clip_aesthetic"]["weights_sha256"] == (
+        "c7b14cead230694acc7b9447974d3cad78003c72da032e402a303b6c2429e85f"
+    )
+    assert scoring["metrics"]["hpsv2_1"]["checkpoint_sha256"] == (
+        "c57a38fb4a2f7e7c15bf00da2ea377cdf165448b4dd1052a484c215a998c9837"
+    )
     assert set(scoring["metrics"]) == {
         "clip_similarity",
         "clip_score",
@@ -124,6 +148,18 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
         == "monster-labs/control_v1p_sd15_qrcode_monster"
     )
     assert controlnet_profile["model"]["controlnet_model_subfolder"] == "v2"
+    assert controlnet_profile["model"]["base_model_revision"] == (
+        "f914b3679760c1c3baea6bb1815867bf1c9c92a4"
+    )
+    assert controlnet_profile["model"]["base_model_config_revision"] == (
+        "451f4fe16113bff5a5d2269ed5ad43b0592e9a14"
+    )
+    assert controlnet_profile["model"]["base_model_config_id"] == (
+        "stable-diffusion-v1-5/stable-diffusion-v1-5"
+    )
+    assert controlnet_profile["model"]["controlnet_model_revision"] == (
+        "560fb7b15d0badb409f8cd578a2bfe63bd4b8046"
+    )
     assert controlnet_profile["output_variant"] == "raw"
     assert srpg_profile["output_variant"] == "srpg"
     assert srpg_profile["reuse_stage1"] is True

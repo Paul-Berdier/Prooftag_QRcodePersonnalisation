@@ -1,3 +1,4 @@
+import hashlib
 import sys
 from dataclasses import asdict
 from types import SimpleNamespace
@@ -6,6 +7,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
+from prooftag_qr import quality_scoring as quality_scoring_module
 from prooftag_qr.advisor import (
     AdvisorPrediction,
     ContextualParameterAdvisor,
@@ -21,7 +23,13 @@ from prooftag_qr.experiments import (
 from prooftag_qr.optimization import E007Experiment, factorial_contexts, query_gpu_processes
 from prooftag_qr.qr import generate_qr
 from prooftag_qr.quality_scoring import (
+    DEFAULT_AESTHETIC_WEIGHTS_SHA256,
+    DEFAULT_AESTHETIC_WEIGHTS_URL,
+    DEFAULT_CLIP_MODEL_REVISION,
+    DEFAULT_HPS_CHECKPOINT_REVISION,
+    DEFAULT_HPS_SOURCE_REVISION,
     CLIPQualityScorer,
+    QualityProvenanceError,
     clip_score_from_similarity,
     project_embedding,
 )
@@ -103,23 +111,168 @@ def test_clip_score_and_projection_are_deterministic():
 
 
 def test_hpsv21_score_is_optional_and_uses_the_official_version(tmp_path, monkeypatch):
+    monkeypatch.delenv("HF_HUB_CACHE", raising=False)
+    monkeypatch.delenv("HF_HOME", raising=False)
     calls = []
-    fake_hps = SimpleNamespace(
-        __path__=[],
-        score=lambda image, prompt, hps_version: (
-            calls.append((image.size, prompt, hps_version)) or [0.314]
-        )
+    checkpoint = tmp_path / "hps-v2.1.pt"
+    checkpoint.write_bytes(b"pinned HPS checkpoint")
+    checkpoint_sha256 = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+    fake_hps = SimpleNamespace(__path__=[])
+    fake_img_score = SimpleNamespace(
+        device="cuda",
+        score=lambda image, prompt, cp, hps_version: (
+            calls.append((image.size, prompt, cp, hps_version)) or [0.314]
+        ),
     )
-    fake_img_score = SimpleNamespace(device="cuda")
     monkeypatch.setitem(sys.modules, "hpsv2", fake_hps)
     monkeypatch.setitem(sys.modules, "hpsv2.img_score", fake_img_score)
-    scorer = CLIPQualityScorer(tmp_path, hps_enabled=True)
+    monkeypatch.setitem(
+        sys.modules,
+        "huggingface_hub",
+        SimpleNamespace(
+            hf_hub_download=lambda **kwargs: (
+                calls.append(("download", kwargs)) or str(checkpoint)
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        quality_scoring_module,
+        "_installed_distribution_source",
+        lambda package: ("1.2.0", DEFAULT_HPS_SOURCE_REVISION, None),
+    )
+    scorer = CLIPQualityScorer(
+        tmp_path,
+        hps_enabled=True,
+        hps_checkpoint_sha256=checkpoint_sha256,
+    )
 
     score = scorer._hps_score(Image.new("RGB", (16, 16)), "a blue vase")
 
     assert score == pytest.approx(0.314)
-    assert calls == [((16, 16), "a blue vase", "v2.1")]
+    assert calls[0] == (
+        "download",
+        {
+            "repo_id": "xswu/HPSv2",
+            "filename": "HPS_v2.1_compressed.pt",
+            "revision": DEFAULT_HPS_CHECKPOINT_REVISION,
+            "cache_dir": tmp_path / "huggingface" / "hub",
+        },
+    )
+    assert calls[1] == ((16, 16), "a blue vase", str(checkpoint), "v2.1")
     assert fake_img_score.device == "cpu"
+    assert scorer.provenance()["hpsv2_1"]["checkpoint_verified"] is True
+
+
+def test_hps_provenance_mismatch_fails_before_inference(tmp_path, monkeypatch):
+    monkeypatch.setitem(sys.modules, "hpsv2", SimpleNamespace(__path__=[]))
+    monkeypatch.setattr(
+        quality_scoring_module,
+        "_installed_distribution_source",
+        lambda package: ("1.2.0", "0" * 40, None),
+    )
+    scorer = CLIPQualityScorer(tmp_path, hps_enabled=True)
+
+    with pytest.raises(QualityProvenanceError, match="source revision mismatch"):
+        scorer._hps_score(Image.new("RGB", (16, 16)), "a blue vase")
+
+
+def test_quality_defaults_use_immutable_revisions_and_hashes(tmp_path):
+    scorer = CLIPQualityScorer(tmp_path)
+
+    assert scorer.model_revision == DEFAULT_CLIP_MODEL_REVISION
+    assert DEFAULT_HPS_SOURCE_REVISION == "866735ecaae999fa714bd9edfa05aa2672669ee3"
+    assert "/refs/heads/" not in DEFAULT_AESTHETIC_WEIGHTS_URL
+    assert "/main/" not in DEFAULT_AESTHETIC_WEIGHTS_URL
+    assert len(DEFAULT_AESTHETIC_WEIGHTS_SHA256) == 64
+
+
+def test_clip_and_aesthetic_loader_verify_effective_artifacts(tmp_path, monkeypatch):
+    calls = []
+    expected_weights = b"verified aesthetic weights"
+    expected_sha256 = hashlib.sha256(expected_weights).hexdigest()
+
+    class FakeModel:
+        config = SimpleNamespace(
+            projection_dim=512,
+            _commit_hash=DEFAULT_CLIP_MODEL_REVISION,
+        )
+
+        def requires_grad_(self, value):
+            return self
+
+        def eval(self):
+            return self
+
+        def to(self, device):
+            return self
+
+    class FakeLinear(FakeModel):
+        def load_state_dict(self, state):
+            calls.append(("state", state))
+
+    class FakeCLIPModel:
+        @staticmethod
+        def from_pretrained(model_id, **kwargs):
+            calls.append(("model", model_id, kwargs))
+            return FakeModel()
+
+    class FakeCLIPProcessor:
+        @staticmethod
+        def from_pretrained(model_id, **kwargs):
+            calls.append(("processor", model_id, kwargs))
+            return object()
+
+    monkeypatch.setitem(
+        sys.modules,
+        "transformers",
+        SimpleNamespace(CLIPModel=FakeCLIPModel, CLIPProcessor=FakeCLIPProcessor),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "torch",
+        SimpleNamespace(
+            nn=SimpleNamespace(Linear=lambda dimensions, output: FakeLinear()),
+            load=lambda *args, **kwargs: {"weight": "verified"},
+        ),
+    )
+    monkeypatch.setattr(
+        quality_scoring_module,
+        "urlretrieve",
+        lambda url, path: (calls.append(("download", url)), path.write_bytes(expected_weights)),
+    )
+    weight_path = tmp_path / "clip-quality" / "sa_0_4_vit_b_32_linear.pth"
+    weight_path.parent.mkdir(parents=True)
+    weight_path.write_bytes(b"corrupt")
+    scorer = CLIPQualityScorer(
+        tmp_path,
+        aesthetic_weights_sha256=expected_sha256,
+    )
+
+    scorer._load()
+
+    assert calls[0][2]["revision"] == DEFAULT_CLIP_MODEL_REVISION
+    assert calls[1][2]["revision"] == DEFAULT_CLIP_MODEL_REVISION
+    assert ("download", DEFAULT_AESTHETIC_WEIGHTS_URL) in calls
+    assert weight_path.read_bytes() == expected_weights
+    provenance = scorer.provenance()
+    assert provenance["clip"]["revision_verified"] is True
+    assert provenance["clip_aesthetic"]["sha256_verified"] is True
+
+
+def test_clip_effective_revision_mismatch_fails_closed(tmp_path, monkeypatch):
+    class FakeModel:
+        config = SimpleNamespace(projection_dim=512, _commit_hash="0" * 40)
+
+    loader = SimpleNamespace(from_pretrained=lambda *args, **kwargs: FakeModel())
+    monkeypatch.setitem(
+        sys.modules,
+        "transformers",
+        SimpleNamespace(CLIPModel=loader, CLIPProcessor=loader),
+    )
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace())
+
+    with pytest.raises(QualityProvenanceError, match="CLIP model revision mismatch"):
+        CLIPQualityScorer(tmp_path)._load()
 
 
 def test_delivery_never_trades_scan_for_aesthetic():

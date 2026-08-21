@@ -1519,3 +1519,53 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
 - **Résultats verrouillés :** `docs/e029-results-2026-08-20.md`.
 - **Notebook :** `25_e030_reliable_qrverify_cascade.ipynb`.
 - **Protocole :** `docs/e030-reliable-qrverify-cascade.md`.
+
+## E030 — résultats du rescoring conservateur — 21 août 2026
+
+- **Archive auditée :** `75856bbf5ed2f32e.tar.gz`, SHA-256
+  `29e274b3015027db9cbb1cc61667217729563b01e545fe1351bb104eccbbb98c`.
+- **Intégrité :** 24/24 artefacts internes vérifiés, commit `369d955`, image et digest OCI
+  enregistrés ; 99 rasters uniques issus des 180 états E029 v4.
+- **Mesure :** cinq répétitions des 37 presets QR-Verify ; 16/99 rasters possèdent au moins un
+  preset instable.
+- **Politiques :** Stage 2 fixe `8/10`; fixe puis advisor `10/10`; fixe puis nouvelle seed
+  `10/10`. Les deux secours coûtent en moyenne 1,2 génération par prompt.
+- **Interprétation :** l'advisor récupère les deux échecs initiaux, mais une nouvelle seed les
+  récupère également. L'échantillon ne prouve donc pas la supériorité de l'advisor.
+- **Limite visuelle :** QR toujours très apparent, mode collapse vers une façade/grille et sujets
+  parfois absents malgré les scores automatiques. Aucun test téléphone n'est revendiqué.
+- **Seuil futur :** la porte E031 `36/37` ne conserverait que 7/10 gagnants E030 ; ce diagnostic
+  postérieur motive un holdout prospectif et ne réétiquette pas E030.
+- **Résultats complets :** `docs/e030-results-2026-08-21.md`.
+
+## E031 — protocole prospectif Stage 2 préenregistré — 21 août 2026
+
+- **Statut :** protocole uniquement ; aucune image ni aucun résultat E031 n'existe encore.
+- **Population :** 40 prompts gelés, 20 simples et 20 atypiques, contrôlés contre les prompts
+  d'entraînement et les anciens holdouts.
+- **Plan :** trois branches appariées par prompt — fixe seed A, advisor seed A et fixe seed B —
+  chacune avec Stage 1 interne puis Stage 2, soit 240 états logiques et 120 candidats Stage 2.
+- **Exclusions :** Stage 1 n'est jamais livrable et SR-MPGD n'est pas exécuté.
+- **Porte QR :** payload exact sur cinq répétitions et intersection d'au moins 36/37 presets,
+  saturation `<= 0,05`. Le seuil 30/37 reste affiché pour la comparaison E030 seulement.
+- **Qualité :** HPS/CLIP restent secondaires ; les 120 sorties reçoivent un jugement humain en
+  aveugle sur esthétique, fidélité, présence du sujet, discrétion et artefacts.
+- **Décision :** passage vers E032 seulement à partir de 38/40 portes QR strictes et 36/40 portes
+  finales humaines, sans revendiquer 99 % ni une validation téléphone.
+- **Audit avant exécution :** le premier brouillon du protocole décrivait une autre banque de
+  prompts, une rotation en carré latin et des analyses qui n'étaient pas dans le notebook. Aucune
+  image E031 n'ayant encore été générée, le document a été corrigé pour refléter exactement le
+  contrat exécutable : banque `e031h_*`, ordre déterministe par blocs et analyses réellement
+  produites. Les promesses non implémentées ont été retirées au lieu de fabriquer des résultats.
+- **Durcissement avant exécution :** normalisation NFKC et registre de fuite exact, `plan_id` lié
+  au commit/digest/révisions, hash du CLIP et des poids esthétiques du conseiller, saturation
+  recalculée sur chaque raster, images aveugles renommées, accord des quatre doublons, porte
+  humaine complète et cascade `final_deliverable`. Le plan, l'état, les prédictions et les exports
+  sont copiés dans l'archive finale.
+- **Provenance finale avant exécution :** le commit, le tag et le digest OCI de l'API sont
+  revalidés depuis `/v1/runtime`; les pins statiques CLIP/Aesthetic/HPS sont liés au plan, tandis
+  que leurs sept preuves effectives sont exigées dans chacun des 120 exports Stage 2. Le hash
+  sémantique du notebook et le SHA-256 du protocole sont liés puis revérifiés. Le Dockerfile
+  notebook embarque explicitement ce protocole et contrôle à la construction les chemins du
+  scorer QR-Verify, du bridge et de son `package-lock.json`.
+- **Protocole complet :** `docs/e031-prospective-stage2-holdout.md`.

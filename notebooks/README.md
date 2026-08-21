@@ -318,6 +318,33 @@ Le cache et les résultats sont reprenables sous `/data/e030-reliable-qrverify`.
 SR-MPGD sont explicitement inéligibles à la livraison. Voir
 [`../docs/e030-reliable-qrverify-cascade.md`](../docs/e030-reliable-qrverify-cascade.md).
 
+## E031 — holdout prospectif Stage 2
+
+E031 entraîne et gèle le conseiller avant d'exposer quarante prompts réellement nouveaux. Il
+génère ensuite, pour chaque prompt, le Stage 2 fixe avec la seed A, le Stage 2 conseillé avec la
+même seed et le Stage 2 fixe avec la seed B. Chaque candidat possède son Stage 1 exact comme
+prérequis : 240 essais API au total, dont 120 images Stage 2 évaluées. Stage 1 n'est jamais livré
+et SR-MPGD n'est pas exécuté.
+
+Après avoir commité et poussé la version locale, déployer sur le serveur depuis la racine du dépôt :
+
+```bash
+bash scripts/deploy-e031-notebook.sh
+```
+
+Puis ouvrir le notebook depuis PowerShell sur le PC :
+
+```powershell
+.\scripts\notebook-remote.ps1 -Notebook 26_e031_prospective_stage2_holdout.ipynb
+```
+
+Lancer **Run > Run All Cells**. Le notebook tourne sur CPU et délègue les diffusions à l'API GPU
+du même commit. Après une coupure, relancer exactement la même commande et Run All : le plan,
+les campagnes, les exports, les images et le rescoring sont repris sous
+`/data/e031-prospective-stage2-holdout/<plan-id>`. La fin produit une galerie humaine aveugle ;
+remplir son CSV puis relancer uniquement les cellules 9 et 10 n'effectue aucune régénération.
+Voir [`../docs/e031-prospective-stage2-holdout.md`](../docs/e031-prospective-stage2-holdout.md).
+
 Pour remplir ce dataset pendant une absence sans laisser Jupyter ouvert, E026W lance un Job
 Kubernetes CPU reprenable et réserve la RTX à l'API. Le plan borné contient 300 prompts, 16
 recettes, trois seeds et jusqu'à 14 400 essais. Les commandes de démarrage, suivi, reprise et

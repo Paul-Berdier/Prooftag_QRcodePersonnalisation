@@ -15,12 +15,48 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     lab_clip_scoring_enabled: bool = False
     lab_hps_scoring_enabled: bool = False
+    lab_quality_scoring_fail_closed: bool = False
+    quality_clip_model_id: str = "openai/clip-vit-base-patch32"
+    quality_clip_model_revision: str = Field(
+        default="092a3b7e31726acc3a0207eea00f6040ac8b03a7",
+        pattern=r"^[0-9a-f]{40}$",
+    )
+    quality_aesthetic_weights_url: str = (
+        "https://raw.githubusercontent.com/LAION-AI/aesthetic-predictor/"
+        "6d122adad522ab246644d9dc1c6d7a3810ee255f/"
+        "sa_0_4_vit_b_32_linear.pth"
+    )
+    quality_aesthetic_weights_sha256: str = Field(
+        default="c7b14cead230694acc7b9447974d3cad78003c72da032e402a303b6c2429e85f",
+        pattern=r"^[0-9a-f]{64}$",
+    )
+    quality_hps_model_version: Literal["v2.1"] = "v2.1"
+    quality_hps_package_name: Literal["hpsv2"] = "hpsv2"
+    quality_hps_package_version: str = "1.2.0"
+    quality_hps_source_revision: str = Field(
+        default="866735ecaae999fa714bd9edfa05aa2672669ee3",
+        pattern=r"^[0-9a-f]{40}$",
+    )
+    quality_hps_checkpoint_repo: str = "xswu/HPSv2"
+    quality_hps_checkpoint_revision: str = Field(
+        default="697403c78157020a1ae59d23f111aa58ced35b0a",
+        pattern=r"^[0-9a-f]{40}$",
+    )
+    quality_hps_checkpoint_filename: str = "HPS_v2.1_compressed.pt"
+    quality_hps_checkpoint_sha256: str = Field(
+        default="c57a38fb4a2f7e7c15bf00da2ea377cdf165448b4dd1052a484c215a998c9837",
+        pattern=r"^[0-9a-f]{64}$",
+    )
     data_dir: Path = Path("data")
     model_cache_dir: Path = Path("models")
     default_backend: Literal["qr", "controlnet"] = "qr"
     base_model_id: str = "stable-diffusion-v1-5/stable-diffusion-v1-5"
+    base_model_revision: str = ""
+    base_model_config_id: str = "stable-diffusion-v1-5/stable-diffusion-v1-5"
+    base_model_config_revision: str = ""
     controlnet_model_id: str = "DionTimmer/controlnet_qrcode-control_v1p_sd15"
     controlnet_model_subfolder: str = ""
+    controlnet_model_revision: str = ""
     controlnet_conditioning_profile: Literal[
         "binary", "gray_quiet_zone", "nacholmo_extremes_25"
     ] = "binary"
@@ -195,6 +231,14 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_guided_rediffusion_schedule(self) -> "Settings":
+        if self.lab_hps_scoring_enabled and not self.lab_clip_scoring_enabled:
+            raise ValueError("HPS scoring requires the laboratory quality scorer")
+        mutable_aesthetic_markers = ("/refs/heads/", "/main/", "/master/")
+        if any(
+            marker in self.quality_aesthetic_weights_url
+            for marker in mutable_aesthetic_markers
+        ):
+            raise ValueError("aesthetic weights URL must not reference a mutable branch")
         scheduler_steps = ceil(self.guided_rediffusion_steps / self.guided_rediffusion_strength)
         if scheduler_steps > 100:
             raise ValueError(

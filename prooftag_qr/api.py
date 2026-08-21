@@ -168,7 +168,10 @@ def ready() -> dict:
 
 @app.get("/v1/runtime", tags=["operations"])
 def runtime() -> dict:
-    return runtime_info(settings)
+    return runtime_info(
+        settings,
+        quality_scoring_provenance=lab_service.quality_scoring_provenance(),
+    )
 
 
 @app.get("/metrics", include_in_schema=False)
@@ -324,27 +327,36 @@ def get_lab_schema() -> dict:
         "clip_enabled": settings.lab_clip_scoring_enabled,
         "hpsv2_1_enabled": settings.lab_hps_scoring_enabled,
         "device": "cpu",
-        "failure_policy": "non_blocking",
+        "failure_policy": (
+            "fail_closed" if settings.lab_quality_scoring_fail_closed else "non_blocking"
+        ),
         "acceptance_effect": "none",
+        "provenance": lab_service.quality_scoring_provenance(),
         "metrics": {
             "clip_similarity": {
                 "label": "CLIP similarity (DiffQRCoder paper scale)",
-                "model": "openai/clip-vit-base-patch32",
+                "model": settings.quality_clip_model_id,
+                "revision": settings.quality_clip_model_revision,
                 "range": "cosine_-1_to_1",
             },
             "clip_score": {
                 "label": "CLIPScore",
-                "model": "openai/clip-vit-base-patch32",
+                "model": settings.quality_clip_model_id,
+                "revision": settings.quality_clip_model_revision,
                 "formula": "2.5 * max(clip_similarity, 0)",
             },
             "clip_aesthetic": {
                 "label": "LAION CLIP-Aesthetic",
                 "model": "LAION-AI/aesthetic-predictor ViT-B/32 linear",
+                "weights_sha256": settings.quality_aesthetic_weights_sha256,
                 "range": "approximately_0_to_10",
             },
             "hpsv2_1": {
                 "label": "Human Preference Score v2.1",
                 "model": "tgxs002/HPSv2 official v2.1 checkpoint",
+                "source_revision": settings.quality_hps_source_revision,
+                "checkpoint_revision": settings.quality_hps_checkpoint_revision,
+                "checkpoint_sha256": settings.quality_hps_checkpoint_sha256,
                 "comparison": "same_prompt_only",
             },
         },

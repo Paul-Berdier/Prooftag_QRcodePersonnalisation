@@ -88,6 +88,11 @@ def test_remote_gpu_notebook_has_an_isolated_kubernetes_runtime():
     assert "prepare_runtime" in server
     assert 'kubectl scale "deployment/${api_deployment}"' in server
     assert "reset)" in server
+    assert "XDG_STATE_HOME" in server
+    assert "write_previous_state" in server
+    assert "read_previous_state" in server
+    assert 'source "$state_file"' not in server
+    assert "chmod 600" in server
 
 
 def test_parameter_search_notebook_has_reproducible_screen_and_confirmation():
@@ -749,6 +754,7 @@ def test_deployment_shell_entrypoints_have_no_utf8_bom():
         Path("scripts/deploy-e028-notebook.sh"),
         Path("scripts/deploy-e029-notebook.sh"),
         Path("scripts/deploy-e030-notebook.sh"),
+        Path("scripts/deploy-e031-notebook.sh"),
     ]
     for path in paths:
         assert not path.read_bytes().startswith(b"\xef\xbb\xbf"), path
@@ -970,3 +976,151 @@ def test_e030_notebook_rescores_unique_e029_rasters_without_gpu_generation():
     namespace = {"__name__": "__main__", "__file__": str(builder_path)}
     exec(compile(builder, str(builder_path), "exec"), namespace)
     assert path.read_bytes() == before
+
+
+def test_e031_deploys_cpu_orchestrator_with_matching_versioned_gpu_api():
+    notebook = "26_e031_prospective_stage2_holdout.ipynb"
+    launcher = Path("scripts/notebook-remote.ps1").read_text(encoding="utf-8")
+    server = Path("scripts/notebook-server.sh").read_text(encoding="utf-8")
+    deployer = Path("scripts/deploy-e031-notebook.sh").read_text(encoding="utf-8")
+    app_deployer = Path("scripts/deploy-app-image.sh").read_text(encoding="utf-8")
+    dockerfile = Path("Dockerfile.notebook").read_text(encoding="utf-8")
+
+    assert notebook in launcher
+    assert notebook in server
+    assert notebook in deployer
+
+    advisor_case = server.split("advisor_mode=1", maxsplit=1)[0]
+    offline_case = server.split("offline_mode=1", maxsplit=1)[0].rsplit(
+        ";;", maxsplit=1
+    )[-1]
+    assert notebook in advisor_case
+    assert notebook not in offline_case
+
+    app_image = deployer.index("bash scripts/deploy-app-image.sh")
+    notebook_image = deployer.index(
+        'bash scripts/deploy-notebook-image.sh "notebooks/${notebook}"'
+    )
+    start = deployer.index('bash scripts/notebook-server.sh start "$notebook"')
+    reset = deployer.index('bash scripts/notebook-server.sh reset "$notebook"')
+    assert app_image < notebook_image < min(start, reset)
+
+    assert 'runtime_mode" != "advisor-cpu"' in deployer
+    assert 'api_replicas:-0}" -ne 1' in deployer
+    assert 'active_notebook_replicas:-0}" -ne 1' in deployer
+    assert 'vllm_replicas:-0}" -ne 0' in deployer
+    assert "PROOFTAG_GIT_COMMIT" in deployer
+    assert "PROOFTAG_RUNTIME_IMAGE" in deployer
+    assert "PROOFTAG_RUNTIME_IMAGE_DIGEST" in deployer
+    assert "upstream_revision" in deployer
+
+    assert 'image_revision" != "$git_sha"' in app_deployer
+    assert '^sha256:[0-9a-f]{64}$' in app_deployer
+    assert 'PROOFTAG_GIT_COMMIT=${git_sha}' in app_deployer
+    assert 'PROOFTAG_RUNTIME_IMAGE=${image}' in app_deployer
+    assert 'PROOFTAG_RUNTIME_IMAGE_DIGEST=${image_digest}' in app_deployer
+    assert 'deployed_runtime_digest" != "$image_digest"' in app_deployer
+    assert "Identité runtime API vérifiée" in app_deployer
+    assert "Révisions des modèles vérifiées" in app_deployer
+    assert "base_model_config_revision" in app_deployer
+    assert "controlnet_model_revision" in app_deployer
+    assert (
+        "COPY docs/e031-prospective-stage2-holdout.md "
+        "./docs/e031-prospective-stage2-holdout.md"
+    ) in dockerfile
+    assert "inspect.getfile(ConservativeQRVerifyScorer)" in dockerfile
+    assert "bridge.with_name('package-lock.json')" in dockerfile
+    assert "protocol.is_file()" in dockerfile
+
+
+def test_e031_notebook_is_prospective_paired_resumable_and_deterministic():
+    path = Path("notebooks/26_e031_prospective_stage2_holdout.ipynb")
+    builder_path = Path("scripts/build_e031_prospective_stage2_notebook.py")
+    notebook = json.loads(path.read_text(encoding="utf-8"))
+    source = "\n".join(
+        "".join(cell.get("source", [])) for cell in notebook["cells"]
+    )
+    builder = builder_path.read_text(encoding="utf-8")
+
+    assert "HOLDOUT_PROMPT_COUNT = 40" in source
+    assert "E031_PRIMARY_SEED" in source
+    assert "E031_RETRY_SEED" in source
+    assert "recommend_e031_advisor_chains" in source
+    assert "build_e031_prospective_plan" in source
+    assert "reject_campaigns_with_errors=True" in source
+    assert "require_exact_stage1_reuse" in source
+    assert "plan.public['srmpgd_trial_count'] != 0" in source
+    assert "ConservativeQRVerifyScorer" in source
+    assert "validate_rescore_journal_rows" in source
+    assert "E031_QR_VERIFY_REPETITIONS" in source
+    assert "E031_QR_VERIFY_PRESET_COUNT" in source
+    assert "stream.flush()" in source
+    assert "os.fsync" in source
+    assert "e031-human-review.csv" in source
+    assert "e031-human-review-reveal.csv" in source
+    assert "blind_image_dir / f'{blind_id}.png'" in source
+    assert "'image_path': f'images/{blind_id}.png'" in source
+    assert "reveal_path = RUN_DIR / 'e031-human-review-reveal.csv'" in source
+    assert "relative_to(gallery_dir)" not in source
+    assert "e031-artifact-manifest.json" in source
+    assert "artifact_checksums" in source
+    assert "runtime_image_digest" in source
+    assert "api_runtime_digest" in source
+    assert "api_identity.get('git_commit') != runtime_commit" in source
+    assert "api_runtime_image.endswith" in source
+    assert "static_quality_contract" in source
+    assert "api_quality_contract" in source
+    assert "canonical_sha256(schema['quality_scoring'])" not in source
+    assert "expected_run_quality_provenance" in source
+    assert "e031-quality-provenance-audit.csv" in source
+    assert "verified_stage2_quality_provenance_count" in source
+    assert "Métrique {metric} absente ou non finie" in source
+    assert "prompt_registry_sha256" in source
+    assert "normalized_prompt" in source
+    assert "AdvisorInferencePlan" in source
+    assert "bound_plan_id" in source
+    assert "notebook_semantic_sha256_initial" in source
+    assert "protocol_document_sha256" in source
+    assert "Les sources des cellules E031 ont changé" in source
+    assert "clip_model_revision" in source
+    assert "aesthetic_weights_sha256" in source
+    assert "base_model_revision" in source
+    assert "controlnet_model_revision" in source
+    assert "image_quality_metrics(rgb)" in source
+    assert "local_saturation_risk" in source
+    assert "une métrique API" in source
+    assert "e031-control-plane" in source
+    assert "e031-final-candidate-status.csv" in source
+    assert "e031-final-policy-decisions.csv" in source
+    assert "e031-human-duplicate-agreement.csv" in source
+    assert "final_deliverable" in source
+    assert "human_results.qr_discretion_1_5 >= 3" in source
+    assert "human_results.grid_too_visible_yes_no" in source
+    assert "human_reviews_used += 1" in source
+    assert "stage1_delivery_allowed': False" in source
+    assert "srmpgd_requested': False" in source
+    assert "physical_phone_claim': False" in source
+    assert "torch.cuda" not in source
+    assert "import torch" not in source
+
+    before = path.read_bytes()
+    namespace = {"__name__": "__main__", "__file__": str(builder_path)}
+    exec(compile(builder, str(builder_path), "exec"), namespace)
+    assert path.read_bytes() == before
+
+
+def test_e031_protocol_document_matches_the_executable_v1_contract():
+    protocol = Path("docs/e031-prospective-stage2-holdout.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "e031h_simple_001" in protocol
+    assert "e031h_atypical_040" in protocol
+    assert "amber glass chess knight" in protocol
+    assert "mechanical lotus" in protocol
+    assert "padding 78 px" in protocol
+    assert "il n'y a\npas de carré latin" in protocol
+    assert "recalculée localement" in protocol
+    assert "final_deliverable = software_deliverable ET human_approved" in protocol
+    assert "e031_simple_001" not in protocol
+    assert "huit strates" not in protocol
