@@ -1075,6 +1075,9 @@ def test_e031_notebook_is_prospective_paired_resumable_and_deterministic():
     assert "e031-quality-provenance-audit.csv" in source
     assert "verified_stage2_quality_provenance_count" in source
     assert "Métrique {metric} absente ou non finie" in source
+    assert "def finite_number(value):" in source
+    assert "finite_number(row.get(metric))" in source
+    assert "_finite(" not in source
     assert "prompt_registry_sha256" in source
     assert "normalized_prompt" in source
     assert "AdvisorInferencePlan" in source
@@ -1107,6 +1110,32 @@ def test_e031_notebook_is_prospective_paired_resumable_and_deterministic():
     namespace = {"__name__": "__main__", "__file__": str(builder_path)}
     exec(compile(builder, str(builder_path), "exec"), namespace)
     assert path.read_bytes() == before
+
+
+def test_e031_finite_number_helper_rejects_invalid_and_non_finite_values():
+    path = Path("notebooks/26_e031_prospective_stage2_holdout.ipynb")
+    notebook = json.loads(path.read_text(encoding="utf-8"))
+    module = ast.parse(
+        "\n".join(
+            "".join(cell.get("source", []))
+            for cell in notebook["cells"]
+            if cell["cell_type"] == "code"
+        )
+    )
+    helper = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef) and node.name == "finite_number"
+    )
+    namespace = {"math": __import__("math")}
+    exec(compile(ast.Module(body=[helper], type_ignores=[]), str(path), "exec"), namespace)
+    finite_number = namespace["finite_number"]
+
+    for value in (None, True, False, "", "nan", "inf", "-inf", object()):
+        assert finite_number(value) is None
+    assert finite_number("0") == 0.0
+    assert finite_number(0) == 0.0
+    assert finite_number("3.14") == 3.14
 
 
 def test_e031_protocol_document_matches_the_executable_v1_contract():

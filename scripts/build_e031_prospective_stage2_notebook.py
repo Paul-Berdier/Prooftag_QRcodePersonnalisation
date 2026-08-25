@@ -161,6 +161,16 @@ def canonical_sha256(value):
     return hashlib.sha256(body).hexdigest()
 
 
+def finite_number(value):
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        result = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return result if math.isfinite(result) else None
+
+
 def notebook_semantic_sha256(path):
     raw = json.loads(Path(path).read_text(encoding='utf-8'))
     material = [
@@ -716,7 +726,7 @@ quality_provenance_audit.to_csv(
 for metric in ['clip_aesthetic', 'clip_score', 'hpsv2_1']:
     invalid = [
         row['trial_id'] for row in stage2_rows
-        if _finite(row.get(metric)) is None
+        if finite_number(row.get(metric)) is None
     ]
     if invalid:
         raise RuntimeError(
