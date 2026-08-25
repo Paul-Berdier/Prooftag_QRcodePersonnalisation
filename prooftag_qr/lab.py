@@ -467,6 +467,7 @@ TOOL_SETTING_KEYS = {
     "srpg_seed_offset",
     "srpg_save_step_previews",
     "srpg_preview_interval",
+    "srmpgd_protocol",
     "srmpgd_max_iterations",
     "srmpgd_step_size",
     "srmpgd_lpips_weight",
@@ -628,6 +629,82 @@ def laboratory_profiles() -> list[dict[str, Any]]:
                 "est entièrement rebruité, les 40 pas Stage 2 sont exécutés, "
                 "PG λ2=3 et la cible vient du QArt public à fragment d'URL. "
                 "Ce QArt n'est pas le constructeur privé des auteurs."
+            ),
+        },
+        {
+            "id": "diffqrcoder_paper_srmpgd_guarded",
+            "name": "E032 — SR-MPGD papier avec gardes",
+            "backend": "controlnet",
+            "enabled": False,
+            "output_variant": "srmpgd",
+            "reuse_stage1": True,
+            "generation": generation.copy(),
+            "model": DIFFQRCODER_MODEL_SETTINGS.copy(),
+            "tools": {
+                "srpg_enabled": True,
+                "srmpgd_enabled": True,
+                "settings": {
+                    **stage2_at(1.0, target="qart_url_fragment"),
+                    "srpg_perceptual_weight": 3.0,
+                    "srmpgd_protocol": "guarded_production",
+                    "srmpgd_max_iterations": 20,
+                    "srmpgd_step_size": 1000.0,
+                    "srmpgd_lpips_weight": 0.01,
+                    "srmpgd_lpips_net": "vgg",
+                    "srmpgd_crop_padding_px": -1,
+                    "srmpgd_dark_threshold": 0.5,
+                    "srmpgd_light_threshold": 0.5,
+                    "srmpgd_center_fraction": 1 / 3,
+                    "srmpgd_max_initial_module_error_rate": 1.0,
+                    "srmpgd_max_step_rms": 0.02,
+                    "srmpgd_max_total_delta_rms": 0.06,
+                    "srmpgd_min_relative_module_improvement": 0.01,
+                    "srmpgd_max_lpips_loss": 0.15,
+                    "srmpgd_max_mean_absolute_change": 0.06,
+                    "srmpgd_max_saturation_mean_increase": 0.04,
+                    "srmpgd_max_high_saturation_ratio_increase": 0.05,
+                    "srmpgd_max_rgb_clipped_channel_ratio_increase": 0.01,
+                },
+            },
+            "description": (
+                "Témoin E032 apparié au même Stage 2 QArt que le mode équations et "
+                "aux mêmes gamma/LPIPS, mais avec caps latents, gardes esthétiques, "
+                "arrêt QR-Verify et sélection externe. Il isole l'effet des gardes."
+            ),
+        },
+        {
+            "id": "diffqrcoder_paper_srmpgd",
+            "name": "E032 — SR-MPGD équations du PDF",
+            "backend": "controlnet",
+            "enabled": False,
+            "output_variant": "srmpgd",
+            "reuse_stage1": True,
+            "generation": generation.copy(),
+            "model": DIFFQRCODER_MODEL_SETTINGS.copy(),
+            "tools": {
+                "srpg_enabled": True,
+                "srmpgd_enabled": True,
+                "settings": {
+                    **stage2_at(1.0, target="qart_url_fragment"),
+                    "srpg_perceptual_weight": 3.0,
+                    "srmpgd_protocol": "paper_equations",
+                    "srmpgd_max_iterations": 20,
+                    "srmpgd_step_size": 1000.0,
+                    "srmpgd_lpips_weight": 0.01,
+                    "srmpgd_lpips_net": "vgg",
+                    "srmpgd_crop_padding_px": -1,
+                    "srmpgd_dark_threshold": 0.5,
+                    "srmpgd_light_threshold": 0.5,
+                    "srmpgd_center_fraction": 1 / 3,
+                },
+            },
+            "description": (
+                "E032, désactivé par défaut : même Stage 2 complet que le profil PDF, "
+                "puis Eq. 13-14 sur son latent propre avec la cible QR originale, gamma "
+                "1000 et LPIPS 0,01. Aucun gate MER, cap latent, arrêt esthétique, arrêt "
+                "QR-Verify ou oracle de sélection : la sortie est l'itération finale. "
+                "Le QArt reste l'approximation publique à fragment d'URL et non le "
+                "constructeur privé des auteurs ; ce profil est réservé à l'ablation."
             ),
         },
         {

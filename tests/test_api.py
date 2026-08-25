@@ -76,7 +76,7 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     lab_page = client.get("/lab")
     assert lab_page.status_code == 200
     assert "PROOFTAG × DIFFQRCODER" in lab_page.text
-    assert "20260805-e025-quality-scores-1" in lab_page.text
+    assert "20260825-e032-srmpgd-paper-1" in lab_page.text
     lab_javascript = client.get("/lab-assets/app.js")
     assert lab_javascript.status_code == 200
     assert "human_scan_result" in lab_javascript.text
@@ -120,6 +120,8 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
         "diffqrcoder_stage1",
         "diffqrcoder_srpg",
         "diffqrcoder_paper_srpg",
+        "diffqrcoder_paper_srmpgd_guarded",
+        "diffqrcoder_paper_srmpgd",
         "diffqrcoder_srmpgd",
         "diffqrcoder_srmpgd_robust",
         "diffqrcoder_auto",

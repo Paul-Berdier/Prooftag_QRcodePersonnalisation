@@ -1324,6 +1324,26 @@ def _decision(
 ) -> dict[str, Any]:
     branches = E031_POLICIES[policy]
     gate = _gate(gate_name)
+    srmpgd_was_requested = False
+    for candidate in candidates_by_branch.values():
+        configuration = candidate.get("candidate_configuration")
+        tools = (
+            configuration.get("tools")
+            if isinstance(configuration, Mapping)
+            else None
+        )
+        srmpgd_was_requested = srmpgd_was_requested or any(
+            (
+                "srmpgd"
+                in str(candidate.get("output_variant") or "").strip().casefold(),
+                "srmpgd"
+                in str(candidate.get("requested_source_output_variant") or "")
+                .strip()
+                .casefold(),
+                isinstance(tools, Mapping)
+                and _strict_bool(tools.get("srmpgd_enabled")) is True,
+            )
+        )
     attempted: list[tuple[Mapping[str, Any], Stage2CandidateAssessment]] = []
     selected: Mapping[str, Any] | None = None
     selected_assessment: Stage2CandidateAssessment | None = None
@@ -1371,6 +1391,14 @@ def _decision(
             math.ceil(gate.qr_tolerance_threshold * E031_QR_VERIFY_PRESET_COUNT)
         ),
         "deliverable": selected is not None,
+        # Repeat protocol evidence on every decision so tabular exports remain
+        # independently auditable instead of trusting aggregate constants.
+        "stage1_was_delivered": (
+            selected is not None
+            and str(selected.get("pipeline_state") or "").strip().casefold()
+            == "stage1"
+        ),
+        "srmpgd_was_requested": srmpgd_was_requested,
         "selected_branch": selected_branch,
         "selected_attempt": selected_index,
         "selected_generation_run_id": selected.get("generation_run_id") if selected else None,
@@ -1491,8 +1519,12 @@ def evaluate_e031_policies(
                             if item.get("selected_branch")
                         )
                     ),
-                    "stage1_was_delivered": False,
-                    "srmpgd_was_requested": False,
+                    "stage1_was_delivered": any(
+                        bool(item["stage1_was_delivered"]) for item in selected
+                    ),
+                    "srmpgd_was_requested": any(
+                        bool(item["srmpgd_was_requested"]) for item in selected
+                    ),
                 }
             )
     return {"decisions": decisions, "summary": summaries}

@@ -62,14 +62,16 @@ Le dépôt public ne reproduit pas seul tout l’algorithme décrit dans le papi
 - le constructeur Reed–Solomon de la cible `Qart(x̂, y)` n’est pas publié. Le
   wrapper utilise donc le QR binaire exact comme cible de repli : il est moins
   proche du Stage 1, mais son payload et sa matrice sont garantis ;
-- le SR-MPGD public réutilise la loss pondérée du Stage 2. Le wrapper applique
-  séparément l’équation 13, `LSR + 0,01 × LPIPS`, puis l’équation 14 avec
-  `gamma=1000`.
+- le SR-MPGD public réutilise la loss pondérée du Stage 2. Le wrapper sépare
+  désormais deux protocoles déclarés dans `/v1/lab/schema` :
+  - `guarded_production` décode et valide chaque état, applique les gardes
+    esthétiques et conserve le meilleur candidat externe ;
+  - `paper_equations`, réservé à E032, applique littéralement
+    `LSR + 0,01 × LPIPS` avec `gamma=1000`, sans porte, cap, early stop ou
+    oracle, puis rapporte l'itération finale fixée.
 
-SR-MPGD décode et valide chaque état, s’arrête en cas de succès strict ou de
-gradient non fini et livre le meilleur état observé — jamais aveuglément la
-dernière itération. Ces corrections sont déclarées dans `/v1/lab/schema`. Le
-commit amont n’est pas modifié sur disque.
+Le commit amont n’est pas modifié sur disque. Le profil E032 est désactivé par
+défaut et aucune de ses sorties n'est livrable automatiquement.
 
 ## Limite honnête de la cible QArt
 
@@ -79,10 +81,12 @@ constructeur. Une ancienne version Prooftag avait fabriqué un hybride coloré
 en remplaçant des centres de modules : ce n’était pas QArt et ce raster était
 ensuite binarisé par la loss SRL comme s’il s’agissait d’un QR valide.
 
-Cette imitation est supprimée. Le laboratoire passe désormais le QR binaire
-exact à ControlNet et à SRL. Un vrai QArt ne pourra revenir que dans un mode
-expérimental séparé, avec preuve de décodage du payload Prooftag avant toute
-diffusion.
+La production passe le QR binaire exact à ControlNet et à SRL. Le mode
+expérimental propose un proxy QArt public à fragment d'URL. Dans ce mode,
+`y_tilde` est réservé au ControlNet/SRPG du Stage 2 ; SR-MPGD reçoit toujours le
+QR original `y`, conformément aux équations 12 à 14. Ce proxy n'est pas le
+constructeur Reed-Solomon privé des auteurs et ne permet pas de revendiquer une
+reproduction intégrale.
 
 Pour comparer des paramètres, le Stage 2 reçoit une seed dérivée explicite
 (`seed + srpg_seed_offset`). Les recettes d’un même prompt et d’une même seed
@@ -120,7 +124,8 @@ charger plusieurs pipelines en VRAM.
   poids ControlNet, SRG `λ1`, PG `λ2`, ETA et seed offset ;
 - cible Stage 2 : QR binaire exact, non modifiable dans le profil de production ;
 - artefacts : fréquence des aperçus intermédiaires ;
-- SR-MPGD : itérations, `gamma`, poids LPIPS et MER initial maximal ;
+- SR-MPGD : protocole sécurisé ou équations papier, itérations, `gamma`, poids
+  LPIPS et, uniquement en mode sécurisé, MER initial maximal ;
 - avancé : modèles, commit et géométrie QR.
 
 Les valeurs initiales sont 40 pas, CFG 7,5, ControlNet 1,35, SRG 500, PG 2

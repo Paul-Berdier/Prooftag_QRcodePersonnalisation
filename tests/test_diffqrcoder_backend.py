@@ -14,6 +14,7 @@ from prooftag_qr.diffqrcoder_backend import (
 )
 from prooftag_qr.qr import generate_diffqrcoder_qr
 from prooftag_qr.quality import image_sha256
+from prooftag_qr.schemas import GenerationRequest
 from prooftag_qr.srmpgd import SRMPGDStep
 
 
@@ -246,6 +247,69 @@ def test_stage2_state_export_and_import_are_hash_verified():
     corrupted = {**state, "latent": state["latent"] + 1}
     with pytest.raises(RuntimeError, match="latent hash mismatch"):
         target.import_stage2_state(corrupted)
+
+
+def test_reused_qart_stage2_routes_original_qr_to_srmpgd(monkeypatch):
+    torch = pytest.importorskip("torch")
+    original = generate_diffqrcoder_qr(
+        "https://pt.ag/t/original",
+        "M",
+        version=3,
+        mask_pattern=4,
+        module_size=20,
+    )
+    qart_proxy = generate_diffqrcoder_qr(
+        "https://pt.ag/t/original#proxy",
+        "M",
+        version=3,
+        mask_pattern=4,
+        module_size=20,
+    )
+    stage2_image = _reference_artwork()
+    latent = torch.zeros((1, 4, 8, 8), dtype=torch.float32)
+    backend = UpstreamDiffQRCoderBackend(
+        Settings(srpg_enabled=True, srmpgd_enabled=True, device="cpu")
+    )
+    backend._stage2_override = {
+        "latent": latent,
+        "latent_sha256": backend_module._tensor_sha256(latent),
+        "source_run_id": "paired-stage2",
+        "source_method_id": "diffqrcoder_paper_srpg",
+        "image": stage2_image,
+        "reference": stage2_image,
+        "control": SimpleNamespace(
+            image=qart_proxy.image,
+            blueprint=qart_proxy,
+            match_mode="canonical_url_without_fragment",
+        ),
+        "diagnostics": {},
+    }
+    observed = {}
+    monkeypatch.setattr(
+        backend,
+        "_load",
+        lambda: SimpleNamespace(unet=SimpleNamespace(dtype=torch.float32)),
+    )
+
+    def apply_srmpgd(_pipe, _latent, image, target, **_kwargs):
+        observed["target"] = target
+        return image
+
+    monkeypatch.setattr(backend, "_apply_srmpgd", apply_srmpgd)
+    monkeypatch.setattr(backend, "_record_divergence_guard", lambda *_args: None)
+
+    backend._run_stage2(
+        stage2_image,
+        original,
+        GenerationRequest(
+            payload="https://pt.ag/t/original",
+            prompt="paired target routing",
+        ),
+        51_001,
+    )
+
+    assert observed["target"] is original
+    assert observed["target"] is not qart_proxy
 
 
 def test_stage2_target_is_the_exact_binary_qr_not_a_visual_proxy():

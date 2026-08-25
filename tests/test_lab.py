@@ -174,6 +174,8 @@ def test_web_lab_exposes_only_the_pinned_diffqrcoder_chain():
         "diffqrcoder_stage1",
         "diffqrcoder_srpg",
         "diffqrcoder_paper_srpg",
+        "diffqrcoder_paper_srmpgd_guarded",
+        "diffqrcoder_paper_srmpgd",
         "diffqrcoder_srmpgd",
         "diffqrcoder_srmpgd_robust",
         "diffqrcoder_auto",
@@ -189,12 +191,29 @@ def test_web_lab_exposes_only_the_pinned_diffqrcoder_chain():
     }
     srpg = next(profile for profile in profiles if profile["id"] == "diffqrcoder_srpg")
     paper_srpg = next(profile for profile in profiles if profile["id"] == "diffqrcoder_paper_srpg")
+    paper_srmpgd = next(
+        profile for profile in profiles if profile["id"] == "diffqrcoder_paper_srmpgd"
+    )
+    paper_srmpgd_guarded = next(
+        profile
+        for profile in profiles
+        if profile["id"] == "diffqrcoder_paper_srmpgd_guarded"
+    )
     assert srpg["tools"]["settings"]["diffqrcoder_stage2_target_mode"] == "binary_exact"
     assert srpg["tools"]["settings"]["diffqrcoder_stage2_strength"] == 0.65
     assert paper_srpg["enabled"] is False
     assert paper_srpg["tools"]["settings"]["diffqrcoder_stage2_target_mode"] == "qart_url_fragment"
     assert paper_srpg["tools"]["settings"]["diffqrcoder_stage2_strength"] == 1.0
     assert paper_srpg["tools"]["settings"]["srpg_perceptual_weight"] == 3.0
+    assert paper_srmpgd["enabled"] is False
+    assert paper_srmpgd["tools"]["settings"]["srmpgd_protocol"] == "paper_equations"
+    assert paper_srmpgd["tools"]["settings"]["srmpgd_step_size"] == 1000.0
+    assert paper_srmpgd["tools"]["settings"]["srmpgd_lpips_weight"] == 0.01
+    assert paper_srmpgd_guarded["enabled"] is False
+    assert (
+        paper_srmpgd_guarded["tools"]["settings"]["srmpgd_protocol"]
+        == "guarded_production"
+    )
     qart = next(profile for profile in profiles if profile["id"] == "diffqrcoder_qart_srpg")
     automatic = next(profile for profile in profiles if profile["id"] == "diffqrcoder_auto")
     srmpgd = next(profile for profile in profiles if profile["id"] == "diffqrcoder_srmpgd")
@@ -256,6 +275,19 @@ def test_srmpgd_reuses_the_matching_srpg_stage2_cache_key(tmp_path):
     robust_srmpgd = LabMethod.model_validate(
         next(item for item in profiles if item["id"] == "diffqrcoder_srmpgd_robust")
     )
+    paper_srpg = LabMethod.model_validate(
+        next(item for item in profiles if item["id"] == "diffqrcoder_paper_srpg")
+    )
+    paper_srmpgd = LabMethod.model_validate(
+        next(item for item in profiles if item["id"] == "diffqrcoder_paper_srmpgd")
+    )
+    paper_srmpgd_guarded = LabMethod.model_validate(
+        next(
+            item
+            for item in profiles
+            if item["id"] == "diffqrcoder_paper_srmpgd_guarded"
+        )
+    )
     try:
         srpg_key = service._stage2_cache_key(
             srpg,
@@ -289,12 +321,38 @@ def test_srmpgd_reuses_the_matching_srpg_stage2_cache_key(tmp_path):
             "M",
             "https://ptag.io/t/cache",
         )
+        paper_srpg_key = service._stage2_cache_key(
+            paper_srpg,
+            "blue courtyard",
+            "easynegative",
+            51001,
+            "M",
+            "https://ptag.io/t/cache",
+        )
+        paper_srmpgd_key = service._stage2_cache_key(
+            paper_srmpgd,
+            "blue courtyard",
+            "easynegative",
+            51001,
+            "M",
+            "https://ptag.io/t/cache",
+        )
+        paper_srmpgd_guarded_key = service._stage2_cache_key(
+            paper_srmpgd_guarded,
+            "blue courtyard",
+            "easynegative",
+            51001,
+            "M",
+            "https://ptag.io/t/cache",
+        )
     finally:
         service.shutdown()
 
     assert srpg_key == srmpgd_key
     assert srpg_key == automatic_key
     assert srpg_key == robust_srmpgd_key
+    assert paper_srpg_key == paper_srmpgd_key
+    assert paper_srpg_key == paper_srmpgd_guarded_key
 
 
 def test_stage2_cache_key_uses_effective_math_not_debug_settings(tmp_path):

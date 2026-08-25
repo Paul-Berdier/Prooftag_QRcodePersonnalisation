@@ -922,7 +922,20 @@ policy_summary = pd.DataFrame(policy_report['summary'])
 decisions.to_csv(RUN_DIR / 'e031-policy-decisions.csv', index=False)
 policy_summary.to_csv(RUN_DIR / 'e031-policy-summary.csv', index=False)
 atomic_json(RUN_DIR / 'e031-policy-report.json', policy_report)
-if decisions.stage1_was_delivered.any() or decisions.srmpgd_was_requested.any():
+required_decision_columns = {
+    'stage1_was_delivered',
+    'srmpgd_was_requested',
+}
+missing_decision_columns = sorted(required_decision_columns - set(decisions.columns))
+if missing_decision_columns:
+    raise RuntimeError(
+        'Rapport de politique incomplet : colonnes absentes '
+        + ', '.join(missing_decision_columns)
+    )
+if (
+    not decisions['stage1_was_delivered'].eq(False).all()
+    or not decisions['srmpgd_was_requested'].eq(False).all()
+):
     raise RuntimeError('Violation du protocole : Stage 1 livré ou SR-MPGD demandé.')
 
 software_family_rows = []

@@ -526,6 +526,8 @@ def test_e031_policy_replay_uses_standard_and_effective_36_of_37_strict_gates():
     assert strict["api_trials_used"] == 4
     assert oracle["selected_branch"] == "fixed_seed_b"
     assert oracle["stage2_attempts_used"] == 3
+    assert all(item["stage1_was_delivered"] is False for item in decisions)
+    assert all(item["srmpgd_was_requested"] is False for item in decisions)
 
     strict_summary = next(
         item
@@ -538,6 +540,50 @@ def test_e031_policy_replay_uses_standard_and_effective_36_of_37_strict_gates():
     assert strict_summary["total_effective_api_trials"] == 4
     assert strict_summary["stage1_was_delivered"] is False
     assert strict_summary["srmpgd_was_requested"] is False
+
+
+def test_e031_policy_decisions_expose_and_aggregate_protocol_evidence():
+    rows = _enriched_rows()
+    hidden_branch = next(
+        item for item in rows if item["branch_id"] == "fixed_seed_b"
+    )
+    hidden_branch["requested_source_output_variant"] = "srmpgd"
+
+    report = evaluate_e031_policies(rows)
+    decision_columns_used_by_notebook = {
+        "gate",
+        "policy",
+        "prompt_family",
+        "deliverable",
+        "stage1_was_delivered",
+        "srmpgd_was_requested",
+        "conservative_qr_tolerance",
+        "maximum_saturation_risk",
+        "hpsv2_1",
+        "clip_score",
+        "clip_aesthetic",
+    }
+    assert all(
+        decision_columns_used_by_notebook <= set(item)
+        for item in report["decisions"]
+    )
+    fixed_only = next(
+        item
+        for item in report["decisions"]
+        if item["gate"] == "standard" and item["policy"] == "fixed_seed_a"
+    )
+    fixed_only_summary = next(
+        item
+        for item in report["summary"]
+        if item["gate"] == "standard" and item["policy"] == "fixed_seed_a"
+    )
+
+    # Even though fixed_seed_b is not attempted by this policy, the decision
+    # must expose the forbidden request present in its candidate matrix.
+    assert fixed_only["stage1_was_delivered"] is False
+    assert fixed_only["srmpgd_was_requested"] is True
+    assert fixed_only_summary["stage1_was_delivered"] is False
+    assert fixed_only_summary["srmpgd_was_requested"] is True
 
 
 def test_e031_lexicographic_selection_is_qr_then_saturation_then_quality():

@@ -27,7 +27,8 @@ param(
         "23_e028_hierarchical_prompt_advisor.ipynb",
         "24_e029_srmpgd_exact_raster_recovery.ipynb",
         "25_e030_reliable_qrverify_cascade.ipynb",
-        "26_e031_prospective_stage2_holdout.ipynb"
+        "26_e031_prospective_stage2_holdout.ipynb",
+        "27_e032_srmpgd_paper_reconstruction.ipynb"
     )]
     [string]$Notebook = "02_generate_live_on_gpu.ipynb",
     [switch]$Reset,
@@ -139,7 +140,8 @@ try {
                 "22_e027_srmpgd_policy_holdout.ipynb",
                 "23_e028_hierarchical_prompt_advisor.ipynb",
                 "24_e029_srmpgd_exact_raster_recovery.ipynb",
-                "26_e031_prospective_stage2_holdout.ipynb"
+                "26_e031_prospective_stage2_holdout.ipynb",
+                "27_e032_srmpgd_paper_reconstruction.ipynb"
             )) {
                 Write-Host "Mode campagne : Jupyter reste sur CPU et l'API conserve la RTX pour generer les donnees."
             }

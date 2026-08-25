@@ -17,7 +17,7 @@ expected_notebook_path="/workspace/notebooks/${expected_notebook}"
 advisor_mode=0
 offline_mode=0
 case "$expected_notebook" in
-  21_e026_prompt_parameter_advisor.ipynb|22_e027_srmpgd_policy_holdout.ipynb|23_e028_hierarchical_prompt_advisor.ipynb|24_e029_srmpgd_exact_raster_recovery.ipynb|26_e031_prospective_stage2_holdout.ipynb)
+  21_e026_prompt_parameter_advisor.ipynb|22_e027_srmpgd_policy_holdout.ipynb|23_e028_hierarchical_prompt_advisor.ipynb|24_e029_srmpgd_exact_raster_recovery.ipynb|26_e031_prospective_stage2_holdout.ipynb|27_e032_srmpgd_paper_reconstruction.ipynb)
     advisor_mode=1
     ;;
   25_e030_reliable_qrverify_cascade.ipynb)

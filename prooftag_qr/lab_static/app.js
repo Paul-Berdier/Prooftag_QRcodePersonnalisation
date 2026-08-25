@@ -442,11 +442,11 @@ async function renderSrmpgdTrace(run) {
   const host = $("#srmpgd-trace");
   panel.hidden = true;
   host.innerHTML = "";
-  if (run.selected_variant !== "srmpgd") return;
+  if (run.selected_variant !== "srmpgd" && !run.provenance?.srmpgd_protocol) return;
   try {
     const trace = await api(`/v1/generations/${run.id}/metadata/srmpgd_trace`);
     panel.hidden = false;
-    host.innerHTML = `<p class="muted">Loss robuste : ${trace.robust_loss_enabled ? "active" : "témoin officiel"} · état retenu : ${trace.selected_iteration} · arrêt : ${trace.stop_reason}</p>
+    host.innerHTML = `<p class="muted">Protocole : ${trace.protocol || "guarded_production"} · cible : ${trace.target || "historique"} · loss robuste : ${trace.robust_loss_enabled ? "active" : "non"} · état retenu : ${trace.selected_iteration} · arrêt : ${trace.stop_reason}</p>
       <div class="table-scroll"><table>
         <thead><tr><th>It.</th><th>Retenu</th><th>Score QR-Verify</th><th>MER</th><th>SRL</th><th>Base</th><th>Flou</th><th>Réduction</th><th>Lum.</th><th>Contraste</th><th>LPIPS</th><th>Δ latent</th><th>Pas</th><th>Garde</th><th>Gain QR</th><th>Éligible</th></tr></thead>
         <tbody>${trace.steps.map(step => `<tr class="${step.iteration === trace.selected_iteration ? "selected" : ""}">
@@ -520,6 +520,8 @@ async function openTrial(index) {
     metric("Sélection automatique", Number(quality.selection_auto_mode || 0) === 1 ? "Oui" : "Non"),
     metric("Repli Stage 1", Number(quality.selection_preserved_stage1 || 0) === 1 ? "Oui — Stage 2 écarté" : "Non"),
     metric("SR-MPGD gamma", fmt(quality.diffqrcoder_srmpgd_gamma, 3)),
+    metric("Protocole SR-MPGD", run.provenance?.srmpgd_protocol || "—"),
+    metric("Cible SR-MPGD", run.provenance?.srmpgd_target === "original_qr" ? "QR original y" : "—"),
     metric("Loss SR-MPGD", Number(quality.diffqrcoder_srmpgd_robust_loss_enabled || 0) === 1 ? "Robuste E020" : "Officielle"),
     metric("SR-MPGD LPIPS lambda", fmt(quality.diffqrcoder_srmpgd_lpips_weight, 3)),
     metric("Itération retenue", fmt(quality.diffqrcoder_srmpgd_selected_iteration, 0)),

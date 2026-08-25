@@ -168,6 +168,9 @@ class Settings(BaseSettings):
         default=0.0, ge=0.0, le=1.0
     )
     srmpgd_enabled: bool = False
+    srmpgd_protocol: Literal["guarded_production", "paper_equations"] = (
+        "guarded_production"
+    )
     srmpgd_max_iterations: int = Field(default=4, ge=1, le=100)
     srmpgd_step_size: float = Field(default=100.0, gt=0.0, le=100_000.0)
     srmpgd_lpips_weight: float = Field(default=0.10, ge=0.0, le=100.0)

@@ -1078,6 +1078,9 @@ def test_e031_notebook_is_prospective_paired_resumable_and_deterministic():
     assert "def finite_number(value):" in source
     assert "finite_number(row.get(metric))" in source
     assert "_finite(" not in source
+    assert "missing_decision_columns" in source
+    assert "decisions.stage1_was_delivered" not in source
+    assert "decisions.srmpgd_was_requested" not in source
     assert "prompt_registry_sha256" in source
     assert "normalized_prompt" in source
     assert "AdvisorInferencePlan" in source
@@ -1153,3 +1156,67 @@ def test_e031_protocol_document_matches_the_executable_v1_contract():
     assert "final_deliverable = software_deliverable ET human_approved" in protocol
     assert "e031_simple_001" not in protocol
     assert "huit strates" not in protocol
+
+
+def test_e032_notebook_is_visual_paired_resumable_and_paper_explicit():
+    path = Path("notebooks/27_e032_srmpgd_paper_reconstruction.ipynb")
+    builder_path = Path("scripts/build_e032_srmpgd_paper_notebook.py")
+    notebook = json.loads(path.read_text(encoding="utf-8"))
+    source = "\n".join(
+        "".join(cell.get("source", [])) for cell in notebook["cells"]
+    )
+    builder = builder_path.read_text(encoding="utf-8")
+
+    assert "e032-srmpgd-paper-reconstruction-v1" in source
+    assert "sum(item['family'] == 'simple' for item in PROMPTS) == 5" in source
+    assert "sum(item['family'] == 'atypical' for item in PROMPTS) == 5" in source
+    assert "SEEDS = [51_001, 62_017, 73_133]" in source
+    assert "CHECKPOINT_ITERATIONS = [0, 1, 2, 4, 8, 12, 20]" in source
+    assert "diffqrcoder_paper_srmpgd_guarded" in source
+    assert "if profiles[profile_id]['enabled'] is not False" in source
+    assert "method['enabled'] = True" in source
+    assert "srmpgd_protocol'] == 'guarded_production'" in source
+    assert "srmpgd_max_initial_module_error_rate'] == 1.0" in source
+    assert "srmpgd_protocol'] == 'paper_equations'" in source
+    assert "srmpgd_step_size'] == 1000.0" in source
+    assert "srmpgd_lpips_weight'] == 0.01" in source
+    assert "require_exact_stage1_reuse" in source
+    assert "candidate_signature != paper_stage2_signature" in source
+    assert "api_runtime = api_json('/v1/runtime')" in source
+    assert "PROOFTAG_GIT_COMMIT" in source
+    assert "PROOFTAG_RUNTIME_IMAGE_DIGEST" in source
+    assert "api_identity.get('git_commit') != notebook_commit" in source
+    assert "'runtime_binding': runtime_binding" in source
+    assert "len(plan.campaigns) == 30" in source
+    assert "maximum_campaign_attempts=1" in source
+    assert "reject_campaigns_with_errors=True" in source
+    assert "stage2_source_latent_sha256 == row.stage2_latent_sha256" in source
+    assert "srmpgd_stage2_image_sha256 == parent.final_image_sha256" in source
+    assert "finite(row.srmpgd_iteration_zero_exact) == 1.0" in source
+    assert "ConservativeQRVerifyScorer" in source
+    assert "RUN_INTERMEDIATE_CLIP_HPS" in source
+    assert "clip_aesthetic" in source
+    assert "clip_score" in source
+    assert "hpsv2_1" in source
+    assert "srmpgd_iteration_{iteration:03d}" in source
+    assert "context-contact-sheets" in source
+    assert "iteration-contact-sheets" in source
+    assert "e032-checkpoint-scores.jsonl" in source
+    assert "e032-final-qrverify-scores.jsonl" in source
+    assert "measurement_key" in source
+    assert "record_key" in source
+    assert "e032-final-raster-alias-audit.csv" in source
+    assert "e032-checkpoint-raster-alias-audit.csv" in source
+    assert "e032-artifact-manifest.json" in source
+    assert "automatic_delivery_authorized': False" in source
+    assert "probabilité de scan téléphone" in source
+
+    before = path.read_bytes()
+    namespace = {"__name__": "__main__", "__file__": str(builder_path)}
+    exec(compile(builder, str(builder_path), "exec"), namespace)
+    assert path.read_bytes() == before
+
+    launcher = Path("scripts/notebook-remote.ps1").read_text(encoding="utf-8")
+    server = Path("scripts/notebook-server.sh").read_text(encoding="utf-8")
+    assert path.name in launcher
+    assert path.name in server

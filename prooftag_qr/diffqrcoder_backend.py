@@ -591,7 +591,7 @@ class UpstreamDiffQRCoderBackend:
         pipe,
         latent,
         image: Image.Image,
-        blueprint: QRBlueprint,
+        original_blueprint: QRBlueprint,
         *,
         validation_callback=None,
     ) -> Image.Image:
@@ -610,7 +610,19 @@ class UpstreamDiffQRCoderBackend:
             ).to(self.settings.device).to(pipe.unet.dtype)
 
         def preview_srmpgd(preview_image, step):
-            if self.settings.srpg_save_step_previews:
+            paper_milestones = {
+                0,
+                1,
+                2,
+                4,
+                8,
+                12,
+                self.settings.srmpgd_max_iterations,
+            }
+            if self.settings.srpg_save_step_previews and (
+                self.settings.srmpgd_protocol != "paper_equations"
+                or step.iteration in paper_milestones
+            ):
                 self._debug_artifacts[
                     f"srmpgd_iteration_{step.iteration:03d}"
                 ] = preview_image.copy()
@@ -622,8 +634,9 @@ class UpstreamDiffQRCoderBackend:
         srmpgd = run_srmpgd(
             pipe,
             latent,
-            blueprint,
+            original_blueprint,
             SRMPGDConfig(
+                protocol=self.settings.srmpgd_protocol,
                 max_iterations=self.settings.srmpgd_max_iterations,
                 step_size=self.settings.srmpgd_step_size,
                 lpips_weight=self.settings.srmpgd_lpips_weight,
@@ -678,7 +691,11 @@ class UpstreamDiffQRCoderBackend:
                 functional_pattern_tone_factor=0.0,
             ),
             initial_image=image,
-            scanning_loss=paper_scanning_loss,
+            scanning_loss=(
+                None
+                if self.settings.srmpgd_protocol == "paper_equations"
+                else paper_scanning_loss
+            ),
             validation_callback=validation_callback,
             preview_callback=preview_srmpgd,
         )
@@ -705,6 +722,8 @@ class UpstreamDiffQRCoderBackend:
             ),
         )
         self._debug_metadata["srmpgd_trace"] = {
+            "protocol": self.settings.srmpgd_protocol,
+            "target": "original_qr",
             "selected_iteration": srmpgd.selected_iteration,
             "stop_reason": srmpgd.stop_reason,
             "robust_loss_enabled": any(
@@ -721,6 +740,9 @@ class UpstreamDiffQRCoderBackend:
         self._diagnostics.update(
             {
                 "diffqrcoder_srmpgd_iterations": float(len(srmpgd.steps) - 1),
+                "diffqrcoder_srmpgd_paper_equations": float(
+                    self.settings.srmpgd_protocol == "paper_equations"
+                ),
                 "diffqrcoder_srmpgd_gamma": float(
                     self.settings.srmpgd_step_size
                 ),
@@ -885,7 +907,7 @@ class UpstreamDiffQRCoderBackend:
                 pipe,
                 latent,
                 image,
-                stage2_control.blueprint,
+                blueprint,
                 validation_callback=validation_callback,
             )
             self._record_divergence_guard(image, candidate)
@@ -1020,7 +1042,7 @@ class UpstreamDiffQRCoderBackend:
             pipe,
             latent,
             image,
-            stage2_blueprint,
+            blueprint,
             validation_callback=validation_callback,
         )
         self._record_divergence_guard(image, candidate)
@@ -1085,6 +1107,9 @@ class UpstreamDiffQRCoderBackend:
             values["stage2_pairing_status"] = self._stage2_pairing_status
         if self._srmpgd_stop_reason:
             values["srmpgd_stop_reason"] = self._srmpgd_stop_reason
+        if self.settings.srmpgd_enabled:
+            values["srmpgd_protocol"] = self.settings.srmpgd_protocol
+            values["srmpgd_target"] = "original_qr"
         if self._srmpgd_stage2_image_sha256:
             values["srmpgd_stage2_image_sha256"] = (
                 self._srmpgd_stage2_image_sha256

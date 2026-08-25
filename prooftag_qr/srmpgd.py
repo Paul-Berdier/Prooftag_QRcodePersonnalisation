@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from PIL import Image
 
@@ -24,13 +24,15 @@ from .quality import image_change_metrics, image_sha256
 
 @dataclass(frozen=True, slots=True)
 class SRMPGDConfig:
-    """Paper-aligned Scanning-Robust Manifold Projected Gradient Descent.
+    """Scanning-Robust Manifold Projected Gradient Descent.
 
-    The WACV 2025 paper specifies ``gamma=1000`` and an LPIPS coefficient of ``0.01``.
-    It does not publish the iteration count, so the implementation evaluates and persists every
-    state up to ``max_iterations`` and stops as soon as the external validation gate is strict.
+    ``guarded_production`` keeps the safety gates used by the Web Lab. ``paper_equations``
+    executes the literal Eq. 13-14 update: no MER precondition, no latent clipping, no
+    validation/aesthetic early stop and the final fixed iteration is returned. The latter is an
+    experimental audit mode and must not be exposed as an automatically deliverable result.
     """
 
+    protocol: Literal["guarded_production", "paper_equations"] = "guarded_production"
     max_iterations: int = 4
     step_size: float = 100.0
     lpips_weight: float = 0.10
@@ -115,6 +117,8 @@ ScanningLoss = Callable[[Any, Any], Any]
 
 
 def _validate_config(config: SRMPGDConfig) -> None:
+    if config.protocol not in {"guarded_production", "paper_equations"}:
+        raise ValueError("protocol must be guarded_production or paper_equations")
     if config.max_iterations < 1:
         raise ValueError("max_iterations must be at least 1")
     if config.step_size <= 0:
@@ -426,6 +430,7 @@ def run_srmpgd(
     import torch
 
     _validate_config(config)
+    paper_equations = config.protocol == "paper_equations"
     if not torch.is_tensor(initial_latent) or initial_latent.ndim != 4:
         raise ValueError("initial_latent must be a BCHW torch tensor")
     if initial_latent.shape[0] != 1:
@@ -538,7 +543,10 @@ def run_srmpgd(
                 light_threshold=config.light_threshold,
                 layout=layout,
             )
-            if scanning_loss is not None:
+            # The paper defines Eq. 13 with its own SRL (Eq. 1-6). The public repository
+            # exposes a related but numerically different loss, so the faithful audit mode
+            # deliberately uses our equation-level implementation above.
+            if scanning_loss is not None and not paper_equations:
                 srl, robust_components = _robust_scanning_loss(
                     decoded_unit,
                     target_core,
@@ -582,7 +590,7 @@ def run_srmpgd(
             latent_delta_rms = float(
                 (working.detach() - initial).square().mean().sqrt().cpu()
             )
-            aesthetic_guard_passed = iteration == 0 or (
+            aesthetic_guard_passed = paper_equations or iteration == 0 or (
                 float(lpips_loss.detach().cpu()) <= config.max_lpips_loss
                 and latent_delta_rms <= config.max_total_delta_rms + 1e-8
                 and changes["mean_absolute_change"]
@@ -594,7 +602,7 @@ def run_srmpgd(
                 and changes["rgb_clipped_channel_ratio_increase"]
                 <= config.max_rgb_clipped_channel_ratio_increase
             )
-            qr_gain_sufficient = iteration == 0 or (
+            qr_gain_sufficient = paper_equations or iteration == 0 or (
                 validation["strict_all"]
                 or validation["pass_rate"] > baseline_pass_rate
                 or relative_module_improvement
@@ -610,13 +618,15 @@ def run_srmpgd(
             applied_step_rms = None
             step_scale = None
             next_working = None
-            if iteration > 0 and not aesthetic_guard_passed:
+            if not paper_equations and iteration > 0 and not aesthetic_guard_passed:
                 iteration_stop_reason = (
                     f"aesthetic_guard_failed_at_iteration_{iteration}"
                 )
-            elif not refinement_applicable:
+            elif not paper_equations and not refinement_applicable:
                 iteration_stop_reason = "initial_module_error_rate_above_limit"
-            elif not validation["strict_all"] and iteration < config.max_iterations:
+            elif (
+                paper_equations or not validation["strict_all"]
+            ) and iteration < config.max_iterations:
                 gradient = torch.autograd.grad(objective, working, only_inputs=True)[0]
                 if not torch.isfinite(gradient).all():
                     iteration_stop_reason = (
@@ -626,18 +636,23 @@ def run_srmpgd(
                 else:
                     gradient_rms = float(gradient.square().mean().sqrt().detach().cpu())
                     next_step_rms = config.step_size * gradient_rms
-                    step_scale = min(
-                        1.0,
-                        config.max_step_rms / max(next_step_rms, 1e-12),
+                    step_scale = (
+                        1.0
+                        if paper_equations
+                        else min(
+                            1.0,
+                            config.max_step_rms / max(next_step_rms, 1e-12),
+                        )
                     )
                     proposed = working - config.step_size * step_scale * gradient
-                    delta = proposed.detach() - initial
-                    total_delta_rms = float(delta.square().mean().sqrt().cpu())
-                    if total_delta_rms > config.max_total_delta_rms:
-                        delta = delta * (
-                            config.max_total_delta_rms / total_delta_rms
-                        )
-                        proposed = initial + delta
+                    if not paper_equations:
+                        delta = proposed.detach() - initial
+                        total_delta_rms = float(delta.square().mean().sqrt().cpu())
+                        if total_delta_rms > config.max_total_delta_rms:
+                            delta = delta * (
+                                config.max_total_delta_rms / total_delta_rms
+                            )
+                            proposed = initial + delta
                     next_working = proposed
                     applied_step_rms = float(
                         (next_working.detach() - working.detach())
@@ -702,7 +717,11 @@ def run_srmpgd(
             states.append((step, working.detach().clone(), image.copy()))
             if preview_callback is not None:
                 preview_callback(image, step)
-            if step.strict_all and step.eligible_for_selection:
+            if (
+                not paper_equations
+                and step.strict_all
+                and step.eligible_for_selection
+            ):
                 stop_reason = "strict_validation_passed"
                 break
             if iteration_stop_reason is not None:
@@ -714,12 +733,17 @@ def run_srmpgd(
             if next_working is not None:
                 working = next_working
 
-    eligible_states = [
-        item for item in states if item[0].eligible_for_selection
-    ]
-    selected_step, selected_latent, selected_image = max(
-        eligible_states, key=lambda item: _rank_step(item[0])
-    )
+    if paper_equations:
+        # The PDF does not publish a best-state oracle. Report the fixed final iterate;
+        # every intermediate state remains available in ``steps`` and debug artifacts.
+        selected_step, selected_latent, selected_image = states[-1]
+    else:
+        eligible_states = [
+            item for item in states if item[0].eligible_for_selection
+        ]
+        selected_step, selected_latent, selected_image = max(
+            eligible_states, key=lambda item: _rank_step(item[0])
+        )
     if (
         selected_step.iteration == 0
         and image_sha256(selected_image) != image_sha256(reference_image)

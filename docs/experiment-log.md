@@ -1569,3 +1569,73 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   notebook embarque explicitement ce protocole et contrôle à la construction les chemins du
   scorer QR-Verify, du bridge et de son `package-lock.json`.
 - **Protocole complet :** `docs/e031-prospective-stage2-holdout.md`.
+
+## E031 — incidents d'analyse post-campagne — 25 août 2026
+
+- **Portée :** les deux arrêts se produisent après la collecte GPU des 240 états. Le premier
+  précède le téléchargement et le rescoring local ; le second survient après le rescoring
+  QR-Verify. Ils n'invalident ni les images, ni les campagnes, ni le journal de rescoring déjà
+  persistant et n'exigent aucune régénération GPU.
+- **Incident 1 — métriques qualité :** la cellule d'audit appelait `_finite`, helper privé qui
+  n'était ni défini ni importé dans le notebook. Il a été remplacé par le helper local
+  `finite_number`, qui refuse explicitement les booléens, valeurs non numériques, infinis et NaN.
+- **Incident 2 — schéma des politiques :** `evaluate_e031_policies()` plaçait
+  `stage1_was_delivered` et `srmpgd_was_requested` uniquement dans les résumés agrégés, tandis que
+  le notebook les exigeait dans le tableau détaillé des décisions. Chaque décision expose
+  désormais ces deux preuves, calculées depuis les candidats réels ; le résumé les agrège au lieu
+  de publier deux constantes. Le notebook vérifie le schéma avant toute lecture de colonne.
+- **Non-régression :** un test matérialise toutes les colonnes de décision consommées par les
+  cellules suivantes et vérifie qu'une demande SR-MPGD cachée dans une branche non tentée est tout
+  de même signalée. Le notebook est régénéré depuis son builder ; les tests E031/notebook, le lint
+  ciblé et la suite pytest complète réussissent.
+- **Reprise de la campagne existante :** ne pas redéployer le correctif avant d'avoir produit
+  l'archive de la campagne en cours. Le `plan_id` E031 est lié au commit, au digest runtime, au hash
+  sémantique du notebook et au SHA-256 du protocole ; un redéploiement crée donc normalement un
+  nouveau plan. Une rustine temporaire en mémoire permet de terminer uniquement l'analyse de
+  l'ancien plan, puis doit être supprimée du notebook avant sa vérification sémantique finale.
+- **Intégrité du protocole :** le document préenregistré E031 n'est pas réécrit après observation ;
+  cet incident et sa résolution sont consignés ici séparément.
+
+## E031 — résultats et décision NO-GO — 25 août 2026
+
+- **Archive auditée :** `447ea4ea8bf6f337-e031-prospective-stage2-holdout-v1.tar.gz`,
+  SHA-256 `a3369c5c09b0f16d4e3ec4addddcc947004ec7645e2b45748f0b76aa12b35ea1`.
+- **Intégrité :** 279/279 artefacts du manifeste conformes, aucun fichier parasite, 240/240
+  états, 120/120 appariements et 120/120 provenances qualité vérifiés.
+- **Porte stricte :** la cascade préenregistrée fixe A → conseiller A → fixe B atteint 25/40
+  (`62,5 %`, Wilson 95 % `[47,0 % ; 75,8 %]`) contre 38/40 requis. E031 est NO-GO ; la revue
+  humaine ne peut plus rétablir le seuil final de 36/40.
+- **Porte standard :** 33/40 (`82,5 %`). La cascade fixe à deux seeds obtient déjà 33/40 ; le
+  conseiller n'ajoute aucun succès standard.
+- **Conseiller :** 22/40 standard et 16/40 strict, contre 26/40 et 19/40 pour la recette fixe à la
+  même seed. L'ajouter avant la seconde seed coûte 40 appels API stricts pour un seul sauvetage.
+- **Diagnostic exploratoire :** les sept groupes advisor se réduisent à trois recettes effectives ;
+  18/40 choix sont identiques à la recette fixe, mais les campagnes indépendantes ne reproduisent
+  aucun raster exact. La prochaine comparaison devra canoniser les recettes et partager les
+  latents/bruits, pas seulement le numéro de seed.
+- **Mesure :** 8/120 rasters QR-Verify instables et 10/120 au-dessus de la garde de saturation.
+  Parmi les 25 gagnants stricts, 23 passent aussi le preset original dans les cinq répétitions.
+- **Qualité :** les 120 métriques HPS/CLIP sont complètes, mais la revue humaine aveugle est vide.
+  L'inspection visuelle montre des sujets absents ou multipliés malgré de bons proxys.
+- **Décision technique :** suspendre le conseiller actuel, conserver la cascade fixe deux seeds
+  comme témoin de développement, puis tester des recettes réellement distinctes avec latent/bruit
+  appariés sur une banque de développement avant tout nouveau holdout.
+- **Rapport complet :** `docs/e031-results-2026-08-25.md`.
+## E032 — reconstruction contrôlée du SR-MPGD du papier — 25 août 2026
+
+- **Déclencheur :** la Table 7 du papier annonce +5 à +12 points de SSR, alors que les campagnes
+  Prooftag sélectionnent presque toujours l'état zéro. L'audit montre que ces campagnes mesuraient
+  le mode sécurisé E019 et non les équations 12 à 14 sans modification.
+- **Défaut corrigé :** quand le Stage 2 utilisait QArt, son blueprint transformé était aussi envoyé
+  à SR-MPGD. Le backend route désormais `y_tilde` uniquement vers le Stage 2 et le QR original `y`
+  vers SR-MPGD.
+- **Séparation algorithmique :** `guarded_production` conserve les portes et plafonds existants ;
+  `paper_equations` emploie l'objectif `SRL + 0,01 LPIPS`, `gamma=1000`, sans porte MER, clipping
+  latent, early stop ou oracle externe, et rapporte l'itération finale.
+- **Traçabilité :** les profils `diffqrcoder_paper_srmpgd` et
+  `diffqrcoder_paper_srmpgd_guarded` sont ajoutés mais désactivés par défaut. Ils réutilisent le
+  même Stage 2 complet et le proxy QArt public afin d'isoler l'effet des gardes ; aucun ne doit être
+  livré automatiquement.
+- **Limite :** le nombre d'itérations et le QArt exact ne sont pas publiés. E032 est une ablation
+  contrôlée des équations, pas encore une reproduction revendiquée des 99 % du papier.
+- **Protocole détaillé :** `docs/e032-srmpgd-paper-reconstruction.md`.

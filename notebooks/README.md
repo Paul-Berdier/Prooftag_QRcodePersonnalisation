@@ -345,6 +345,36 @@ les campagnes, les exports, les images et le rescoring sont repris sous
 remplir son CSV puis relancer uniquement les cellules 9 et 10 n'effectue aucune régénération.
 Voir [`../docs/e031-prospective-stage2-holdout.md`](../docs/e031-prospective-stage2-holdout.md).
 
+## E032 — reconstruction visuelle du SR-MPGD du papier
+
+E032 compare sur le même Stage 1 et le même latent Stage 2 : le Stage 2 SRPG complet, le profil
+`paper_equations` (`gamma=1000`, LPIPS `0,01`) et le profil gardé fourni par le schéma Web Lab.
+Le plan contient cinq prompts simples, cinq atypiques et trois seeds. Les 30 contextes sont des
+campagnes autonomes : une campagne terminée et son CSV valide ne sont jamais régénérés après une
+coupure.
+
+Le notebook produit une planche finale et une planche d'évolution par prompt/seed. Les jalons
+SR-MPGD 0, 1, 2, 4, 8, 12 et 20, leurs traces, QR-Verify conservateur, MER, saturation et LPIPS
+sont conservés dans l'archive. CLIP-Aesthetic, CLIPScore et HPS v2.1 sont toujours présents sur
+les quatre sorties finales ; leur recalcul sur les 210 jalons intermédiaires reste optionnel.
+
+Après commit/push/pull, reconstruire l'API et l'image notebook depuis le même commit :
+
+```bash
+bash scripts/deploy-e032-notebook.sh
+```
+
+Puis, sur le PC :
+
+```powershell
+.\scripts\notebook-remote.ps1 -Notebook 27_e032_srmpgd_paper_reconstruction.ipynb
+```
+
+Lancer **Run > Run All Cells**. Les résultats persistants sont dans
+`/data/e032-srmpgd-paper/<plan-id>` et l'archive téléchargeable dans `/workspace/downloads`.
+Le protocole et ses limites sont dans
+[`../docs/e032-srmpgd-paper-reconstruction.md`](../docs/e032-srmpgd-paper-reconstruction.md).
+
 Pour remplir ce dataset pendant une absence sans laisser Jupyter ouvert, E026W lance un Job
 Kubernetes CPU reprenable et réserve la RTX à l'API. Le plan borné contient 300 prompts, 16
 recettes, trois seeds et jusqu'à 14 400 essais. Les commandes de démarrage, suivi, reprise et
