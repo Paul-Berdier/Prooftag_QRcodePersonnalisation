@@ -55,6 +55,21 @@ Un PASS est seulement une preuve mécanistique locale. Il ne prouve ni la géné
 probabilité de scan téléphone, ni une amélioration esthétique. Aucun élargissement automatique
 n'est lancé.
 
+## Arrêt technique et reprise
+
+E033 n'autorise qu'une tentative de la campagne atomique. Une campagne encore active est reprise
+après une coupure, mais une campagne terminale contenant une erreur n'est jamais régénérée
+automatiquement. Le notebook affiche alors l'historique, la méthode fautive et le message conservé
+dans chaque CSV, puis crée une archive `*-technical-failure.tar.gz` dans
+`/workspace/downloads`. Les cellules scientifiques suivantes s'ignorent proprement : les sorties
+existantes et l'état de reprise restent inchangés jusqu'à la correction de la cause.
+
+Le premier plan `732665438a6e7382` a ainsi été arrêté par quatre OOM CUDA reproductibles : deux
+branches FP16 et FP32, chacune répétée deux fois par l'ancien runner. La cause et le correctif
+d'offload temporaire des modules de diffusion sont consignés dans
+`docs/e033-technical-incident-2026-08-26.md`. Cette archive reste une preuve d'incident ; la relance
+corrective doit obligatoirement créer un nouveau plan.
+
 ## Exécution
 
 Après avoir commité et poussé le dépôt, exécuter sur le serveur :

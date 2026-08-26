@@ -26,7 +26,7 @@ def test_e033_notebook_is_one_resumable_paired_microdiagnostic():
     assert "len(plan.campaigns) == 1" in source
     assert "plan.public['campaign_count'] == 1" in source
     assert "plan.public['trial_count'] == 5" in source
-    assert "maximum_campaign_attempts=2" in source
+    assert "maximum_campaign_attempts=1" in source
     assert "reject_campaigns_with_errors=True" in source
     assert "stop_on_first_failed_campaign=True" in source
 
@@ -99,6 +99,33 @@ def test_e033_contact_sheets_precede_fp32_verdict_and_archive_is_unconditional()
     assert "if not PRIMARY_FP32_GATES_PASSED:" in source
     scientific_stop = source[source.index("if not PRIMARY_FP32_GATES_PASSED:") : archive]
     assert "raise RuntimeError" not in scientific_stop
+
+
+def test_e033_technical_failure_is_explained_archived_and_never_regenerated():
+    source = _notebook_source()
+
+    assert "maximum_campaign_attempts=1" in source
+    assert "maximum_campaign_attempts=2" not in source
+    assert "aucune campagne terminale n'est automatiquement régénérée" in source
+    assert "E033_TECHNICAL_STOP = runner_summary['status'] != 'completed'" in source
+    assert "technical-failure.json" in source
+    assert "attempt-history.csv" in source
+    assert "export-diagnostics.csv" in source
+    assert "failed-trials.csv" in source
+    assert "remote-campaign-diagnostics.csv" in source
+    assert "inspect_archive_without_regenerating" in source
+    assert "-technical-failure.tar.gz" in source
+    assert "STOP technique E033 — aucune nouvelle génération" in source
+    assert "Ne relancez pas la campagne." in source
+
+    execution = source[source.index("runner_summary = runner.run()") : source.index("## 5.")]
+    assert "raise RuntimeError" not in execution
+    assert "(remote or {}).get('error')" in execution
+    assert "record.get('error')" in execution
+
+    scientific = source[source.index("## 5.") :]
+    assert scientific.count("if E033_TECHNICAL_STOP:") == 7
+    assert scientific.count("Cellule ignorée après le STOP technique") == 7
 
 
 def test_e033_generated_code_is_syntax_valid_and_builder_is_idempotent():

@@ -406,10 +406,10 @@ display(pd.DataFrame([{
     markdown(
         """## 4. Exécuter ou reprendre
 
-Le runner conserve le plan, l'état et le CSV exporté sous `/data`. Une campagne terminée avec un
-export valide n'est pas relancée après une coupure. Le runner autorise un second essai uniquement
-si le premier est `interrupted`, annulé ou techniquement en erreur ; un arrêt scientifique sur
-gradient nul reste une sortie normale et n'est donc pas régénéré. Il n'existe aucune boucle vers
+Le runner conserve le plan, l'état et le CSV exporté sous `/data`. Une campagne active est reprise
+après une coupure, mais **aucune campagne terminale n'est automatiquement régénérée** : E033 utilise
+une seule tentative. Une erreur technique produit un diagnostic et demande une décision humaine ;
+un arrêt scientifique sur gradient nul reste une sortie normale. Il n'existe aucune boucle vers
 trente contextes.
 """
     ),
@@ -440,7 +440,7 @@ runner = AdvisorInferenceRunner(
     api_url=COLLECTION_API_URL,
     output_root=OUTPUT_ROOT,
     poll_seconds=POLL_SECONDS,
-    maximum_campaign_attempts=2,
+    maximum_campaign_attempts=1,
     reject_campaigns_with_errors=True,
     stop_on_first_failed_campaign=True,
     progress_callback=progress,
@@ -449,11 +449,165 @@ print('Plan persistant :', runner.output_dir)
 print('État de reprise :', runner.state_path)
 runner_summary = runner.run() if RUN_E033 else runner.summary()
 display(pd.DataFrame([runner_summary]).T.rename(columns={0: 'valeur'}))
-if runner_summary['status'] != 'completed':
-    raise RuntimeError(
-        'La campagne E033 contient une erreur technique. Son export est conservé ; '
-        'corriger cette erreur avant l audit scientifique.'
+E033_TECHNICAL_STOP = runner_summary['status'] != 'completed'
+TECHNICAL_ARCHIVE_DOWNLOAD = None
+
+if E033_TECHNICAL_STOP:
+    # Le runner strict a consommé son unique essai et son état fail-fast
+    # interdit toute nouvelle soumission au prochain Run All. On transforme donc l'arrêt
+    # en diagnostic téléchargeable au lieu de masquer la vraie erreur par une exception.
+    diagnostic_root = runner.output_dir / 'technical-failure'
+    diagnostic_root.mkdir(parents=True, exist_ok=True)
+    state = json.loads(runner.state_path.read_text(encoding='utf-8'))
+    history = pd.DataFrame(state.get('history', []))
+    history.to_csv(diagnostic_root / 'attempt-history.csv', index=False)
+
+    export_rows = []
+    failure_rows = []
+    remote_rows = []
+    export_copy_root = diagnostic_root / 'exports'
+    export_copy_root.mkdir(exist_ok=True)
+    remote_root = diagnostic_root / 'remote-campaigns'
+    remote_root.mkdir(exist_ok=True)
+    for item in state.get('history', []):
+        campaign_id = str(item.get('campaign_id') or '')
+        export_path = Path(str(item.get('export_path') or ''))
+        export_diagnostic = {
+            'attempt': item.get('attempt'),
+            'campaign_id': campaign_id,
+            'campaign_status': item.get('status'),
+            'export_path': str(export_path),
+            'export_exists': export_path.is_file(),
+            'rows': 0,
+            'error_rows': 0,
+            'status_counts': '{}',
+            'read_error': None,
+        }
+        if export_path.is_file():
+            shutil.copy2(export_path, export_copy_root / export_path.name)
+            try:
+                exported = pd.read_csv(export_path, dtype=str, keep_default_na=False)
+                export_diagnostic['rows'] = len(exported)
+                if 'status' in exported:
+                    export_diagnostic['status_counts'] = json.dumps(
+                        exported['status'].value_counts().to_dict(),
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    )
+                error_mask = pd.Series(False, index=exported.index)
+                if 'status' in exported:
+                    error_mask |= exported['status'].str.lower().eq('error')
+                if 'error' in exported:
+                    error_mask |= exported['error'].str.strip().ne('')
+                failed = exported[error_mask].copy()
+                export_diagnostic['error_rows'] = len(failed)
+                for record in failed.to_dict(orient='records'):
+                    failure_rows.append({
+                        'attempt': item.get('attempt'),
+                        'campaign_id': campaign_id,
+                        'trial_id': record.get('trial_id'),
+                        'method_id': record.get('method_id'),
+                        'status': record.get('status'),
+                        'generation_run_id': record.get('generation_run_id'),
+                        'error': record.get('error'),
+                    })
+            except Exception as exc:
+                export_diagnostic['read_error'] = f'{type(exc).__name__}: {exc}'
+        export_rows.append(export_diagnostic)
+
+        if campaign_id:
+            remote_error = None
+            remote = None
+            try:
+                remote = api_json(f'/v1/lab/campaigns/{campaign_id}')
+                atomic_json(remote_root / f'{campaign_id}.json', remote)
+            except Exception as exc:
+                remote_error = f'{type(exc).__name__}: {exc}'
+            remote_rows.append({
+                'attempt': item.get('attempt'),
+                'campaign_id': campaign_id,
+                'status': (remote or {}).get('status'),
+                'campaign_error': (remote or {}).get('error'),
+                'remote_read_error': remote_error,
+            })
+
+    export_diagnostics = pd.DataFrame(export_rows)
+    trial_failures = pd.DataFrame(failure_rows)
+    remote_diagnostics = pd.DataFrame(remote_rows)
+    export_diagnostics.to_csv(
+        diagnostic_root / 'export-diagnostics.csv', index=False
     )
+    trial_failures.to_csv(diagnostic_root / 'failed-trials.csv', index=False)
+    remote_diagnostics.to_csv(
+        diagnostic_root / 'remote-campaign-diagnostics.csv', index=False
+    )
+    for source in [runner.plan_path, runner.predictions_path, runner.state_path]:
+        shutil.copy2(source, diagnostic_root / source.name)
+
+    failure_manifest = {
+        'experiment': EXPERIMENT,
+        'plan_id': plan.plan_id,
+        'created_at': datetime.now(UTC).isoformat(),
+        'runner_summary': runner_summary,
+        'attempts': state.get('attempts', {}),
+        'active_campaign': state.get('active_campaign'),
+        'failed_campaigns': state.get('failed_campaigns', []),
+        'history': state.get('history', []),
+        'export_diagnostics': export_rows,
+        'failed_trials': failure_rows,
+        'remote_campaigns': remote_rows,
+        'next_action': 'inspect_archive_without_regenerating',
+    }
+    atomic_json(diagnostic_root / 'technical-failure.json', failure_manifest)
+    artifact_files = sorted(
+        path for path in diagnostic_root.rglob('*')
+        if path.is_file() and path.name != 'checksums.json'
+        and not path.name.endswith('.tmp')
+    )
+    atomic_json(
+        diagnostic_root / 'checksums.json',
+        {
+            str(path.relative_to(diagnostic_root)).replace('\\\\', '/'):
+                sha256_file(path)
+            for path in artifact_files
+        },
+    )
+    technical_archive = ARCHIVE_ROOT / (
+        f'{plan.plan_id}-{EXPERIMENT}-technical-failure.tar.gz'
+    )
+    temporary_archive = Path(f'{technical_archive}.tmp')
+    with tarfile.open(temporary_archive, 'w:gz') as bundle:
+        bundle.add(
+            diagnostic_root,
+            arcname=f'{plan.plan_id}-{EXPERIMENT}-technical-failure',
+        )
+    os.replace(temporary_archive, technical_archive)
+    technical_sha256 = sha256_file(technical_archive)
+    technical_checksum = Path(f'{technical_archive}.sha256')
+    atomic_text(
+        technical_checksum,
+        f'{technical_sha256}  {technical_archive.name}\\n',
+    )
+    for source in [technical_archive, technical_checksum]:
+        shutil.copy2(source, DOWNLOAD_ROOT / source.name)
+    TECHNICAL_ARCHIVE_DOWNLOAD = DOWNLOAD_ROOT / technical_archive.name
+
+    display(Markdown('### STOP technique E033 — aucune nouvelle génération'))
+    display(history if not history.empty else pd.DataFrame([{'historique': 'vide'}]))
+    display(export_diagnostics)
+    display(
+        trial_failures
+        if not trial_failures.empty
+        else pd.DataFrame([{'erreurs de trials': 'aucune erreur détaillée dans les CSV'}])
+    )
+    display(remote_diagnostics)
+    display(Markdown(
+        '**Ne relancez pas la campagne.** Les essais existants, leurs erreurs et les exports '
+        f'disponibles ont été archivés dans `{TECHNICAL_ARCHIVE_DOWNLOAD}`. Téléchargez cette '
+        'archive pour corriger la cause avant de créer un nouveau plan.'
+    ))
+else:
+    display(Markdown('**Campagne complète : audit scientifique E033 autorisé.**'))
 """
     ),
     markdown("## 5. Audit d'appariement exact avant toute comparaison"),
@@ -986,6 +1140,30 @@ print('Archive :', DOWNLOAD_ROOT / archive_path.name)
 """
     ),
 ]
+
+# Lors d'un STOP technique, les cellules scientifiques suivantes doivent s'ignorer proprement :
+# la cellule d'exécution a déjà produit l'archive de diagnostic et le runner fail-fast n'enverra
+# aucune nouvelle campagne lors d'un nouveau Run All.
+scientific_section = False
+for cell in cells:
+    source = "".join(cell.get("source", []))
+    if cell["cell_type"] == "markdown" and source.startswith("## 5."):
+        scientific_section = True
+    if scientific_section and cell["cell_type"] == "code":
+        indented = "".join(
+            f"    {line}" if line.strip() else line
+            for line in source.splitlines(keepends=True)
+        )
+        guarded = (
+            "if E033_TECHNICAL_STOP:\n"
+            "    display(Markdown(\n"
+            "        f'**Cellule ignorée après le STOP technique.** Archive : ' \n"
+            "        f'`{TECHNICAL_ARCHIVE_DOWNLOAD}`'\n"
+            "    ))\n"
+            "else:\n"
+            f"{indented}"
+        )
+        cell["source"] = guarded.splitlines(True)
 
 notebook = {
     "cells": cells,

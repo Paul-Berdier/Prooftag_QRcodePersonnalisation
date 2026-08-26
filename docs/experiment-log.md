@@ -1694,3 +1694,18 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
 - **Statut :** implémenté et testé localement ; validation CUDA réelle encore requise sur la RTX
   4000 Ada. E033 ne doit pas être présenté comme réussi avant cette exécution.
 - **Protocole :** `docs/e033-srmpgd-microdiagnostic.md`.
+
+## E033 - incident VRAM du premier plan - 26 août 2026
+
+- **Plan concerné :** `732665438a6e7382`; aucune sortie SR-MPGD interprétable.
+- **Échecs :** FP16 2/2 OOM avec 323–325 Mio libres pour 530 Mio demandés ; FP32 2/2 OOM avec
+  117–125 Mio libres pour 134 Mio demandés. Les répétitions sont déterministes.
+- **Cause :** la rétropropagation VAE + LPIPS démarrait alors que l'UNet, le ControlNet et les
+  encodeurs restaient sur la RTX ; le mode papier construisait aussi un SRPG amont inutilisé.
+- **Correction :** offload CPU temporaire des modules de diffusion, LPIPS replacé sur CPU avant
+  restauration, télémétrie mémoire et restauration garantie même après exception.
+- **Runner :** une seule tentative ; une erreur terminale devient une archive technique et ne
+  déclenche plus une seconde génération identique.
+- **Décision :** conserver le plan en lecture seule et relancer sous un nouveau commit/digest/plan.
+  La validation CUDA réelle reste requise avant tout PASS scientifique.
+- **Rapport :** `docs/e033-technical-incident-2026-08-26.md`.

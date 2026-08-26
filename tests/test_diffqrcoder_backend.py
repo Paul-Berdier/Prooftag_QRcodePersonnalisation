@@ -11,6 +11,7 @@ from prooftag_qr.diffqrcoder_backend import (
     UpstreamDiffQRCoderBackend,
     _control_target_center_error_rate,
     _install_partial_schedule,
+    _offload_unused_pipeline_modules_for_paper_srmpgd,
 )
 from prooftag_qr.qr import generate_diffqrcoder_qr
 from prooftag_qr.quality import image_sha256
@@ -121,6 +122,152 @@ def test_upstream_srmpgd_iteration_zero_receives_and_returns_exact_stage2_raster
     assert backend.debug_metadata()["srmpgd_trace"]["initial_redecoded_image_sha256"] == stage2_hash
     assert backend.provenance()["srmpgd_stage2_image_sha256"] == stage2_hash
     assert backend.provenance()["srmpgd_selected_image_sha256"] == stage2_hash
+
+
+def test_paper_srmpgd_offloads_diffusion_modules_and_skips_upstream_srpg(monkeypatch):
+    class Device:
+        def __init__(self, kind):
+            self.type = kind
+
+    class Parameter:
+        def __init__(self, kind="cuda"):
+            self.device = Device(kind)
+            self.dtype = "float16"
+
+    class Module:
+        def __init__(self, name, kind="cuda"):
+            self.name = name
+            self.parameter = Parameter(kind)
+            self.moves = []
+
+        def parameters(self):
+            return iter((self.parameter,))
+
+        def to(self, *args, device=None, **_kwargs):
+            target = device if device is not None else args[0]
+            kind = target.type if hasattr(target, "type") else str(target).split(":")[0]
+            self.parameter.device = Device(kind)
+            self.moves.append(kind)
+            return self
+
+    unet = Module("unet")
+    unet.dtype = "float16"
+    controlnet = Module("controlnet")
+    text_encoder = Module("text_encoder")
+    vae = Module("vae")
+    lpips = Module("lpips")
+    modules = [unet, controlnet, text_encoder, vae, lpips]
+    empty_cache_calls = []
+    fake_torch = SimpleNamespace(
+        float32="float32",
+        cuda=SimpleNamespace(
+            is_available=lambda: True,
+            empty_cache=lambda: empty_cache_calls.append(True),
+            memory_allocated=lambda: sum(
+                1024 for module in modules if module.parameter.device.type == "cuda"
+            ),
+        ),
+    )
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+
+    pipe = SimpleNamespace(
+        unet=unet,
+        controlnet=controlnet,
+        text_encoder=text_encoder,
+        vae=vae,
+    )
+    backend = UpstreamDiffQRCoderBackend(
+        Settings(
+            srpg_enabled=True,
+            srmpgd_enabled=True,
+            srmpgd_protocol="paper_equations",
+            device="cuda",
+        )
+    )
+    stage2_image = _reference_artwork(64)
+    step = _srmpgd_step_zero()
+
+    def fake_run_srmpgd(current_pipe, latent, _blueprint, _config, **kwargs):
+        assert current_pipe.unet.parameter.device.type == "cpu"
+        assert current_pipe.controlnet.parameter.device.type == "cpu"
+        assert current_pipe.text_encoder.parameter.device.type == "cpu"
+        assert current_pipe.vae.parameter.device.type == "cuda"
+        current_pipe._prooftag_srmpgd_lpips_vgg = lpips
+        return SimpleNamespace(
+            image=kwargs["initial_image"].copy(),
+            latent=latent,
+            initial_redecoded_image=kwargs["initial_image"].copy(),
+            steps=(step,),
+            selected_iteration=0,
+            stop_reason="zero_latent_gradient_at_iteration_0",
+            duration_s=0.1,
+            initial_module_error_rate=0.1,
+            final_module_error_rate=0.1,
+        )
+
+    monkeypatch.setattr(backend_module, "run_srmpgd", fake_run_srmpgd)
+
+    result = backend._apply_srmpgd(
+        pipe,
+        object(),
+        stage2_image,
+        SimpleNamespace(),
+    )
+
+    assert image_sha256(result) == image_sha256(stage2_image)
+    assert not hasattr(pipe, "srpg")
+    assert unet.moves == ["cpu", "cuda"]
+    assert controlnet.moves == ["cpu", "cuda"]
+    assert text_encoder.moves == ["cpu", "cuda"]
+    assert vae.moves == []
+    assert lpips.moves == ["cpu"]
+    assert len(empty_cache_calls) == 3
+    assert backend.diagnostics()["diffqrcoder_srmpgd_offloaded_module_count"] == 3.0
+    assert backend.diagnostics()["diffqrcoder_srmpgd_offloaded_gib"] > 0.0
+
+
+def test_paper_srmpgd_offload_scope_restores_modules_after_failure(monkeypatch):
+    class Device:
+        type = "cuda"
+
+    class Parameter:
+        device = Device()
+
+    class Module:
+        def __init__(self):
+            self.parameter = Parameter()
+            self.moves = []
+
+        def parameters(self):
+            return iter((self.parameter,))
+
+        def to(self, *args, device=None, **_kwargs):
+            target = device if device is not None else args[0]
+            kind = target.type if hasattr(target, "type") else str(target)
+            self.parameter.device = SimpleNamespace(type=kind)
+            self.moves.append(kind)
+            return self
+
+    unet = Module()
+    upstream_srpg = Module()
+    fake_torch = SimpleNamespace(
+        cuda=SimpleNamespace(
+            is_available=lambda: True,
+            empty_cache=lambda: None,
+            memory_allocated=lambda: 0,
+        )
+    )
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+
+    with pytest.raises(RuntimeError, match="synthetic failure"):
+        with _offload_unused_pipeline_modules_for_paper_srmpgd(
+            SimpleNamespace(unet=unet, srpg=upstream_srpg),
+            lpips_net="vgg",
+        ):
+            raise RuntimeError("synthetic failure")
+
+    assert unet.moves == ["cpu", "cuda"]
+    assert upstream_srpg.moves == ["cpu", "cuda"]
 
 
 def test_upstream_provenance_records_all_pinned_model_revisions():

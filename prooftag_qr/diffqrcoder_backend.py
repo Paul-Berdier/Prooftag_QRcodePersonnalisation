@@ -5,7 +5,7 @@ import logging
 import threading
 import time
 from collections.abc import Iterable
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import asdict, dataclass
 from types import MethodType
 
@@ -130,6 +130,109 @@ def _install_partial_schedule(
         yield
     finally:
         scheduler.set_timesteps = original_set_timesteps
+
+
+@contextmanager
+def _offload_unused_pipeline_modules_for_paper_srmpgd(pipe, *, lpips_net: str):
+    """Free diffusion-only CUDA weights while Eq. 13-14 uses VAE + LPIPS.
+
+    The E033 FP16 and FP32 branches reached 19.35--19.55 GiB on a 20 GiB RTX because
+    UNet, ControlNet and the text encoder remained resident after Stage 2. None of these
+    modules participates in the post-processing objective. Move only those modules to CPU,
+    keep the VAE on CUDA, then restore the original devices for a reusable pipeline.
+    """
+
+    import torch
+
+    moved: list[tuple[str, object, object]] = []
+    primary_error: BaseException | None = None
+    restoration_errors: list[str] = []
+    memory_allocated = getattr(torch.cuda, "memory_allocated", None)
+    memory_info = getattr(torch.cuda, "mem_get_info", None)
+
+    def driver_free_bytes():
+        if not callable(memory_info):
+            return None
+        try:
+            return int(memory_info()[0])
+        except Exception:
+            return None
+
+    state = {
+        "offloaded_modules": (),
+        "cuda_allocated_before_bytes": (
+            int(memory_allocated()) if callable(memory_allocated) else None
+        ),
+        "cuda_driver_free_before_bytes": driver_free_bytes(),
+        "cuda_allocated_after_offload_bytes": None,
+        "cuda_driver_free_after_offload_bytes": None,
+        "cuda_allocated_before_restore_bytes": None,
+        "cuda_allocated_after_lpips_offload_bytes": None,
+        "cuda_allocated_after_restore_bytes": None,
+    }
+    try:
+        for name in (
+            "unet",
+            "controlnet",
+            "text_encoder",
+            "text_encoder_2",
+            "image_encoder",
+            "srpg",
+        ):
+            module = getattr(pipe, name, None)
+            if module is None or not hasattr(module, "parameters"):
+                continue
+            parameter = next(iter(module.parameters()), None)
+            device = getattr(parameter, "device", None) if parameter is not None else None
+            if getattr(device, "type", None) != "cuda":
+                continue
+            # Record before moving so a partially failed ``to`` is restored as well.
+            moved.append((name, module, device))
+            module.to(device="cpu")
+        if moved and torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        state["offloaded_modules"] = tuple(name for name, _, _ in moved)
+        state["cuda_allocated_after_offload_bytes"] = (
+            int(memory_allocated()) if callable(memory_allocated) else None
+        )
+        state["cuda_driver_free_after_offload_bytes"] = driver_free_bytes()
+        yield state
+    except BaseException as exc:
+        primary_error = exc
+        raise
+    finally:
+        state["cuda_allocated_before_restore_bytes"] = (
+            int(memory_allocated()) if callable(memory_allocated) else None
+        )
+        # LPIPS is cached by run_srmpgd. Return it to CPU before reloading the diffusion
+        # modules, otherwise the restoration can create a second transient memory peak.
+        cached_lpips = getattr(pipe, f"_prooftag_srmpgd_lpips_{lpips_net}", None)
+        if cached_lpips is not None:
+            try:
+                cached_lpips.to(device="cpu")
+            except Exception as exc:
+                restoration_errors.append(f"LPIPS: {type(exc).__name__}: {exc}")
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        state["cuda_allocated_after_lpips_offload_bytes"] = (
+            int(memory_allocated()) if callable(memory_allocated) else None
+        )
+        for name, module, device in reversed(moved):
+            try:
+                module.to(device=device)
+            except Exception as exc:
+                restoration_errors.append(f"{name}: {type(exc).__name__}: {exc}")
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        state["cuda_allocated_after_restore_bytes"] = (
+            int(memory_allocated()) if callable(memory_allocated) else None
+        )
+        if restoration_errors:
+            message = "failed to restore SR-MPGD pipeline modules: " + "; ".join(restoration_errors)
+            if primary_error is not None:
+                primary_error.add_note(message)
+            else:
+                raise RuntimeError(message)
 
 
 class UpstreamDiffQRCoderBackend:
@@ -545,7 +648,8 @@ class UpstreamDiffQRCoderBackend:
         if not self.settings.srmpgd_enabled:
             return image
         stage2_image_sha256 = image_sha256(image)
-        if not hasattr(pipe, "srpg"):
+        paper_equations = self.settings.srmpgd_protocol == "paper_equations"
+        if not paper_equations and not hasattr(pipe, "srpg"):
             from diffqrcoder.srpg import ScanningRobustPerceptualGuidance
 
             pipe.srpg = (
@@ -580,57 +684,151 @@ class UpstreamDiffQRCoderBackend:
             with torch.autocast("cuda", dtype=pipe.unet.dtype):
                 return pipe.srpg.scanning_robust_loss_fn(decoded, target)
 
-        srmpgd = run_srmpgd(
-            pipe,
-            latent,
-            original_blueprint,
-            SRMPGDConfig(
-                protocol=self.settings.srmpgd_protocol,
-                max_iterations=self.settings.srmpgd_max_iterations,
-                step_size=self.settings.srmpgd_step_size,
-                gradient_scale=self.settings.srmpgd_gradient_scale,
-                min_gradient_rms=self.settings.srmpgd_min_gradient_rms,
-                decode_precision=self.settings.srmpgd_decode_precision,
-                lpips_weight=self.settings.srmpgd_lpips_weight,
-                lpips_net=self.settings.srmpgd_lpips_net,
-                crop_padding_px=self.settings.srmpgd_crop_padding_px,
-                dark_threshold=self.settings.srmpgd_dark_threshold,
-                light_threshold=self.settings.srmpgd_light_threshold,
-                center_fraction=self.settings.srmpgd_center_fraction,
-                max_initial_module_error_rate=(self.settings.srmpgd_max_initial_module_error_rate),
-                max_step_rms=self.settings.srmpgd_max_step_rms,
-                max_total_delta_rms=self.settings.srmpgd_max_total_delta_rms,
-                min_relative_module_improvement=(
-                    self.settings.srmpgd_min_relative_module_improvement
-                ),
-                max_lpips_loss=self.settings.srmpgd_max_lpips_loss,
-                max_mean_absolute_change=(self.settings.srmpgd_max_mean_absolute_change),
-                max_saturation_mean_increase=(self.settings.srmpgd_max_saturation_mean_increase),
-                max_high_saturation_ratio_increase=(
-                    self.settings.srmpgd_max_high_saturation_ratio_increase
-                ),
-                max_rgb_clipped_channel_ratio_increase=(
-                    self.settings.srmpgd_max_rgb_clipped_channel_ratio_increase
-                ),
-                robust_blur_weight=self.settings.srmpgd_robust_blur_weight,
-                robust_blur_kernel=self.settings.srmpgd_robust_blur_kernel,
-                robust_downscale_weight=(self.settings.srmpgd_robust_downscale_weight),
-                robust_downscale_factor=(self.settings.srmpgd_robust_downscale_factor),
-                robust_brightness_weight=(self.settings.srmpgd_robust_brightness_weight),
-                robust_brightness_low=self.settings.srmpgd_robust_brightness_low,
-                robust_brightness_high=(self.settings.srmpgd_robust_brightness_high),
-                robust_contrast_weight=(self.settings.srmpgd_robust_contrast_weight),
-                robust_contrast_factor=(self.settings.srmpgd_robust_contrast_factor),
-                quiet_zone_mode="none",
-                functional_pattern_tone_factor=0.0,
+        srmpgd_config = SRMPGDConfig(
+            protocol=self.settings.srmpgd_protocol,
+            max_iterations=self.settings.srmpgd_max_iterations,
+            step_size=self.settings.srmpgd_step_size,
+            gradient_scale=self.settings.srmpgd_gradient_scale,
+            min_gradient_rms=self.settings.srmpgd_min_gradient_rms,
+            decode_precision=self.settings.srmpgd_decode_precision,
+            lpips_weight=self.settings.srmpgd_lpips_weight,
+            lpips_net=self.settings.srmpgd_lpips_net,
+            crop_padding_px=self.settings.srmpgd_crop_padding_px,
+            dark_threshold=self.settings.srmpgd_dark_threshold,
+            light_threshold=self.settings.srmpgd_light_threshold,
+            center_fraction=self.settings.srmpgd_center_fraction,
+            max_initial_module_error_rate=(self.settings.srmpgd_max_initial_module_error_rate),
+            max_step_rms=self.settings.srmpgd_max_step_rms,
+            max_total_delta_rms=self.settings.srmpgd_max_total_delta_rms,
+            min_relative_module_improvement=(self.settings.srmpgd_min_relative_module_improvement),
+            max_lpips_loss=self.settings.srmpgd_max_lpips_loss,
+            max_mean_absolute_change=(self.settings.srmpgd_max_mean_absolute_change),
+            max_saturation_mean_increase=(self.settings.srmpgd_max_saturation_mean_increase),
+            max_high_saturation_ratio_increase=(
+                self.settings.srmpgd_max_high_saturation_ratio_increase
             ),
-            initial_image=image,
-            scanning_loss=(
-                None if self.settings.srmpgd_protocol == "paper_equations" else paper_scanning_loss
+            max_rgb_clipped_channel_ratio_increase=(
+                self.settings.srmpgd_max_rgb_clipped_channel_ratio_increase
             ),
-            validation_callback=validation_callback,
-            preview_callback=preview_srmpgd,
+            robust_blur_weight=self.settings.srmpgd_robust_blur_weight,
+            robust_blur_kernel=self.settings.srmpgd_robust_blur_kernel,
+            robust_downscale_weight=(self.settings.srmpgd_robust_downscale_weight),
+            robust_downscale_factor=(self.settings.srmpgd_robust_downscale_factor),
+            robust_brightness_weight=(self.settings.srmpgd_robust_brightness_weight),
+            robust_brightness_low=self.settings.srmpgd_robust_brightness_low,
+            robust_brightness_high=(self.settings.srmpgd_robust_brightness_high),
+            robust_contrast_weight=(self.settings.srmpgd_robust_contrast_weight),
+            robust_contrast_factor=(self.settings.srmpgd_robust_contrast_factor),
+            quiet_zone_mode="none",
+            functional_pattern_tone_factor=0.0,
         )
+        if paper_equations:
+            memory_scope = _offload_unused_pipeline_modules_for_paper_srmpgd(
+                pipe,
+                lpips_net=self.settings.srmpgd_lpips_net,
+            )
+        else:
+            # Guarded SR-MPGD uses the upstream SRPG network held by ``pipe.srpg``.
+            # Keep its existing residency unchanged.
+            memory_scope = nullcontext(
+                {
+                    "offloaded_modules": (),
+                    "cuda_allocated_before_bytes": None,
+                    "cuda_driver_free_before_bytes": None,
+                    "cuda_allocated_after_offload_bytes": None,
+                    "cuda_driver_free_after_offload_bytes": None,
+                    "cuda_allocated_before_restore_bytes": None,
+                    "cuda_allocated_after_lpips_offload_bytes": None,
+                    "cuda_allocated_after_restore_bytes": None,
+                }
+            )
+
+        def record_srmpgd_memory(memory_state):
+            offloaded_modules = memory_state["offloaded_modules"]
+            allocated_before = memory_state["cuda_allocated_before_bytes"]
+            allocated_after_offload = memory_state["cuda_allocated_after_offload_bytes"]
+            free_before = memory_state["cuda_driver_free_before_bytes"]
+            free_after_offload = memory_state["cuda_driver_free_after_offload_bytes"]
+            diagnostics = {
+                "diffqrcoder_srmpgd_offloaded_module_count": float(len(offloaded_modules)),
+                "diffqrcoder_srmpgd_offloaded_gib": (
+                    max(0.0, float(allocated_before - allocated_after_offload) / 2**30)
+                    if allocated_before is not None and allocated_after_offload is not None
+                    else 0.0
+                ),
+                "diffqrcoder_srmpgd_cuda_gib_before": (
+                    float(allocated_before) / 2**30 if allocated_before is not None else 0.0
+                ),
+                "diffqrcoder_srmpgd_cuda_gib_after_offload": (
+                    float(allocated_after_offload) / 2**30
+                    if allocated_after_offload is not None
+                    else 0.0
+                ),
+            }
+            for key, diagnostic_name in (
+                ("cuda_driver_free_before_bytes", "diffqrcoder_srmpgd_driver_free_gib_before"),
+                (
+                    "cuda_driver_free_after_offload_bytes",
+                    "diffqrcoder_srmpgd_driver_free_gib_after_offload",
+                ),
+                (
+                    "cuda_allocated_before_restore_bytes",
+                    "diffqrcoder_srmpgd_cuda_gib_before_restore",
+                ),
+                (
+                    "cuda_allocated_after_lpips_offload_bytes",
+                    "diffqrcoder_srmpgd_cuda_gib_after_lpips_offload",
+                ),
+                (
+                    "cuda_allocated_after_restore_bytes",
+                    "diffqrcoder_srmpgd_cuda_gib_after_restore",
+                ),
+            ):
+                value = memory_state[key]
+                diagnostics[diagnostic_name] = (
+                    float(value) / 2**30 if value is not None else 0.0
+                )
+            diagnostics["diffqrcoder_srmpgd_driver_free_gib_gained"] = (
+                max(0.0, float(free_after_offload - free_before) / 2**30)
+                if free_before is not None and free_after_offload is not None
+                else 0.0
+            )
+            self._diagnostics.update(diagnostics)
+
+        srmpgd_memory = None
+        try:
+            with memory_scope as srmpgd_memory:
+                srmpgd = run_srmpgd(
+                    pipe,
+                    latent,
+                    original_blueprint,
+                    srmpgd_config,
+                    initial_image=image,
+                    scanning_loss=None if paper_equations else paper_scanning_loss,
+                    validation_callback=validation_callback,
+                    preview_callback=preview_srmpgd,
+                )
+        except BaseException as exc:
+            if srmpgd_memory is not None:
+                record_srmpgd_memory(srmpgd_memory)
+                if paper_equations:
+                    module_count = len(srmpgd_memory["offloaded_modules"])
+                    free_after = srmpgd_memory["cuda_driver_free_after_offload_bytes"]
+                    note = (
+                        "paper SR-MPGD failed after temporarily offloading "
+                        f"{module_count} diffusion modules; "
+                        f"driver_free_after_offload_gib="
+                        f"{float(free_after) / 2**30:.3f}"
+                        if free_after is not None
+                        else (
+                            "paper SR-MPGD failed after temporarily offloading "
+                            f"{module_count} diffusion modules"
+                        )
+                    )
+                    if hasattr(exc, "add_note"):
+                        exc.add_note(note)
+            raise
+        record_srmpgd_memory(srmpgd_memory)
         if self.settings.srpg_save_step_previews:
             # This is the same Stage-2 latent decoded in the SR-MPGD VAE precision before
             # any update. It separates reconstruction/precision effects from Eq. 14.
