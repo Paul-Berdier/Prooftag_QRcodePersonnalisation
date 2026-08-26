@@ -69,45 +69,31 @@ class Settings(BaseSettings):
     diffqrcoder_qr_padding_px: int = Field(default=78, ge=0, le=256)
     diffqrcoder_control_guidance_start: float = Field(default=0.0, ge=0.0, le=1.0)
     diffqrcoder_control_guidance_end: float = Field(default=1.0, ge=0.0, le=1.0)
-    diffqrcoder_stage2_initialization: Literal[
-        "paper_stage1_noise", "public_random"
-    ] = "paper_stage1_noise"
+    diffqrcoder_stage2_initialization: Literal["paper_stage1_noise", "public_random"] = (
+        "paper_stage1_noise"
+    )
     diffqrcoder_stage2_strength: float = Field(default=1.0, gt=0.0, le=1.0)
-    diffqrcoder_stage2_target_mode: Literal[
-        "binary_exact", "qart_url_fragment"
-    ] = "binary_exact"
+    diffqrcoder_stage2_target_mode: Literal["binary_exact", "qart_url_fragment"] = "binary_exact"
     diffqrcoder_qart_executable: str = "/usr/local/bin/qart"
     diffqrcoder_qart_thresholds: tuple[int, ...] = (96, 112, 128, 144, 160)
-    diffqrcoder_guard_max_changed_pixel_ratio: float = Field(
-        default=0.995, gt=0.0, le=1.0
-    )
-    diffqrcoder_guard_max_mean_absolute_change: float = Field(
-        default=0.35, gt=0.0, le=1.0
-    )
-    diffqrcoder_guard_max_clipped_pixel_ratio_increase: float = Field(
-        default=0.05, ge=0.0, le=1.0
-    )
+    diffqrcoder_guard_max_changed_pixel_ratio: float = Field(default=0.995, gt=0.0, le=1.0)
+    diffqrcoder_guard_max_mean_absolute_change: float = Field(default=0.35, gt=0.0, le=1.0)
+    diffqrcoder_guard_max_clipped_pixel_ratio_increase: float = Field(default=0.05, ge=0.0, le=1.0)
     diffqrcoder_guard_max_rgb_clipped_channel_ratio_increase: float = Field(
         default=0.02, ge=0.0, le=1.0
     )
-    diffqrcoder_guard_max_saturation_mean_increase: float = Field(
-        default=0.08, ge=0.0, le=1.0
-    )
+    diffqrcoder_guard_max_saturation_mean_increase: float = Field(default=0.08, ge=0.0, le=1.0)
     diffqrcoder_guard_max_high_saturation_ratio_increase: float = Field(
         default=0.05, ge=0.0, le=1.0
     )
-    diffqrcoder_guard_hard_max_mean_absolute_change: float = Field(
-        default=0.40, gt=0.0, le=1.0
-    )
+    diffqrcoder_guard_hard_max_mean_absolute_change: float = Field(default=0.40, gt=0.0, le=1.0)
     diffqrcoder_guard_hard_max_clipped_pixel_ratio_increase: float = Field(
         default=0.20, ge=0.0, le=1.0
     )
     diffqrcoder_guard_hard_max_rgb_clipped_channel_ratio_increase: float = Field(
         default=0.25, ge=0.0, le=1.0
     )
-    diffqrcoder_guard_hard_max_saturation_mean_increase: float = Field(
-        default=0.20, ge=0.0, le=1.0
-    )
+    diffqrcoder_guard_hard_max_saturation_mean_increase: float = Field(default=0.20, ge=0.0, le=1.0)
     diffqrcoder_guard_hard_max_high_saturation_ratio_increase: float = Field(
         default=0.30, ge=0.0, le=1.0
     )
@@ -158,47 +144,32 @@ class Settings(BaseSettings):
     srpg_latent_fusion_alpha: float = Field(default=0.15, ge=0.0, le=1.0)
     srpg_latent_fusion_start: float = Field(default=0.0, ge=0.0, le=1.0)
     srpg_latent_fusion_end: float = Field(default=1.0, ge=0.0, le=1.0)
-    srpg_quiet_zone_mode: Literal["none", "white", "adaptive_light"] = (
-        "adaptive_light"
-    )
-    srpg_quiet_zone_minimum_luminance: float = Field(
-        default=0.90, gt=0.0, le=1.0
-    )
-    srpg_functional_pattern_tone_factor: float = Field(
-        default=0.0, ge=0.0, le=1.0
-    )
+    srpg_quiet_zone_mode: Literal["none", "white", "adaptive_light"] = "adaptive_light"
+    srpg_quiet_zone_minimum_luminance: float = Field(default=0.90, gt=0.0, le=1.0)
+    srpg_functional_pattern_tone_factor: float = Field(default=0.0, ge=0.0, le=1.0)
     srmpgd_enabled: bool = False
-    srmpgd_protocol: Literal["guarded_production", "paper_equations"] = (
-        "guarded_production"
-    )
+    srmpgd_protocol: Literal["guarded_production", "paper_equations"] = "guarded_production"
     srmpgd_max_iterations: int = Field(default=4, ge=1, le=100)
     srmpgd_step_size: float = Field(default=100.0, gt=0.0, le=100_000.0)
+    srmpgd_gradient_scale: float = Field(default=32_768.0, ge=1.0, le=1_000_000.0)
+    srmpgd_min_gradient_rms: float = Field(default=1e-12, ge=0.0, le=1.0)
+    srmpgd_decode_precision: Literal["model", "float32"] = "model"
     srmpgd_lpips_weight: float = Field(default=0.10, ge=0.0, le=100.0)
     srmpgd_lpips_net: Literal["alex", "vgg", "squeeze"] = "vgg"
     srmpgd_crop_padding_px: int = Field(default=-1, ge=-1, le=256)
     srmpgd_dark_threshold: float = Field(default=0.5, gt=0.0, lt=1.0)
     srmpgd_light_threshold: float = Field(default=0.5, gt=0.0, lt=1.0)
     srmpgd_center_fraction: float = Field(default=1 / 3, gt=0.0, le=1.0)
-    srmpgd_max_initial_module_error_rate: float = Field(
-        default=0.10, ge=0.0, le=1.0
-    )
+    srmpgd_max_initial_module_error_rate: float = Field(default=0.10, ge=0.0, le=1.0)
     srmpgd_min_qr_tolerance: float = Field(default=0.0, ge=0.0, le=1.0)
     srmpgd_max_step_rms: float = Field(default=0.02, gt=0.0, le=10.0)
     srmpgd_max_total_delta_rms: float = Field(default=0.06, gt=0.0, le=10.0)
-    srmpgd_min_relative_module_improvement: float = Field(
-        default=0.01, ge=0.0, le=1.0
-    )
+    srmpgd_min_relative_module_improvement: float = Field(default=0.01, ge=0.0, le=1.0)
     srmpgd_max_lpips_loss: float = Field(default=0.15, ge=0.0, le=100.0)
     srmpgd_max_mean_absolute_change: float = Field(default=0.06, ge=0.0, le=1.0)
-    srmpgd_max_saturation_mean_increase: float = Field(
-        default=0.04, ge=0.0, le=1.0
-    )
-    srmpgd_max_high_saturation_ratio_increase: float = Field(
-        default=0.05, ge=0.0, le=1.0
-    )
-    srmpgd_max_rgb_clipped_channel_ratio_increase: float = Field(
-        default=0.01, ge=0.0, le=1.0
-    )
+    srmpgd_max_saturation_mean_increase: float = Field(default=0.04, ge=0.0, le=1.0)
+    srmpgd_max_high_saturation_ratio_increase: float = Field(default=0.05, ge=0.0, le=1.0)
+    srmpgd_max_rgb_clipped_channel_ratio_increase: float = Field(default=0.01, ge=0.0, le=1.0)
     srmpgd_robust_blur_weight: float = Field(default=0.0, ge=0.0, le=10.0)
     srmpgd_robust_blur_kernel: int = Field(default=3, ge=1, le=15)
     srmpgd_robust_downscale_weight: float = Field(default=0.0, ge=0.0, le=10.0)
@@ -238,8 +209,7 @@ class Settings(BaseSettings):
             raise ValueError("HPS scoring requires the laboratory quality scorer")
         mutable_aesthetic_markers = ("/refs/heads/", "/main/", "/master/")
         if any(
-            marker in self.quality_aesthetic_weights_url
-            for marker in mutable_aesthetic_markers
+            marker in self.quality_aesthetic_weights_url for marker in mutable_aesthetic_markers
         ):
             raise ValueError("aesthetic weights URL must not reference a mutable branch")
         scheduler_steps = ceil(self.guided_rediffusion_steps / self.guided_rediffusion_strength)
@@ -264,9 +234,7 @@ class Settings(BaseSettings):
         if self.srmpgd_dark_threshold > self.srmpgd_light_threshold:
             raise ValueError("SR-MPGD dark threshold cannot exceed light threshold")
         if self.srmpgd_max_step_rms > self.srmpgd_max_total_delta_rms:
-            raise ValueError(
-                "SR-MPGD maximum step RMS cannot exceed total latent delta RMS"
-            )
+            raise ValueError("SR-MPGD maximum step RMS cannot exceed total latent delta RMS")
         if self.srmpgd_robust_blur_kernel % 2 == 0:
             raise ValueError("SR-MPGD robust blur kernel must be odd")
         if self.srpg_dark_threshold > self.srpg_light_threshold:
@@ -306,9 +274,7 @@ class Settings(BaseSettings):
         )
         for name, warning_threshold, hard_threshold in guard_pairs:
             if hard_threshold < warning_threshold:
-                raise ValueError(
-                    f"DiffQRCoder hard {name} guard cannot be lower than its warning"
-                )
+                raise ValueError(f"DiffQRCoder hard {name} guard cannot be lower than its warning")
         return self
 
     @property

@@ -81,9 +81,9 @@ def test_lab_exact_stage1_reuse_contract_survives_campaign_roundtrip():
     serialized = campaign.model_dump(mode="json")
 
     assert serialized["methods"][0]["require_exact_stage1_reuse"] is True
-    assert LabCampaignCreate.model_validate(serialized).methods[
-        0
-    ].require_exact_stage1_reuse is True
+    assert (
+        LabCampaignCreate.model_validate(serialized).methods[0].require_exact_stage1_reuse is True
+    )
 
 
 def test_lab_strict_stage2_refuses_to_regenerate_a_missing_stage1(tmp_path, monkeypatch):
@@ -108,9 +108,7 @@ def test_lab_strict_stage2_refuses_to_regenerate_a_missing_stage1(tmp_path, monk
     method = LabMethod.model_validate(
         {
             **next(
-                profile
-                for profile in laboratory_profiles()
-                if profile["id"] == "diffqrcoder_srpg"
+                profile for profile in laboratory_profiles() if profile["id"] == "diffqrcoder_srpg"
             ),
             "id": "strict_stage2",
             "require_exact_stage1_reuse": True,
@@ -176,6 +174,9 @@ def test_web_lab_exposes_only_the_pinned_diffqrcoder_chain():
         "diffqrcoder_paper_srpg",
         "diffqrcoder_paper_srmpgd_guarded",
         "diffqrcoder_paper_srmpgd",
+        "e033_public_demo_srpg",
+        "e033_equation_srmpgd_fp16",
+        "e033_equation_srmpgd_fp32",
         "diffqrcoder_srmpgd",
         "diffqrcoder_srmpgd_robust",
         "diffqrcoder_auto",
@@ -195,9 +196,7 @@ def test_web_lab_exposes_only_the_pinned_diffqrcoder_chain():
         profile for profile in profiles if profile["id"] == "diffqrcoder_paper_srmpgd"
     )
     paper_srmpgd_guarded = next(
-        profile
-        for profile in profiles
-        if profile["id"] == "diffqrcoder_paper_srmpgd_guarded"
+        profile for profile in profiles if profile["id"] == "diffqrcoder_paper_srmpgd_guarded"
     )
     assert srpg["tools"]["settings"]["diffqrcoder_stage2_target_mode"] == "binary_exact"
     assert srpg["tools"]["settings"]["diffqrcoder_stage2_strength"] == 0.65
@@ -211,11 +210,21 @@ def test_web_lab_exposes_only_the_pinned_diffqrcoder_chain():
     assert paper_srmpgd["tools"]["settings"]["srmpgd_lpips_weight"] == 0.01
     assert paper_srmpgd["tools"]["settings"]["srmpgd_crop_padding_px"] == 78
     assert paper_srmpgd_guarded["enabled"] is False
-    assert (
-        paper_srmpgd_guarded["tools"]["settings"]["srmpgd_protocol"]
-        == "guarded_production"
-    )
+    assert paper_srmpgd_guarded["tools"]["settings"]["srmpgd_protocol"] == "guarded_production"
     assert paper_srmpgd_guarded["tools"]["settings"]["srmpgd_crop_padding_px"] == 78
+    e033_stage2 = next(profile for profile in profiles if profile["id"] == "e033_public_demo_srpg")
+    e033_fp16 = next(
+        profile for profile in profiles if profile["id"] == "e033_equation_srmpgd_fp16"
+    )
+    e033_fp32 = next(
+        profile for profile in profiles if profile["id"] == "e033_equation_srmpgd_fp32"
+    )
+    assert e033_stage2["tools"]["settings"]["srpg_qr_weight"] == 50.0
+    assert e033_stage2["tools"]["settings"]["srpg_perceptual_weight"] == 20.0
+    assert e033_stage2["tools"]["settings"]["diffqrcoder_stage2_initialization"] == "public_random"
+    assert e033_fp16["tools"]["settings"]["srmpgd_decode_precision"] == "model"
+    assert e033_fp32["tools"]["settings"]["srmpgd_decode_precision"] == "float32"
+    assert e033_fp32["tools"]["settings"]["srmpgd_gradient_scale"] == 32768.0
     qart = next(profile for profile in profiles if profile["id"] == "diffqrcoder_qart_srpg")
     automatic = next(profile for profile in profiles if profile["id"] == "diffqrcoder_auto")
     srmpgd = next(profile for profile in profiles if profile["id"] == "diffqrcoder_srmpgd")
@@ -241,11 +250,7 @@ def test_lab_accepts_the_adaptive_srmpgd_qr_tolerance_setting(tmp_path):
         validator=object(),
     )
     method = LabMethod.model_validate(
-        next(
-            profile
-            for profile in laboratory_profiles()
-            if profile["id"] == "diffqrcoder_srmpgd"
-        )
+        next(profile for profile in laboratory_profiles() if profile["id"] == "diffqrcoder_srmpgd")
     )
     method.tools.settings["srmpgd_min_qr_tolerance"] = 0.80
 
@@ -284,11 +289,16 @@ def test_srmpgd_reuses_the_matching_srpg_stage2_cache_key(tmp_path):
         next(item for item in profiles if item["id"] == "diffqrcoder_paper_srmpgd")
     )
     paper_srmpgd_guarded = LabMethod.model_validate(
-        next(
-            item
-            for item in profiles
-            if item["id"] == "diffqrcoder_paper_srmpgd_guarded"
-        )
+        next(item for item in profiles if item["id"] == "diffqrcoder_paper_srmpgd_guarded")
+    )
+    e033_stage2 = LabMethod.model_validate(
+        next(item for item in profiles if item["id"] == "e033_public_demo_srpg")
+    )
+    e033_fp16 = LabMethod.model_validate(
+        next(item for item in profiles if item["id"] == "e033_equation_srmpgd_fp16")
+    )
+    e033_fp32 = LabMethod.model_validate(
+        next(item for item in profiles if item["id"] == "e033_equation_srmpgd_fp32")
     )
     try:
         srpg_key = service._stage2_cache_key(
@@ -347,6 +357,30 @@ def test_srmpgd_reuses_the_matching_srpg_stage2_cache_key(tmp_path):
             "M",
             "https://ptag.io/t/cache",
         )
+        e033_stage2_key = service._stage2_cache_key(
+            e033_stage2,
+            "blue courtyard",
+            "easynegative",
+            51001,
+            "M",
+            "https://ptag.io/t/cache",
+        )
+        e033_fp16_key = service._stage2_cache_key(
+            e033_fp16,
+            "blue courtyard",
+            "easynegative",
+            51001,
+            "M",
+            "https://ptag.io/t/cache",
+        )
+        e033_fp32_key = service._stage2_cache_key(
+            e033_fp32,
+            "blue courtyard",
+            "easynegative",
+            51001,
+            "M",
+            "https://ptag.io/t/cache",
+        )
     finally:
         service.shutdown()
 
@@ -355,6 +389,7 @@ def test_srmpgd_reuses_the_matching_srpg_stage2_cache_key(tmp_path):
     assert srpg_key == robust_srmpgd_key
     assert paper_srpg_key == paper_srmpgd_key
     assert paper_srpg_key == paper_srmpgd_guarded_key
+    assert e033_stage2_key == e033_fp16_key == e033_fp32_key
 
 
 def test_stage2_cache_key_uses_effective_math_not_debug_settings(tmp_path):
@@ -762,9 +797,7 @@ def test_lab_persists_cpu_quality_scores_without_using_the_generation_gpu(
             assert kwargs["device"] == "cpu"
             assert kwargs["hps_enabled"] is True
             assert kwargs["model_revision"] == settings.quality_clip_model_revision
-            assert kwargs["aesthetic_weights_sha256"] == (
-                settings.quality_aesthetic_weights_sha256
-            )
+            assert kwargs["aesthetic_weights_sha256"] == (settings.quality_aesthetic_weights_sha256)
 
         def score(self, image, prompt):
             assert image.size == (64, 64)
@@ -791,12 +824,8 @@ def test_lab_persists_cpu_quality_scores_without_using_the_generation_gpu(
                     "effective_package_version": settings.quality_hps_package_version,
                     "effective_source_revision": settings.quality_hps_source_revision,
                     "package_verified": True,
-                    "requested_checkpoint_revision": (
-                        settings.quality_hps_checkpoint_revision
-                    ),
-                    "effective_checkpoint_sha256": (
-                        settings.quality_hps_checkpoint_sha256
-                    ),
+                    "requested_checkpoint_revision": (settings.quality_hps_checkpoint_revision),
+                    "effective_checkpoint_sha256": (settings.quality_hps_checkpoint_sha256),
                     "checkpoint_verified": True,
                 },
             }

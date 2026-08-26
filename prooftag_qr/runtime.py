@@ -26,9 +26,7 @@ def runtime_deployment_identity() -> dict[str, str | bool | None]:
     if not image or len(image) > 512 or re.search(r"\s", image):
         raise RuntimeError("PROOFTAG_RUNTIME_IMAGE must be a non-empty image reference")
     if not digest or not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
-        raise RuntimeError(
-            "PROOFTAG_RUNTIME_IMAGE_DIGEST must be a lowercase sha256 digest"
-        )
+        raise RuntimeError("PROOFTAG_RUNTIME_IMAGE_DIGEST must be a lowercase sha256 digest")
     return {
         "configured": True,
         "git_commit": commit,
@@ -132,24 +130,22 @@ def runtime_info(
             "srpg_save_step_previews": settings.srpg_save_step_previews,
             "srpg_preview_interval": settings.srpg_preview_interval,
             "srpg_quiet_zone_mode": settings.srpg_quiet_zone_mode,
-            "srpg_quiet_zone_minimum_luminance": (
-                settings.srpg_quiet_zone_minimum_luminance
-            ),
-            "srpg_functional_pattern_tone_factor": (
-                settings.srpg_functional_pattern_tone_factor
-            ),
+            "srpg_quiet_zone_minimum_luminance": (settings.srpg_quiet_zone_minimum_luminance),
+            "srpg_functional_pattern_tone_factor": (settings.srpg_functional_pattern_tone_factor),
             "srmpgd_enabled": settings.srmpgd_enabled,
+            "srmpgd_protocol": settings.srmpgd_protocol,
             "srmpgd_max_iterations": settings.srmpgd_max_iterations,
             "srmpgd_step_size": settings.srmpgd_step_size,
+            "srmpgd_gradient_scale": settings.srmpgd_gradient_scale,
+            "srmpgd_min_gradient_rms": settings.srmpgd_min_gradient_rms,
+            "srmpgd_decode_precision": settings.srmpgd_decode_precision,
             "srmpgd_lpips_weight": settings.srmpgd_lpips_weight,
             "srmpgd_lpips_net": settings.srmpgd_lpips_net,
             "srmpgd_crop_padding_px": settings.srmpgd_crop_padding_px,
             "srmpgd_dark_threshold": settings.srmpgd_dark_threshold,
             "srmpgd_light_threshold": settings.srmpgd_light_threshold,
             "srmpgd_center_fraction": settings.srmpgd_center_fraction,
-            "srmpgd_max_initial_module_error_rate": (
-                settings.srmpgd_max_initial_module_error_rate
-            ),
+            "srmpgd_max_initial_module_error_rate": (settings.srmpgd_max_initial_module_error_rate),
             "srmpgd_min_qr_tolerance": settings.srmpgd_min_qr_tolerance,
             "srmpgd_max_step_rms": settings.srmpgd_max_step_rms,
             "srmpgd_max_total_delta_rms": settings.srmpgd_max_total_delta_rms,
@@ -157,12 +153,8 @@ def runtime_info(
                 settings.srmpgd_min_relative_module_improvement
             ),
             "srmpgd_max_lpips_loss": settings.srmpgd_max_lpips_loss,
-            "srmpgd_max_mean_absolute_change": (
-                settings.srmpgd_max_mean_absolute_change
-            ),
-            "srmpgd_max_saturation_mean_increase": (
-                settings.srmpgd_max_saturation_mean_increase
-            ),
+            "srmpgd_max_mean_absolute_change": (settings.srmpgd_max_mean_absolute_change),
+            "srmpgd_max_saturation_mean_increase": (settings.srmpgd_max_saturation_mean_increase),
             "srmpgd_max_high_saturation_ratio_increase": (
                 settings.srmpgd_max_high_saturation_ratio_increase
             ),
@@ -171,25 +163,13 @@ def runtime_info(
             ),
             "srmpgd_robust_blur_weight": settings.srmpgd_robust_blur_weight,
             "srmpgd_robust_blur_kernel": settings.srmpgd_robust_blur_kernel,
-            "srmpgd_robust_downscale_weight": (
-                settings.srmpgd_robust_downscale_weight
-            ),
-            "srmpgd_robust_downscale_factor": (
-                settings.srmpgd_robust_downscale_factor
-            ),
-            "srmpgd_robust_brightness_weight": (
-                settings.srmpgd_robust_brightness_weight
-            ),
+            "srmpgd_robust_downscale_weight": (settings.srmpgd_robust_downscale_weight),
+            "srmpgd_robust_downscale_factor": (settings.srmpgd_robust_downscale_factor),
+            "srmpgd_robust_brightness_weight": (settings.srmpgd_robust_brightness_weight),
             "srmpgd_robust_brightness_low": settings.srmpgd_robust_brightness_low,
-            "srmpgd_robust_brightness_high": (
-                settings.srmpgd_robust_brightness_high
-            ),
-            "srmpgd_robust_contrast_weight": (
-                settings.srmpgd_robust_contrast_weight
-            ),
-            "srmpgd_robust_contrast_factor": (
-                settings.srmpgd_robust_contrast_factor
-            ),
+            "srmpgd_robust_brightness_high": (settings.srmpgd_robust_brightness_high),
+            "srmpgd_robust_contrast_weight": (settings.srmpgd_robust_contrast_weight),
+            "srmpgd_robust_contrast_factor": (settings.srmpgd_robust_contrast_factor),
             "latent_refinement_enabled": settings.latent_refinement_enabled,
             "latent_refinement_iterations": settings.latent_refinement_iterations,
             "latent_refinement_learning_rate": settings.latent_refinement_learning_rate,

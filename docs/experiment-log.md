@@ -1660,3 +1660,37 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
 - **Décision scientifique :** le plan `48ed7ac799e61502` est invalide et ne doit être ni repris ni
   mélangé à la relance. Ses artefacts sont conservés en lecture seule ; le correctif impose un
   nouveau `plan_id`, un nouveau dossier de reprise et une campagne entièrement nouvelle.
+
+## E032 - résultat négatif de la campagne corrigée - 26 août 2026
+
+- **Plan :** `4fe66e1ff13d8363`, 30 contextes et 120 sorties complets.
+- **Stage 2 :** QR-Verify conservateur 0/30, saturation moyenne `0,3426`, CLIP-AES `4,29`, contre
+  `0,0008` et `6,46` au Stage 1. La dégradation précède donc SR-MPGD.
+- **SR-MPGD :** les 30 traces ont `gradient_rms=0`, `applied_step_rms=0` et
+  `latent_delta_rms=0`. La SRL ne baisse pas ; guarded est identique au Stage 2 dans 30/30 cas.
+- **Erreur de lecture précédente :** la redécompression VAE de la branche équations modifie
+  quelques valeurs de raster sans modifier le latent. Elle ne doit plus être appelée itération
+  SR-MPGD effective.
+- **Correction numérique :** ajout d'un loss scaling dénormalisé, d'une option VAE FP32 limitée au
+  post-traitement, des gradients image/latent dans la trace et d'un arrêt explicite sur gradient
+  nul avec SRL positive.
+- **Décision :** aucune nouvelle matrice 10 x 3. E033 commence par une paire appariée, affiche les
+  états 0/1/2/4 et bloque toute extension tant que gradient, déplacement latent et baisse de SRL ne
+  sont pas simultanément prouvés.
+- **Rapport :** `docs/e032-results-2026-08-26.md`.
+
+## E033 - microdiagnostic numérique SR-MPGD - 26 août 2026
+
+- **But :** prouver sur une seule paire que la descente modifie réellement le latent et réduit la
+  SRL avant toute nouvelle matrice multi-prompt.
+- **Contrôles :** Stage 1, Stage 2 E032 dégradé, recette `demo2.sh`, équations FP16 et équations
+  avec VAE FP32 ; les deux dernières branches réutilisent exactement le même latent Stage 2.
+- **Correctifs :** loss scaling dénormalisé avec repli en cas d'overflow, gradients raster
+  pré-clamp et latent, arrêt fail-closed sur gradient nul, promotion/restauration VAE FP32 sûre.
+- **Attribution visuelle :** chaque branche expose le latent redécodé sans update puis les états
+  directs 0, 1, 2 et 4, afin de séparer reconstruction VAE et effet d'Eq. 14.
+- **Porte :** jalons intègres, gradient FP32 positif, déplacement latent à l'itération 1 et baisse
+  de SRL avant ou à l'itération 4. Un échec produit un STOP archivé et aucun élargissement.
+- **Statut :** implémenté et testé localement ; validation CUDA réelle encore requise sur la RTX
+  4000 Ada. E033 ne doit pas être présenté comme réussi avant cette exécution.
+- **Protocole :** `docs/e033-srmpgd-microdiagnostic.md`.

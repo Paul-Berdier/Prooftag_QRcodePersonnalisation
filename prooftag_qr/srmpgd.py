@@ -35,6 +35,14 @@ class SRMPGDConfig:
     protocol: Literal["guarded_production", "paper_equations"] = "guarded_production"
     max_iterations: int = 4
     step_size: float = 100.0
+    # The VAE is normally FP16. Scaling the scalar objective before backpropagation and
+    # unscaling the resulting latent gradient preserves Eq. 14 while preventing the exact
+    # zero gradients observed in E032. This is deliberately different from the public
+    # repository's ``GRADIENT_SCALE=100``, which is not unscaled and therefore also changes
+    # the effective update amplitude.
+    gradient_scale: float = 32_768.0
+    min_gradient_rms: float = 1e-12
+    decode_precision: Literal["model", "float32"] = "model"
     lpips_weight: float = 0.10
     lpips_net: str = "vgg"
     crop_padding_px: int = -1
@@ -80,6 +88,8 @@ class SRMPGDStep:
     worst_decoder_pass_rate: float
     worst_scenario_pass_rate: float
     gradient_rms: float | None
+    image_gradient_rms: float | None
+    gradient_scale: float | None
     next_step_rms: float | None
     applied_step_rms: float | None
     step_scale: float | None
@@ -103,6 +113,7 @@ class SRMPGDStep:
 class SRMPGDResult:
     image: Image.Image
     latent: Any
+    initial_redecoded_image: Image.Image
     steps: tuple[SRMPGDStep, ...]
     selected_iteration: int
     stop_reason: str
@@ -123,6 +134,12 @@ def _validate_config(config: SRMPGDConfig) -> None:
         raise ValueError("max_iterations must be at least 1")
     if config.step_size <= 0:
         raise ValueError("step_size must be positive")
+    if config.gradient_scale < 1:
+        raise ValueError("gradient_scale must be at least 1")
+    if config.min_gradient_rms < 0:
+        raise ValueError("min_gradient_rms cannot be negative")
+    if config.decode_precision not in {"model", "float32"}:
+        raise ValueError("decode_precision must be model or float32")
     if config.lpips_weight < 0:
         raise ValueError("lpips_weight cannot be negative")
     if config.lpips_net not in {"alex", "vgg", "squeeze"}:
@@ -179,6 +196,19 @@ def _validate_config(config: SRMPGDConfig) -> None:
         raise ValueError("functional_pattern_tone_factor must be between 0 and 1")
 
 
+def _gradient_scale_candidates(maximum: float) -> tuple[float, ...]:
+    """Return bounded descending scales, keeping ``1`` as the final safe fallback."""
+
+    values: list[float] = []
+    current = float(maximum)
+    while current > 1.0:
+        values.append(current)
+        current = max(1.0, current / 4.0)
+    if not values or values[-1] != 1.0:
+        values.append(1.0)
+    return tuple(values)
+
+
 def _load_lpips(pipeline: Any, *, device: Any, net: str) -> Any:
     cache_name = f"_prooftag_srmpgd_lpips_{net}"
     cached = getattr(pipeline, cache_name, None)
@@ -220,9 +250,7 @@ def _blueprint_tensor(
         else blueprint.matrix
     )
     binary = np.where(matrix, 0, 255).astype(np.uint8)
-    resized = Image.fromarray(binary, mode="L").resize(
-        (width, height), Image.Resampling.NEAREST
-    )
+    resized = Image.fromarray(binary, mode="L").resize((width, height), Image.Resampling.NEAREST)
     array = np.asarray(resized, dtype=np.float32) / 255.0
     return torch.as_tensor(array, device=device).unsqueeze(0).unsqueeze(0)
 
@@ -259,11 +287,15 @@ def _decode_latent(
 
     vae = pipeline.vae
     scaling_factor = vae.config.scaling_factor
-    if latent.device.type == "cuda":
+    vae_dtype = next(vae.parameters()).dtype
+    if latent.device.type == "cuda" and vae_dtype != torch.float32:
         with torch.autocast("cuda", dtype=next(vae.parameters()).dtype):
             decoded = vae.decode(latent / scaling_factor, return_dict=False)[0]
     else:
-        decoded = vae.decode(latent / scaling_factor, return_dict=False)[0]
+        decoded = vae.decode(
+            latent.to(dtype=vae_dtype) / scaling_factor,
+            return_dict=False,
+        )[0]
     image = pipeline.image_processor.postprocess(
         decoded.detach(), output_type="pil", do_denormalize=[True]
     )[0].convert("RGB")
@@ -394,9 +426,7 @@ def _robust_scanning_loss(
         total_weight += config.robust_brightness_weight
 
     if config.robust_contrast_weight:
-        contrasted = (
-            (images - 0.5) * config.robust_contrast_factor + 0.5
-        ).clamp(0, 1)
+        contrasted = ((images - 0.5) * config.robust_contrast_factor + 0.5).clamp(0, 1)
         contrast = scanning_loss(contrasted, target)
         if contrast.ndim != 0:
             contrast = contrast.mean()
@@ -407,7 +437,7 @@ def _robust_scanning_loss(
     return total / total_weight, components
 
 
-def run_srmpgd(
+def _run_srmpgd(
     pipeline: Any,
     initial_latent: Any,
     blueprint: QRBlueprint,
@@ -510,9 +540,7 @@ def run_srmpgd(
         blueprint,
         crop_padding_px=resolved_crop_padding_px,
     )
-    refinement_applicable = (
-        initial_module_error_rate <= config.max_initial_module_error_rate
-    )
+    refinement_applicable = initial_module_error_rate <= config.max_initial_module_error_rate
     baseline_pass_rate = 0.0
     for iteration in range(config.max_iterations + 1):
         iteration_stop_reason = None
@@ -583,84 +611,121 @@ def run_srmpgd(
                 crop_padding_px=resolved_crop_padding_px,
             )
             relative_module_improvement = (
-                (initial_module_error_rate - actual_module_error_rate)
-                / max(initial_module_error_rate, 1e-8)
-            )
+                initial_module_error_rate - actual_module_error_rate
+            ) / max(initial_module_error_rate, 1e-8)
             changes = image_change_metrics(image, reference_image)
-            latent_delta_rms = float(
-                (working.detach() - initial).square().mean().sqrt().cpu()
+            latent_delta_rms = float((working.detach() - initial).square().mean().sqrt().cpu())
+            aesthetic_guard_passed = (
+                paper_equations
+                or iteration == 0
+                or (
+                    float(lpips_loss.detach().cpu()) <= config.max_lpips_loss
+                    and latent_delta_rms <= config.max_total_delta_rms + 1e-8
+                    and changes["mean_absolute_change"] <= config.max_mean_absolute_change
+                    and changes["saturation_mean_increase"] <= config.max_saturation_mean_increase
+                    and changes["high_saturation_ratio_increase"]
+                    <= config.max_high_saturation_ratio_increase
+                    and changes["rgb_clipped_channel_ratio_increase"]
+                    <= config.max_rgb_clipped_channel_ratio_increase
+                )
             )
-            aesthetic_guard_passed = paper_equations or iteration == 0 or (
-                float(lpips_loss.detach().cpu()) <= config.max_lpips_loss
-                and latent_delta_rms <= config.max_total_delta_rms + 1e-8
-                and changes["mean_absolute_change"]
-                <= config.max_mean_absolute_change
-                and changes["saturation_mean_increase"]
-                <= config.max_saturation_mean_increase
-                and changes["high_saturation_ratio_increase"]
-                <= config.max_high_saturation_ratio_increase
-                and changes["rgb_clipped_channel_ratio_increase"]
-                <= config.max_rgb_clipped_channel_ratio_increase
+            qr_gain_sufficient = (
+                paper_equations
+                or iteration == 0
+                or (
+                    validation["strict_all"]
+                    or validation["pass_rate"] > baseline_pass_rate
+                    or relative_module_improvement >= config.min_relative_module_improvement
+                )
             )
-            qr_gain_sufficient = paper_equations or iteration == 0 or (
-                validation["strict_all"]
-                or validation["pass_rate"] > baseline_pass_rate
-                or relative_module_improvement
-                >= config.min_relative_module_improvement
-            )
-            eligible_for_selection = (
-                aesthetic_guard_passed and qr_gain_sufficient
-            )
+            eligible_for_selection = aesthetic_guard_passed and qr_gain_sufficient
 
             gradient = None
             gradient_rms = None
+            image_gradient_rms = None
+            effective_gradient_scale = None
             next_step_rms = None
             applied_step_rms = None
             step_scale = None
             next_working = None
             if not paper_equations and iteration > 0 and not aesthetic_guard_passed:
-                iteration_stop_reason = (
-                    f"aesthetic_guard_failed_at_iteration_{iteration}"
-                )
+                iteration_stop_reason = f"aesthetic_guard_failed_at_iteration_{iteration}"
             elif not paper_equations and not refinement_applicable:
                 iteration_stop_reason = "initial_module_error_rate_above_limit"
             elif (
                 paper_equations or not validation["strict_all"]
             ) and iteration < config.max_iterations:
-                gradient = torch.autograd.grad(objective, working, only_inputs=True)[0]
-                if not torch.isfinite(gradient).all():
-                    iteration_stop_reason = (
-                        f"non_finite_gradient_at_iteration_{iteration}"
+                # Diagnose the SRL before crossing the VAE. A positive SRL with a zero
+                # image-space gradient means that clamping/early stopping made the QR
+                # objective locally dead. E032 previously continued for 20 iterations in
+                # this state and mislabeled a VAE re-decode as SR-MPGD progress.
+                image_gradient = torch.autograd.grad(
+                    srl,
+                    decoded_core,
+                    only_inputs=True,
+                    retain_graph=True,
+                    allow_unused=True,
+                )[0]
+                image_gradient_rms = (
+                    0.0
+                    if image_gradient is None
+                    else float(image_gradient.square().mean().sqrt().detach().cpu())
+                )
+                # FP16 VAE backward paths can underflow even when the mathematical
+                # gradient is non-zero. Loss scaling is algebraically neutral because the
+                # gradient is divided by the exact same factor before Eq. 14 is applied.
+                # Start at the configured scale to avoid FP16 underflow. If that scale
+                # overflows, retry deterministically with smaller powers of four down to
+                # one. The retained graph is released with the iteration locals.
+                for candidate_scale in _gradient_scale_candidates(config.gradient_scale):
+                    candidate_gradient = (
+                        torch.autograd.grad(
+                            objective * candidate_scale,
+                            working,
+                            only_inputs=True,
+                            retain_graph=True,
+                        )[0]
+                        / candidate_scale
                     )
-                    gradient = None
+                    if torch.isfinite(candidate_gradient).all():
+                        gradient = candidate_gradient
+                        effective_gradient_scale = candidate_scale
+                        break
+                if gradient is None:
+                    iteration_stop_reason = f"non_finite_gradient_at_iteration_{iteration}"
                 else:
                     gradient_rms = float(gradient.square().mean().sqrt().detach().cpu())
                     next_step_rms = config.step_size * gradient_rms
-                    step_scale = (
-                        1.0
-                        if paper_equations
-                        else min(
-                            1.0,
-                            config.max_step_rms / max(next_step_rms, 1e-12),
-                        )
-                    )
-                    proposed = working - config.step_size * step_scale * gradient
-                    if not paper_equations:
-                        delta = proposed.detach() - initial
-                        total_delta_rms = float(delta.square().mean().sqrt().cpu())
-                        if total_delta_rms > config.max_total_delta_rms:
-                            delta = delta * (
-                                config.max_total_delta_rms / total_delta_rms
+                    if (
+                        float(srl.detach().cpu()) > 0
+                        and image_gradient_rms <= config.min_gradient_rms
+                    ):
+                        iteration_stop_reason = f"zero_image_gradient_at_iteration_{iteration}"
+                    elif (
+                        float(objective.detach().cpu()) > 0
+                        and gradient_rms <= config.min_gradient_rms
+                    ):
+                        iteration_stop_reason = f"zero_latent_gradient_at_iteration_{iteration}"
+                    else:
+                        step_scale = (
+                            1.0
+                            if paper_equations
+                            else min(
+                                1.0,
+                                config.max_step_rms / max(next_step_rms, 1e-12),
                             )
-                            proposed = initial + delta
-                    next_working = proposed
-                    applied_step_rms = float(
-                        (next_working.detach() - working.detach())
-                        .square()
-                        .mean()
-                        .sqrt()
-                        .cpu()
-                    )
+                        )
+                        proposed = working - config.step_size * step_scale * gradient
+                        if not paper_equations:
+                            delta = proposed.detach() - initial
+                            total_delta_rms = float(delta.square().mean().sqrt().cpu())
+                            if total_delta_rms > config.max_total_delta_rms:
+                                delta = delta * (config.max_total_delta_rms / total_delta_rms)
+                                proposed = initial + delta
+                        next_working = proposed
+                        applied_step_rms = float(
+                            (next_working.detach() - working.detach()).square().mean().sqrt().cpu()
+                        )
 
             step = SRMPGDStep(
                 iteration=iteration,
@@ -668,11 +733,11 @@ def run_srmpgd(
                 scanning_robust_loss=float(srl.detach().cpu()),
                 lpips_loss=float(lpips_loss.detach().cpu()),
                 objective=float(objective.detach().cpu()),
-                surrogate_module_error_rate=float(
-                    diagnostics["module_error_rate"].detach().cpu()
-                ),
+                surrogate_module_error_rate=float(diagnostics["module_error_rate"].detach().cpu()),
                 actual_module_error_rate=actual_module_error_rate,
                 gradient_rms=gradient_rms,
+                image_gradient_rms=image_gradient_rms,
+                gradient_scale=effective_gradient_scale,
                 next_step_rms=next_step_rms,
                 applied_step_rms=applied_step_rms,
                 step_scale=step_scale,
@@ -680,18 +745,12 @@ def run_srmpgd(
                 relative_module_improvement=relative_module_improvement,
                 mean_absolute_change=changes["mean_absolute_change"],
                 saturation_mean_increase=changes["saturation_mean_increase"],
-                high_saturation_ratio_increase=changes[
-                    "high_saturation_ratio_increase"
-                ],
-                rgb_clipped_channel_ratio_increase=changes[
-                    "rgb_clipped_channel_ratio_increase"
-                ],
+                high_saturation_ratio_increase=changes["high_saturation_ratio_increase"],
+                rgb_clipped_channel_ratio_increase=changes["rgb_clipped_channel_ratio_increase"],
                 aesthetic_guard_passed=aesthetic_guard_passed,
                 qr_gain_sufficient=qr_gain_sufficient,
                 eligible_for_selection=eligible_for_selection,
-                base_scanning_loss=float(
-                    robust_components["base"].detach().cpu()
-                ),
+                base_scanning_loss=float(robust_components["base"].detach().cpu()),
                 blur_scanning_loss=(
                     float(robust_components["blur"].detach().cpu())
                     if robust_components["blur"] is not None
@@ -717,11 +776,7 @@ def run_srmpgd(
             states.append((step, working.detach().clone(), image.copy()))
             if preview_callback is not None:
                 preview_callback(image, step)
-            if (
-                not paper_equations
-                and step.strict_all
-                and step.eligible_for_selection
-            ):
+            if not paper_equations and step.strict_all and step.eligible_for_selection:
                 stop_reason = "strict_validation_passed"
                 break
             if iteration_stop_reason is not None:
@@ -738,20 +793,18 @@ def run_srmpgd(
         # every intermediate state remains available in ``steps`` and debug artifacts.
         selected_step, selected_latent, selected_image = states[-1]
     else:
-        eligible_states = [
-            item for item in states if item[0].eligible_for_selection
-        ]
+        eligible_states = [item for item in states if item[0].eligible_for_selection]
         selected_step, selected_latent, selected_image = max(
             eligible_states, key=lambda item: _rank_step(item[0])
         )
-    if (
-        selected_step.iteration == 0
-        and image_sha256(selected_image) != image_sha256(reference_image)
+    if selected_step.iteration == 0 and image_sha256(selected_image) != image_sha256(
+        reference_image
     ):
         raise RuntimeError("SR-MPGD iteration zero changed the Stage-2 raster")
     return SRMPGDResult(
         image=selected_image,
         latent=selected_latent,
+        initial_redecoded_image=decoded_reference_image.copy(),
         steps=tuple(item[0] for item in states),
         selected_iteration=selected_step.iteration,
         stop_reason=stop_reason,
@@ -761,3 +814,59 @@ def run_srmpgd(
         ),
         final_module_error_rate=selected_step.actual_module_error_rate,
     )
+
+
+def run_srmpgd(
+    pipeline: Any,
+    initial_latent: Any,
+    blueprint: QRBlueprint,
+    config: SRMPGDConfig,
+    *,
+    initial_image: Image.Image | None = None,
+    scanning_loss: ScanningLoss | None = None,
+    validation_callback: ValidationCallback | None = None,
+    preview_callback: PreviewCallback | None = None,
+) -> SRMPGDResult:
+    """Run SR-MPGD and restore the pipeline VAE precision on every exit path.
+
+    Promoting only the VAE for the short post-processing loop is materially cheaper than
+    promoting UNet/ControlNet, and it isolates the FP16-backward underflow observed by E032.
+    The original dtype is restored even if a numerical assertion or callback fails.
+    """
+    import torch
+
+    _validate_config(config)
+    vae = pipeline.vae
+    original_dtype = next(vae.parameters()).dtype
+    promote_vae = config.decode_precision == "float32" and original_dtype != torch.float32
+    primary_error: BaseException | None = None
+    try:
+        if promote_vae:
+            vae.to(dtype=torch.float32)
+        return _run_srmpgd(
+            pipeline,
+            initial_latent,
+            blueprint,
+            config,
+            initial_image=initial_image,
+            scanning_loss=scanning_loss,
+            validation_callback=validation_callback,
+            preview_callback=preview_callback,
+        )
+    except BaseException as exc:
+        primary_error = exc
+        raise
+    finally:
+        if promote_vae:
+            try:
+                # Always run the restoration after a requested promotion. Checking only
+                # the first parameter would miss a partially converted VAE when ``to``
+                # failed halfway through (for example after a CUDA OOM).
+                vae.to(dtype=original_dtype)
+            except Exception as restore_error:
+                if primary_error is None:
+                    raise
+                primary_error.add_note(
+                    "SR-MPGD also failed to restore the VAE precision: "
+                    f"{type(restore_error).__name__}: {restore_error}"
+                )

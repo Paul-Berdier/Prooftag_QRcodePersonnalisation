@@ -43,6 +43,8 @@ def _srmpgd_step_zero() -> SRMPGDStep:
         worst_decoder_pass_rate=0.5,
         worst_scenario_pass_rate=0.5,
         gradient_rms=None,
+        image_gradient_rms=None,
+        gradient_scale=32_768.0,
         next_step_rms=None,
         applied_step_rms=None,
         step_scale=None,
@@ -79,6 +81,7 @@ def test_upstream_srmpgd_iteration_zero_receives_and_returns_exact_stage2_raster
         return SimpleNamespace(
             image=kwargs["initial_image"].copy(),
             latent=_latent,
+            initial_redecoded_image=kwargs["initial_image"].copy(),
             steps=(step,),
             selected_iteration=0,
             stop_reason="initial_module_error_rate_above_limit",
@@ -88,11 +91,22 @@ def test_upstream_srmpgd_iteration_zero_receives_and_returns_exact_stage2_raster
         )
 
     monkeypatch.setattr(backend_module, "run_srmpgd", fake_run_srmpgd)
-    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace())
+    fake_parameter = SimpleNamespace(dtype="float16")
+
+    class FakeVAE:
+        def parameters(self):
+            return iter((fake_parameter,))
+
+        def to(self, *, dtype):
+            fake_parameter.dtype = dtype
+            return self
+
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(float32="float32"))
     result = backend._apply_srmpgd(
         SimpleNamespace(
             srpg=object(),
             unet=SimpleNamespace(dtype="float16"),
+            vae=FakeVAE(),
         ),
         object(),
         stage2_image,
@@ -104,6 +118,7 @@ def test_upstream_srmpgd_iteration_zero_receives_and_returns_exact_stage2_raster
     assert backend.diagnostics()["diffqrcoder_srmpgd_iteration_zero_exact"] == 1.0
     assert backend.debug_metadata()["srmpgd_stage2_image_sha256"] == stage2_hash
     assert backend.debug_metadata()["srmpgd_selected_image_sha256"] == stage2_hash
+    assert backend.debug_metadata()["srmpgd_trace"]["initial_redecoded_image_sha256"] == stage2_hash
     assert backend.provenance()["srmpgd_stage2_image_sha256"] == stage2_hash
     assert backend.provenance()["srmpgd_selected_image_sha256"] == stage2_hash
 
@@ -120,9 +135,7 @@ def test_upstream_provenance_records_all_pinned_model_revisions():
     provenance = backend.provenance()
 
     assert provenance["base_model_revision"] == "base-revision"
-    assert provenance["base_model_config_id"] == (
-        "stable-diffusion-v1-5/stable-diffusion-v1-5"
-    )
+    assert provenance["base_model_config_id"] == ("stable-diffusion-v1-5/stable-diffusion-v1-5")
     assert provenance["base_model_config_revision"] == "config-revision"
     assert provenance["controlnet_model_revision"] == "controlnet-revision"
 
@@ -167,9 +180,7 @@ def test_upstream_loader_passes_pinned_huggingface_revisions(monkeypatch):
         cuda=SimpleNamespace(is_available=lambda: True),
         float16="float16",
     )
-    monkeypatch.setattr(
-        backend_module, "_patch_upstream_perceptual_gradient", lambda: None
-    )
+    monkeypatch.setattr(backend_module, "_patch_upstream_perceptual_gradient", lambda: None)
     monkeypatch.setitem(sys.modules, "torch", fake_torch)
     monkeypatch.setitem(
         sys.modules,
@@ -188,22 +199,18 @@ def test_upstream_loader_passes_pinned_huggingface_revisions(monkeypatch):
         sys.modules,
         "huggingface_hub",
         SimpleNamespace(
-            hf_hub_download=lambda **kwargs: observed.setdefault(
-                "checkpoint_download", kwargs
-            )
-            and "C:/cache/model.safetensors",
-            snapshot_download=lambda **kwargs: observed.setdefault(
-                "config_download", kwargs
-            )
-            and "C:/cache/sd15-config",
+            hf_hub_download=lambda **kwargs: (
+                observed.setdefault("checkpoint_download", kwargs) and "C:/cache/model.safetensors"
+            ),
+            snapshot_download=lambda **kwargs: (
+                observed.setdefault("config_download", kwargs) and "C:/cache/sd15-config"
+            ),
         ),
     )
     backend = UpstreamDiffQRCoderBackend(
         Settings(
             device="cuda",
-            base_model_id=(
-                "https://huggingface.co/example/model/resolve/main/model.safetensors"
-            ),
+            base_model_id=("https://huggingface.co/example/model/resolve/main/model.safetensors"),
             base_model_revision="base-revision",
             base_model_config_revision="config-revision",
             controlnet_model_id="example/controlnet",
@@ -321,9 +328,7 @@ def test_stage2_target_is_the_exact_binary_qr_not_a_visual_proxy():
         module_size=20,
     )
     reference = _reference_artwork()
-    backend = UpstreamDiffQRCoderBackend(
-        Settings(diffqrcoder_stage2_target_mode="binary_exact")
-    )
+    backend = UpstreamDiffQRCoderBackend(Settings(diffqrcoder_stage2_target_mode="binary_exact"))
 
     target = backend._stage2_target(
         reference,
@@ -338,12 +343,16 @@ def test_stage2_target_is_the_exact_binary_qr_not_a_visual_proxy():
         np.asarray(blueprint.image.convert("RGB")),
     )
     assert not np.array_equal(np.asarray(target.image), np.asarray(reference))
-    assert _control_target_center_error_rate(
-        target.image,
-        blueprint,
-        padding_px=78,
-        module_size=20,
-    ) == 0.0
+    assert (
+        _control_target_center_error_rate(
+            target.image,
+            blueprint,
+            padding_px=78,
+            module_size=20,
+        )
+        == 0.0
+    )
+
 
 def test_partial_stage2_schedule_avoids_custom_timesteps_and_keeps_stride():
     class Scheduler:
@@ -417,12 +426,8 @@ def test_hard_color_guard_must_be_at_least_the_warning_threshold():
     ("selected_iteration", "expected_variant"),
     [(0, "srpg"), (2, "srmpgd")],
 )
-def test_srmpgd_iteration_zero_is_reported_as_srpg(
-    selected_iteration, expected_variant
-):
-    backend = UpstreamDiffQRCoderBackend(
-        Settings(srpg_enabled=True, srmpgd_enabled=True)
-    )
+def test_srmpgd_iteration_zero_is_reported_as_srpg(selected_iteration, expected_variant):
+    backend = UpstreamDiffQRCoderBackend(Settings(srpg_enabled=True, srmpgd_enabled=True))
     image = Image.new("RGB", (32, 32), "navy")
 
     def fake_stage2(*_args, **_kwargs):

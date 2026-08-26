@@ -76,6 +76,8 @@ MODEL_SETTING_KEYS = {
     "diffqrcoder_qr_module_size",
     "diffqrcoder_qr_padding_px",
 }
+
+
 def _legacy_laboratory_profiles() -> list[dict[str, Any]]:
     """Editable starting points; none of them is presented as a production guarantee."""
 
@@ -470,6 +472,9 @@ TOOL_SETTING_KEYS = {
     "srmpgd_protocol",
     "srmpgd_max_iterations",
     "srmpgd_step_size",
+    "srmpgd_gradient_scale",
+    "srmpgd_min_gradient_rms",
+    "srmpgd_decode_precision",
     "srmpgd_lpips_weight",
     "srmpgd_lpips_net",
     "srmpgd_crop_padding_px",
@@ -709,6 +714,109 @@ def laboratory_profiles() -> list[dict[str, Any]]:
                 "QR-Verify ou oracle de sélection : la sortie est l'itération finale. "
                 "Le QArt reste l'approximation publique à fragment d'URL et non le "
                 "constructeur privé des auteurs ; ce profil est réservé à l'ablation."
+            ),
+        },
+        {
+            "id": "e033_public_demo_srpg",
+            "name": "E033 — Stage 2 recette démo publique",
+            "backend": "controlnet",
+            "enabled": False,
+            "output_variant": "srpg",
+            "reuse_stage1": True,
+            "generation": generation.copy(),
+            "model": DIFFQRCODER_MODEL_SETTINGS.copy(),
+            "tools": {
+                "srpg_enabled": True,
+                "settings": {
+                    **stage2_at(1.0, target="binary_exact"),
+                    # demo2.sh at the pinned upstream revision. This is a public-code
+                    # control, not a claim that the unpublished PDF pipeline is reproduced.
+                    "diffqrcoder_stage2_initialization": "public_random",
+                    "srpg_controlnet_scale": 1.05,
+                    "srpg_qr_weight": 50.0,
+                    "srpg_perceptual_weight": 20.0,
+                    "srpg_preview_interval": 1,
+                },
+            },
+            "description": (
+                "Pilote E033 : paramètres de demo2.sh (ControlNet 1,05, SRG 50, "
+                "PG 20), cible binaire et initialisation aléatoire du dépôt public."
+            ),
+        },
+        {
+            "id": "e033_equation_srmpgd_fp16",
+            "name": "E033 — Eq. 13-14, VAE modèle",
+            "backend": "controlnet",
+            "enabled": False,
+            "output_variant": "srmpgd",
+            "reuse_stage1": True,
+            "generation": generation.copy(),
+            "model": DIFFQRCODER_MODEL_SETTINGS.copy(),
+            "tools": {
+                "srpg_enabled": True,
+                "srmpgd_enabled": True,
+                "settings": {
+                    **stage2_at(1.0, target="binary_exact"),
+                    "diffqrcoder_stage2_initialization": "public_random",
+                    "srpg_controlnet_scale": 1.05,
+                    "srpg_qr_weight": 50.0,
+                    "srpg_perceptual_weight": 20.0,
+                    "srpg_preview_interval": 1,
+                    "srmpgd_protocol": "paper_equations",
+                    "srmpgd_max_iterations": 4,
+                    "srmpgd_step_size": 1000.0,
+                    "srmpgd_gradient_scale": 32768.0,
+                    "srmpgd_min_gradient_rms": 1e-12,
+                    "srmpgd_decode_precision": "model",
+                    "srmpgd_lpips_weight": 0.01,
+                    "srmpgd_lpips_net": "vgg",
+                    "srmpgd_crop_padding_px": 78,
+                    "srmpgd_dark_threshold": 0.5,
+                    "srmpgd_light_threshold": 0.5,
+                    "srmpgd_center_fraction": 1 / 3,
+                },
+            },
+            "description": (
+                "Témoin numérique E033 : même latent que la recette démo, équations "
+                "13-14, loss scaling neutre, mais VAE conservé dans sa précision modèle."
+            ),
+        },
+        {
+            "id": "e033_equation_srmpgd_fp32",
+            "name": "E033 — Eq. 13-14, VAE FP32",
+            "backend": "controlnet",
+            "enabled": False,
+            "output_variant": "srmpgd",
+            "reuse_stage1": True,
+            "generation": generation.copy(),
+            "model": DIFFQRCODER_MODEL_SETTINGS.copy(),
+            "tools": {
+                "srpg_enabled": True,
+                "srmpgd_enabled": True,
+                "settings": {
+                    **stage2_at(1.0, target="binary_exact"),
+                    "diffqrcoder_stage2_initialization": "public_random",
+                    "srpg_controlnet_scale": 1.05,
+                    "srpg_qr_weight": 50.0,
+                    "srpg_perceptual_weight": 20.0,
+                    "srpg_preview_interval": 1,
+                    "srmpgd_protocol": "paper_equations",
+                    "srmpgd_max_iterations": 4,
+                    "srmpgd_step_size": 1000.0,
+                    "srmpgd_gradient_scale": 32768.0,
+                    "srmpgd_min_gradient_rms": 1e-12,
+                    "srmpgd_decode_precision": "float32",
+                    "srmpgd_lpips_weight": 0.01,
+                    "srmpgd_lpips_net": "vgg",
+                    "srmpgd_crop_padding_px": 78,
+                    "srmpgd_dark_threshold": 0.5,
+                    "srmpgd_light_threshold": 0.5,
+                    "srmpgd_center_fraction": 1 / 3,
+                },
+            },
+            "description": (
+                "Branche primaire E033 : même latent Stage 2 et mêmes équations que "
+                "le témoin FP16, avec le VAE temporairement promu en FP32."
             ),
         },
         {
@@ -1203,9 +1311,7 @@ class LabService:
             run.provenance.update(
                 {
                     "quality_clip_model_id": str(clip_provenance["model_id"]),
-                    "quality_clip_model_revision": str(
-                        clip_provenance["effective_revision"]
-                    ),
+                    "quality_clip_model_revision": str(clip_provenance["effective_revision"]),
                     "quality_aesthetic_weights_sha256": str(
                         aesthetic_provenance["effective_sha256"]
                     ),

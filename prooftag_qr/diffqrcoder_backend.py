@@ -33,15 +33,7 @@ class _Stage2Control:
 
 
 def _tensor_to_pil(tensor) -> Image.Image:
-    array = (
-        tensor[0]
-        .detach()
-        .float()
-        .clamp(0, 1)
-        .permute(1, 2, 0)
-        .cpu()
-        .numpy()
-    )
+    array = tensor[0].detach().float().clamp(0, 1).permute(1, 2, 0).cpu().numpy()
     return Image.fromarray(np.rint(array * 255).astype(np.uint8), mode="RGB")
 
 
@@ -49,12 +41,7 @@ def _pil_to_tensor(image: Image.Image, *, device: str, dtype):
     import torch
 
     array = np.asarray(image.convert("RGB"), dtype=np.float32) / 255.0
-    return (
-        torch.from_numpy(array)
-        .permute(2, 0, 1)
-        .unsqueeze(0)
-        .to(device=device, dtype=dtype)
-    )
+    return torch.from_numpy(array).permute(2, 0, 1).unsqueeze(0).to(device=device, dtype=dtype)
 
 
 def _tensor_sha256(tensor) -> str:
@@ -74,11 +61,7 @@ def _control_target_center_error_rate(
 ) -> float:
     gray = np.asarray(target.convert("L"), dtype=np.float32) / 255.0
     border = int(blueprint.border)
-    matrix = (
-        blueprint.matrix[border:-border, border:-border]
-        if border
-        else blueprint.matrix
-    )
+    matrix = blueprint.matrix[border:-border, border:-border] if border else blueprint.matrix
     errors = []
     for row in range(matrix.shape[0]):
         for col in range(matrix.shape[1]):
@@ -227,18 +210,14 @@ class UpstreamDiffQRCoderBackend:
                     "cache_dir": self.settings.model_cache_dir,
                 }
                 if self.settings.controlnet_model_revision:
-                    controlnet_arguments["revision"] = (
-                        self.settings.controlnet_model_revision
-                    )
+                    controlnet_arguments["revision"] = self.settings.controlnet_model_revision
                 if self.settings.controlnet_model_subfolder:
                     controlnet_arguments["subfolder"] = self.settings.controlnet_model_subfolder
                 controlnet = ControlNetModel.from_pretrained(
                     self.settings.controlnet_model_id,
                     **controlnet_arguments,
                 )
-                checkpoint_path, config_path = resolve_single_file_sources(
-                    self.settings
-                )
+                checkpoint_path, config_path = resolve_single_file_sources(self.settings)
                 pipeline_arguments = {
                     "config": config_path,
                     "controlnet": controlnet,
@@ -253,9 +232,7 @@ class UpstreamDiffQRCoderBackend:
                 )
                 pipe.scheduler = DDIMScheduler.from_config(pipe.scheduler.config)
                 pipe._callback_tensor_inputs = list(
-                    dict.fromkeys(
-                        [*pipe._callback_tensor_inputs, "original_image"]
-                    )
+                    dict.fromkeys([*pipe._callback_tensor_inputs, "original_image"])
                 )
                 pipe.set_progress_bar_config(disable=True)
                 pipe.to(self.settings.device)
@@ -363,18 +340,14 @@ class UpstreamDiffQRCoderBackend:
         first_timestep = timesteps[0].reshape(1)
         initial = pipe.scheduler.add_noise(clean_latent, noise, first_timestep)
         timestep_index = int(first_timestep.item())
-        alpha = pipe.scheduler.alphas_cumprod[timestep_index].float().to(
-            device=clean_latent.device
-        )
+        alpha = pipe.scheduler.alphas_cumprod[timestep_index].float().to(device=clean_latent.device)
         return (
             initial.detach(),
             {
                 "diffqrcoder_stage2_effective_steps": float(effective_steps),
                 "diffqrcoder_stage2_start_timestep": float(first_timestep.item()),
                 "diffqrcoder_stage2_reference_coefficient": float(alpha.sqrt().cpu()),
-                "diffqrcoder_stage2_noise_coefficient": float(
-                    (1.0 - alpha).sqrt().cpu()
-                ),
+                "diffqrcoder_stage2_noise_coefficient": float((1.0 - alpha).sqrt().cpu()),
             },
         )
 
@@ -403,13 +376,9 @@ class UpstreamDiffQRCoderBackend:
         self._diagnostics.update(
             {
                 "diffqrcoder_qart_threshold": float(target.threshold),
-                "diffqrcoder_qart_target_scan_pass_rate": float(
-                    target.scan_pass_rate
-                ),
+                "diffqrcoder_qart_target_scan_pass_rate": float(target.scan_pass_rate),
                 "diffqrcoder_qart_target_original_pass_rate": float(
-                    target.original_passed / target.original_total
-                    if target.original_total
-                    else 0.0
+                    target.original_passed / target.original_total if target.original_total else 0.0
                 ),
                 "diffqrcoder_qart_reference_cost": float(target.reference_cost),
             }
@@ -437,10 +406,7 @@ class UpstreamDiffQRCoderBackend:
         variant_name: str,
         fallback: QRBlueprint,
     ) -> QRBlueprint:
-        if (
-            variant_name in {"srpg", "srmpgd"}
-            and self._stage2_control is not None
-        ):
+        if variant_name in {"srpg", "srmpgd"} and self._stage2_control is not None:
             return self._stage2_control.blueprint
         return fallback
 
@@ -519,15 +485,9 @@ class UpstreamDiffQRCoderBackend:
             {
                 "diffqrcoder_guard_warning": float(any(warnings.values())),
                 "diffqrcoder_guard_diverged": float(any(hard_failures.values())),
-                "diffqrcoder_stage2_changed_pixel_ratio": float(
-                    change["changed_pixel_ratio"]
-                ),
-                "diffqrcoder_stage2_mean_absolute_change": float(
-                    change["mean_absolute_change"]
-                ),
-                "diffqrcoder_stage2_clipped_pixel_ratio": float(
-                    quality["clipped_pixel_ratio"]
-                ),
+                "diffqrcoder_stage2_changed_pixel_ratio": float(change["changed_pixel_ratio"]),
+                "diffqrcoder_stage2_mean_absolute_change": float(change["mean_absolute_change"]),
+                "diffqrcoder_stage2_clipped_pixel_ratio": float(quality["clipped_pixel_ratio"]),
                 "diffqrcoder_stage2_rgb_clipped_channel_ratio": float(
                     quality["rgb_clipped_channel_ratio"]
                 ),
@@ -537,40 +497,25 @@ class UpstreamDiffQRCoderBackend:
                 "diffqrcoder_stage2_rgb_clipped_channel_ratio_increase": float(
                     change["rgb_clipped_channel_ratio_increase"]
                 ),
-                "diffqrcoder_stage2_saturation_mean": float(
-                    quality["saturation_mean"]
-                ),
-                "diffqrcoder_stage2_saturation_p95": float(
-                    quality["saturation_p95"]
-                ),
+                "diffqrcoder_stage2_saturation_mean": float(quality["saturation_mean"]),
+                "diffqrcoder_stage2_saturation_p95": float(quality["saturation_p95"]),
                 "diffqrcoder_stage2_saturation_mean_increase": float(
                     change["saturation_mean_increase"]
                 ),
                 "diffqrcoder_stage2_high_saturation_ratio_increase": float(
                     change["high_saturation_ratio_increase"]
                 ),
-                "diffqrcoder_guard_changed_pixels": float(
-                    warnings["changed_pixels"]
-                ),
-                "diffqrcoder_guard_mean_absolute_change": float(
-                    warnings["mean_absolute_change"]
-                ),
-                "diffqrcoder_guard_clipped_pixels": float(
-                    warnings["clipped_pixels"]
-                ),
-                "diffqrcoder_guard_rgb_clipped_channels": float(
-                    warnings["rgb_clipped_channels"]
-                ),
+                "diffqrcoder_guard_changed_pixels": float(warnings["changed_pixels"]),
+                "diffqrcoder_guard_mean_absolute_change": float(warnings["mean_absolute_change"]),
+                "diffqrcoder_guard_clipped_pixels": float(warnings["clipped_pixels"]),
+                "diffqrcoder_guard_rgb_clipped_channels": float(warnings["rgb_clipped_channels"]),
                 "diffqrcoder_guard_saturation": float(
-                    warnings["saturation_mean_increase"]
-                    or warnings["high_saturation_increase"]
+                    warnings["saturation_mean_increase"] or warnings["high_saturation_increase"]
                 ),
                 "diffqrcoder_guard_hard_mean_absolute_change": float(
                     hard_failures["mean_absolute_change"]
                 ),
-                "diffqrcoder_guard_hard_clipped_pixels": float(
-                    hard_failures["clipped_pixels"]
-                ),
+                "diffqrcoder_guard_hard_clipped_pixels": float(hard_failures["clipped_pixels"]),
                 "diffqrcoder_guard_hard_rgb_clipped_channels": float(
                     hard_failures["rgb_clipped_channels"]
                 ),
@@ -603,11 +548,15 @@ class UpstreamDiffQRCoderBackend:
         if not hasattr(pipe, "srpg"):
             from diffqrcoder.srpg import ScanningRobustPerceptualGuidance
 
-            pipe.srpg = ScanningRobustPerceptualGuidance(
-                module_size=self.settings.diffqrcoder_qr_module_size,
-                scanning_robust_guidance_scale=self.settings.srpg_qr_weight,
-                perceptual_guidance_scale=self.settings.srpg_perceptual_weight,
-            ).to(self.settings.device).to(pipe.unet.dtype)
+            pipe.srpg = (
+                ScanningRobustPerceptualGuidance(
+                    module_size=self.settings.diffqrcoder_qr_module_size,
+                    scanning_robust_guidance_scale=self.settings.srpg_qr_weight,
+                    perceptual_guidance_scale=self.settings.srpg_perceptual_weight,
+                )
+                .to(self.settings.device)
+                .to(pipe.unet.dtype)
+            )
 
         def preview_srmpgd(preview_image, step):
             paper_milestones = {
@@ -623,9 +572,9 @@ class UpstreamDiffQRCoderBackend:
                 self.settings.srmpgd_protocol != "paper_equations"
                 or step.iteration in paper_milestones
             ):
-                self._debug_artifacts[
-                    f"srmpgd_iteration_{step.iteration:03d}"
-                ] = preview_image.copy()
+                self._debug_artifacts[f"srmpgd_iteration_{step.iteration:03d}"] = (
+                    preview_image.copy()
+                )
 
         def paper_scanning_loss(decoded, target):
             with torch.autocast("cuda", dtype=pipe.unet.dtype):
@@ -639,27 +588,24 @@ class UpstreamDiffQRCoderBackend:
                 protocol=self.settings.srmpgd_protocol,
                 max_iterations=self.settings.srmpgd_max_iterations,
                 step_size=self.settings.srmpgd_step_size,
+                gradient_scale=self.settings.srmpgd_gradient_scale,
+                min_gradient_rms=self.settings.srmpgd_min_gradient_rms,
+                decode_precision=self.settings.srmpgd_decode_precision,
                 lpips_weight=self.settings.srmpgd_lpips_weight,
                 lpips_net=self.settings.srmpgd_lpips_net,
                 crop_padding_px=self.settings.srmpgd_crop_padding_px,
                 dark_threshold=self.settings.srmpgd_dark_threshold,
                 light_threshold=self.settings.srmpgd_light_threshold,
                 center_fraction=self.settings.srmpgd_center_fraction,
-                max_initial_module_error_rate=(
-                    self.settings.srmpgd_max_initial_module_error_rate
-                ),
+                max_initial_module_error_rate=(self.settings.srmpgd_max_initial_module_error_rate),
                 max_step_rms=self.settings.srmpgd_max_step_rms,
                 max_total_delta_rms=self.settings.srmpgd_max_total_delta_rms,
                 min_relative_module_improvement=(
                     self.settings.srmpgd_min_relative_module_improvement
                 ),
                 max_lpips_loss=self.settings.srmpgd_max_lpips_loss,
-                max_mean_absolute_change=(
-                    self.settings.srmpgd_max_mean_absolute_change
-                ),
-                max_saturation_mean_increase=(
-                    self.settings.srmpgd_max_saturation_mean_increase
-                ),
+                max_mean_absolute_change=(self.settings.srmpgd_max_mean_absolute_change),
+                max_saturation_mean_increase=(self.settings.srmpgd_max_saturation_mean_increase),
                 max_high_saturation_ratio_increase=(
                     self.settings.srmpgd_max_high_saturation_ratio_increase
                 ),
@@ -668,48 +614,44 @@ class UpstreamDiffQRCoderBackend:
                 ),
                 robust_blur_weight=self.settings.srmpgd_robust_blur_weight,
                 robust_blur_kernel=self.settings.srmpgd_robust_blur_kernel,
-                robust_downscale_weight=(
-                    self.settings.srmpgd_robust_downscale_weight
-                ),
-                robust_downscale_factor=(
-                    self.settings.srmpgd_robust_downscale_factor
-                ),
-                robust_brightness_weight=(
-                    self.settings.srmpgd_robust_brightness_weight
-                ),
+                robust_downscale_weight=(self.settings.srmpgd_robust_downscale_weight),
+                robust_downscale_factor=(self.settings.srmpgd_robust_downscale_factor),
+                robust_brightness_weight=(self.settings.srmpgd_robust_brightness_weight),
                 robust_brightness_low=self.settings.srmpgd_robust_brightness_low,
-                robust_brightness_high=(
-                    self.settings.srmpgd_robust_brightness_high
-                ),
-                robust_contrast_weight=(
-                    self.settings.srmpgd_robust_contrast_weight
-                ),
-                robust_contrast_factor=(
-                    self.settings.srmpgd_robust_contrast_factor
-                ),
+                robust_brightness_high=(self.settings.srmpgd_robust_brightness_high),
+                robust_contrast_weight=(self.settings.srmpgd_robust_contrast_weight),
+                robust_contrast_factor=(self.settings.srmpgd_robust_contrast_factor),
                 quiet_zone_mode="none",
                 functional_pattern_tone_factor=0.0,
             ),
             initial_image=image,
             scanning_loss=(
-                None
-                if self.settings.srmpgd_protocol == "paper_equations"
-                else paper_scanning_loss
+                None if self.settings.srmpgd_protocol == "paper_equations" else paper_scanning_loss
             ),
             validation_callback=validation_callback,
             preview_callback=preview_srmpgd,
         )
+        if self.settings.srpg_save_step_previews:
+            # This is the same Stage-2 latent decoded in the SR-MPGD VAE precision before
+            # any update. It separates reconstruction/precision effects from Eq. 14.
+            self._debug_artifacts["srmpgd_redecoded_iteration_000"] = (
+                srmpgd.initial_redecoded_image.copy()
+            )
+        initial_redecode_change = image_change_metrics(
+            srmpgd.initial_redecoded_image,
+            image,
+        )
         image = srmpgd.image
         selected_image_sha256 = image_sha256(image)
         iteration_zero_exact = (
-            srmpgd.selected_iteration != 0
-            or selected_image_sha256 == stage2_image_sha256
+            srmpgd.selected_iteration != 0 or selected_image_sha256 == stage2_image_sha256
         )
         if not iteration_zero_exact:
             raise RuntimeError("SR-MPGD iteration zero changed the Stage-2 raster")
         self._srmpgd_stop_reason = srmpgd.stop_reason
         self._srmpgd_selected_iteration = srmpgd.selected_iteration
         attempted_steps = list(srmpgd.steps[1:]) or [srmpgd.steps[0]]
+        initial_step = srmpgd.steps[0]
         best_attempted = max(
             attempted_steps,
             key=lambda step: (
@@ -726,6 +668,9 @@ class UpstreamDiffQRCoderBackend:
             "target": "original_qr",
             "selected_iteration": srmpgd.selected_iteration,
             "stop_reason": srmpgd.stop_reason,
+            "initial_stage2_image_sha256": stage2_image_sha256,
+            "initial_redecoded_image_sha256": image_sha256(srmpgd.initial_redecoded_image),
+            "initial_redecode_change": initial_redecode_change,
             "robust_loss_enabled": any(
                 value > 0
                 for value in (
@@ -743,30 +688,31 @@ class UpstreamDiffQRCoderBackend:
                 "diffqrcoder_srmpgd_paper_equations": float(
                     self.settings.srmpgd_protocol == "paper_equations"
                 ),
-                "diffqrcoder_srmpgd_gamma": float(
-                    self.settings.srmpgd_step_size
+                "diffqrcoder_srmpgd_gamma": float(self.settings.srmpgd_step_size),
+                "diffqrcoder_srmpgd_gradient_scale": float(self.settings.srmpgd_gradient_scale),
+                "diffqrcoder_srmpgd_effective_gradient_scale": float(
+                    initial_step.gradient_scale or 0.0
                 ),
-                "diffqrcoder_srmpgd_lpips_weight": float(
-                    self.settings.srmpgd_lpips_weight
+                "diffqrcoder_srmpgd_decode_float32": float(
+                    self.settings.srmpgd_decode_precision == "float32"
                 ),
-                "diffqrcoder_srmpgd_selected_iteration": float(
-                    srmpgd.selected_iteration
+                "diffqrcoder_srmpgd_lpips_weight": float(self.settings.srmpgd_lpips_weight),
+                "diffqrcoder_srmpgd_initial_gradient_rms": float(initial_step.gradient_rms or 0.0),
+                "diffqrcoder_srmpgd_initial_image_gradient_rms": float(
+                    initial_step.image_gradient_rms or 0.0
                 ),
-                "diffqrcoder_srmpgd_iteration_zero_exact": float(
-                    iteration_zero_exact
+                "diffqrcoder_srmpgd_zero_gradient_stop": float(
+                    srmpgd.stop_reason.startswith("zero_")
                 ),
-                "diffqrcoder_srmpgd_initial_mer": float(
-                    srmpgd.initial_module_error_rate
-                ),
-                "diffqrcoder_srmpgd_final_mer": float(
-                    srmpgd.final_module_error_rate
-                ),
+                "diffqrcoder_srmpgd_selected_iteration": float(srmpgd.selected_iteration),
+                "diffqrcoder_srmpgd_iteration_zero_exact": float(iteration_zero_exact),
+                "diffqrcoder_srmpgd_initial_mer": float(srmpgd.initial_module_error_rate),
+                "diffqrcoder_srmpgd_final_mer": float(srmpgd.final_module_error_rate),
                 "diffqrcoder_srmpgd_strict_selected": float(
                     srmpgd.steps[srmpgd.selected_iteration].strict_all
                 ),
                 "diffqrcoder_srmpgd_stopped_initial_mer": float(
-                    srmpgd.stop_reason
-                    == "initial_module_error_rate_above_limit"
+                    srmpgd.stop_reason == "initial_module_error_rate_above_limit"
                 ),
                 "diffqrcoder_srmpgd_stopped_non_finite": float(
                     srmpgd.stop_reason.startswith("non_finite_")
@@ -791,31 +737,20 @@ class UpstreamDiffQRCoderBackend:
                 ),
                 "diffqrcoder_srmpgd_max_applied_step_rms": float(
                     max(
-                        (
-                            step.applied_step_rms or 0.0
-                            for step in srmpgd.steps
-                        ),
+                        (step.applied_step_rms or 0.0 for step in srmpgd.steps),
                         default=0.0,
                     )
                 ),
                 "diffqrcoder_srmpgd_robust_loss_enabled": float(
                     self._debug_metadata["srmpgd_trace"]["robust_loss_enabled"]
                 ),
-                "diffqrcoder_srmpgd_attempted_best_iteration": float(
-                    best_attempted.iteration
-                ),
-                "diffqrcoder_srmpgd_attempted_best_pass_rate": float(
-                    best_attempted.pass_rate
-                ),
+                "diffqrcoder_srmpgd_attempted_best_iteration": float(best_attempted.iteration),
+                "diffqrcoder_srmpgd_attempted_best_pass_rate": float(best_attempted.pass_rate),
                 "diffqrcoder_srmpgd_attempted_best_mer": float(
                     best_attempted.actual_module_error_rate
                 ),
-                "diffqrcoder_srmpgd_attempted_best_srl": float(
-                    best_attempted.scanning_robust_loss
-                ),
-                "diffqrcoder_srmpgd_attempted_best_lpips": float(
-                    best_attempted.lpips_loss
-                ),
+                "diffqrcoder_srmpgd_attempted_best_srl": float(best_attempted.scanning_robust_loss),
+                "diffqrcoder_srmpgd_attempted_best_lpips": float(best_attempted.lpips_loss),
                 "diffqrcoder_srmpgd_attempted_best_change": float(
                     best_attempted.mean_absolute_change
                 ),
@@ -840,12 +775,8 @@ class UpstreamDiffQRCoderBackend:
             }
         )
         self._debug_artifacts["srmpgd_selected"] = image.copy()
-        self._debug_metadata["srmpgd_stage2_image_sha256"] = (
-            stage2_image_sha256
-        )
-        self._debug_metadata["srmpgd_selected_image_sha256"] = (
-            selected_image_sha256
-        )
+        self._debug_metadata["srmpgd_stage2_image_sha256"] = stage2_image_sha256
+        self._debug_metadata["srmpgd_selected_image_sha256"] = selected_image_sha256
         # Debug metadata is not part of the laboratory CSV export.  Keep the
         # same hashes in backend provenance so an offline audit can prove an
         # iteration-zero no-op without depending on locating an aliased parent
@@ -896,12 +827,8 @@ class UpstreamDiffQRCoderBackend:
             self._diagnostics = dict(cached["diagnostics"])
             self._diagnostics["diffqrcoder_stage2_reused"] = 1.0
             self._diagnostics["diffqrcoder_stage2_pairing_exact"] = 1.0
-            self._debug_artifacts["stage2_reference"] = cached[
-                "reference"
-            ].copy()
-            self._debug_artifacts["stage2_control_target"] = (
-                stage2_control.image.copy()
-            )
+            self._debug_artifacts["stage2_reference"] = cached["reference"].copy()
+            self._debug_artifacts["stage2_control_target"] = stage2_control.image.copy()
             self._debug_artifacts["stage2_before_srmpgd"] = image.copy()
             image = self._apply_srmpgd(
                 pipe,
@@ -932,10 +859,7 @@ class UpstreamDiffQRCoderBackend:
             "diffqrcoder_stage2_paper_initialization": 0.0,
             "diffqrcoder_stage2_effective_steps": float(self.settings.srpg_steps),
         }
-        if (
-            self.settings.diffqrcoder_stage2_initialization
-            == "paper_stage1_noise"
-        ):
+        if self.settings.diffqrcoder_stage2_initialization == "paper_stage1_noise":
             (
                 initial_latent,
                 initialization_diagnostics,
@@ -944,26 +868,16 @@ class UpstreamDiffQRCoderBackend:
                 candidate,
                 generator=generator,
             )
-            initialization_diagnostics[
-                "diffqrcoder_stage2_paper_initialization"
-            ] = 1.0
-        effective_steps = int(
-            initialization_diagnostics["diffqrcoder_stage2_effective_steps"]
-        )
+            initialization_diagnostics["diffqrcoder_stage2_paper_initialization"] = 1.0
+        effective_steps = int(initialization_diagnostics["diffqrcoder_stage2_effective_steps"])
         preview_interval = self.settings.srpg_preview_interval
 
         def callback(current_pipe, index, timestep, values):
             if self.settings.srpg_save_step_previews and (
                 index % preview_interval == 0 or index + 1 == effective_steps
             ):
-                self._debug_artifacts[
-                    f"stage2_x0_estimate_step_{index + 1:03d}"
-                ] = (
-                    _tensor_to_pil(
-                        current_pipe.image_processor.denormalize(
-                            values["original_image"].detach()
-                        )
-                    )
+                self._debug_artifacts[f"stage2_x0_estimate_step_{index + 1:03d}"] = _tensor_to_pil(
+                    current_pipe.image_processor.denormalize(values["original_image"].detach())
                 )
             return values
 
@@ -1012,15 +926,14 @@ class UpstreamDiffQRCoderBackend:
                     stage2_control.match_mode == "exact"
                 ),
                 "diffqrcoder_stage2_control_target_qart": float(
-                    stage2_control.match_mode
-                    == "canonical_url_without_fragment"
+                    stage2_control.match_mode == "canonical_url_without_fragment"
                 ),
                 "diffqrcoder_stage2_control_target_center_error_rate": (
                     _control_target_center_error_rate(
-                    stage2_target,
-                    stage2_blueprint,
-                    padding_px=self.settings.diffqrcoder_qr_padding_px,
-                    module_size=self.settings.diffqrcoder_qr_module_size,
+                        stage2_target,
+                        stage2_blueprint,
+                        padding_px=self.settings.diffqrcoder_qr_padding_px,
+                        module_size=self.settings.diffqrcoder_qr_module_size,
                     )
                 ),
                 "diffqrcoder_srmpgd_iterations": 0.0,
@@ -1111,11 +1024,7 @@ class UpstreamDiffQRCoderBackend:
             values["srmpgd_protocol"] = self.settings.srmpgd_protocol
             values["srmpgd_target"] = "original_qr"
         if self._srmpgd_stage2_image_sha256:
-            values["srmpgd_stage2_image_sha256"] = (
-                self._srmpgd_stage2_image_sha256
-            )
+            values["srmpgd_stage2_image_sha256"] = self._srmpgd_stage2_image_sha256
         if self._srmpgd_selected_image_sha256:
-            values["srmpgd_selected_image_sha256"] = (
-                self._srmpgd_selected_image_sha256
-            )
+            values["srmpgd_selected_image_sha256"] = self._srmpgd_selected_image_sha256
         return values

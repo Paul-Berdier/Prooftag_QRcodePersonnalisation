@@ -375,6 +375,22 @@ Lancer **Run > Run All Cells**. Les résultats persistants sont dans
 Le protocole et ses limites sont dans
 [`../docs/e032-srmpgd-paper-reconstruction.md`](../docs/e032-srmpgd-paper-reconstruction.md).
 
+## E033 — microdiagnostic numérique SR-MPGD
+
+E033 remplace toute nouvelle grande campagne tant que le mécanisme n'est pas démontré. Il compare
+sur un seul prompt apparié le Stage 2 E032, la recette publique DiffQRCoder, puis les équations
+13-14 en précision VAE modèle et FP32. Il affiche le même latent redécodé sans update ainsi que les
+états directs 0, 1, 2 et 4 ; gradient, déplacement latent et baisse de SRL sont des portes
+obligatoires. Un arrêt numérique reste visible et archivé, sans lancer d'autres prompts.
+
+```powershell
+.\scripts\notebook-remote.ps1 -Notebook 28_e033_srmpgd_microdiagnostic.ipynb
+```
+
+Le déploiement immuable de l'API et du notebook se fait d'abord sur le serveur avec
+`bash scripts/deploy-e033-notebook.sh`. Protocole et limites :
+[`../docs/e033-srmpgd-microdiagnostic.md`](../docs/e033-srmpgd-microdiagnostic.md).
+
 Pour remplir ce dataset pendant une absence sans laisser Jupyter ouvert, E026W lance un Job
 Kubernetes CPU reprenable et réserve la RTX à l'API. Le plan borné contient 300 prompts, 16
 recettes, trois seeds et jusqu'à 14 400 essais. Les commandes de démarrage, suivi, reprise et

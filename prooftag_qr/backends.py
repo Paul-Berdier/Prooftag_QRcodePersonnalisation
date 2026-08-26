@@ -151,9 +151,7 @@ class ControlNetBackend(GenerationBackend):
                     "cache_dir": self.settings.model_cache_dir,
                 }
                 if self.settings.controlnet_model_revision:
-                    controlnet_arguments["revision"] = (
-                        self.settings.controlnet_model_revision
-                    )
+                    controlnet_arguments["revision"] = self.settings.controlnet_model_revision
                 if self.settings.controlnet_model_subfolder:
                     controlnet_arguments["subfolder"] = self.settings.controlnet_model_subfolder
                 controlnet = ControlNetModel.from_pretrained(
@@ -176,15 +174,13 @@ class ControlNetBackend(GenerationBackend):
                 ):
                     pipeline_arguments["revision"] = self.settings.base_model_revision
                 if _is_single_file_base_model(self.settings.base_model_id):
-                    checkpoint_path, config_path = resolve_single_file_sources(
-                        self.settings
-                    )
+                    checkpoint_path, config_path = resolve_single_file_sources(self.settings)
                     pipe = pipeline_class.from_single_file(
                         checkpoint_path,
                         config=config_path,
-                        use_safetensors=self.settings.base_model_id.lower().split(
-                            "?", 1
-                        )[0].endswith(".safetensors"),
+                        use_safetensors=self.settings.base_model_id.lower()
+                        .split("?", 1)[0]
+                        .endswith(".safetensors"),
                         **pipeline_arguments,
                     )
                 else:
@@ -590,17 +586,19 @@ class ControlNetBackend(GenerationBackend):
                     )
 
                 def save_srmpgd_preview(image: Image.Image, step: SRMPGDStep) -> None:
-                    self._debug_artifacts[
-                        f"srmpgd_iteration_{step.iteration:02d}"
-                    ] = image.copy()
+                    self._debug_artifacts[f"srmpgd_iteration_{step.iteration:02d}"] = image.copy()
 
                 srmpgd = run_srmpgd(
                     self._load(),
                     stage2_latent,
                     blueprint,
                     SRMPGDConfig(
+                        protocol=self.settings.srmpgd_protocol,
                         max_iterations=self.settings.srmpgd_max_iterations,
                         step_size=self.settings.srmpgd_step_size,
+                        gradient_scale=self.settings.srmpgd_gradient_scale,
+                        min_gradient_rms=self.settings.srmpgd_min_gradient_rms,
+                        decode_precision=self.settings.srmpgd_decode_precision,
                         lpips_weight=self.settings.srmpgd_lpips_weight,
                         lpips_net=self.settings.srmpgd_lpips_net,
                         crop_padding_px=self.settings.srmpgd_crop_padding_px,
@@ -626,22 +624,15 @@ class ControlNetBackend(GenerationBackend):
                 stage2_image_sha256 = image_sha256(srpg.image)
                 selected_image_sha256 = image_sha256(srmpgd.image)
                 iteration_zero_exact = (
-                    srmpgd.selected_iteration != 0
-                    or selected_image_sha256 == stage2_image_sha256
+                    srmpgd.selected_iteration != 0 or selected_image_sha256 == stage2_image_sha256
                 )
                 if not iteration_zero_exact:
-                    raise RuntimeError(
-                        "SR-MPGD iteration zero changed the Stage-2 raster"
-                    )
+                    raise RuntimeError("SR-MPGD iteration zero changed the Stage-2 raster")
                 selected_step = next(
-                    item
-                    for item in srmpgd.steps
-                    if item.iteration == srmpgd.selected_iteration
+                    item for item in srmpgd.steps if item.iteration == srmpgd.selected_iteration
                 )
                 outcome = (
-                    "strict_validation_passed"
-                    if selected_step.strict_all
-                    else srmpgd.stop_reason
+                    "strict_validation_passed" if selected_step.strict_all else srmpgd.stop_reason
                 )
                 metrics.SRMPGD_RUNS.labels(outcome).inc()
                 metrics.SRMPGD_DURATION.observe(duration)
@@ -658,39 +649,25 @@ class ControlNetBackend(GenerationBackend):
                         ("actual_module_error_rate", step.actual_module_error_rate),
                         ("pass_rate", step.pass_rate),
                     ):
-                        metrics.SRMPGD_STEP_DIAGNOSTIC.labels(
-                            iteration_label, metric_name
-                        ).set(value)
+                        metrics.SRMPGD_STEP_DIAGNOSTIC.labels(iteration_label, metric_name).set(
+                            value
+                        )
                 self._diagnostics.update(
                     {
-                        "srmpgd_max_iterations": float(
-                            self.settings.srmpgd_max_iterations
-                        ),
+                        "srmpgd_max_iterations": float(self.settings.srmpgd_max_iterations),
                         "srmpgd_states_evaluated": float(len(srmpgd.steps)),
                         "srmpgd_selected_iteration": float(srmpgd.selected_iteration),
-                        "srmpgd_iteration_zero_exact": float(
-                            iteration_zero_exact
-                        ),
+                        "srmpgd_iteration_zero_exact": float(iteration_zero_exact),
                         "srmpgd_step_size": float(self.settings.srmpgd_step_size),
-                        "srmpgd_lpips_weight": float(
-                            self.settings.srmpgd_lpips_weight
-                        ),
+                        "srmpgd_lpips_weight": float(self.settings.srmpgd_lpips_weight),
                         "srmpgd_max_initial_module_error_rate": float(
                             self.settings.srmpgd_max_initial_module_error_rate
                         ),
                         "srmpgd_applied": float(len(srmpgd.steps) > 1),
-                        "srmpgd_initial_module_error_rate": float(
-                            srmpgd.initial_module_error_rate
-                        ),
-                        "srmpgd_final_module_error_rate": float(
-                            srmpgd.final_module_error_rate
-                        ),
-                        "srmpgd_selected_scan_pass_rate": float(
-                            selected_step.pass_rate
-                        ),
-                        "srmpgd_selected_strict_all": float(
-                            selected_step.strict_all
-                        ),
+                        "srmpgd_initial_module_error_rate": float(srmpgd.initial_module_error_rate),
+                        "srmpgd_final_module_error_rate": float(srmpgd.final_module_error_rate),
+                        "srmpgd_selected_scan_pass_rate": float(selected_step.pass_rate),
+                        "srmpgd_selected_strict_all": float(selected_step.strict_all),
                         "srmpgd_duration_s": float(srmpgd.duration_s),
                     }
                 )
@@ -702,12 +679,8 @@ class ControlNetBackend(GenerationBackend):
                         ),
                         "srmpgd_final_core_module_error_rate": srmpgd_error["core"],
                         "srmpgd_delivered_module_error_rate": srmpgd_error["overall"],
-                        "srmpgd_quiet_zone_module_error_rate": (
-                            srmpgd_error["quiet_zone"]
-                        ),
-                        "srmpgd_functional_module_error_rate": (
-                            srmpgd_error["functional"]
-                        ),
+                        "srmpgd_quiet_zone_module_error_rate": (srmpgd_error["quiet_zone"]),
+                        "srmpgd_functional_module_error_rate": (srmpgd_error["functional"]),
                         "srmpgd_data_module_error_rate": srmpgd_error["data"],
                         "srmpgd_quiet_zone_restored": float(
                             self.settings.srpg_quiet_zone_mode != "none"
@@ -726,9 +699,7 @@ class ControlNetBackend(GenerationBackend):
                         "states_evaluated": len(srmpgd.steps),
                         "selected_iteration": srmpgd.selected_iteration,
                         "stop_reason": srmpgd.stop_reason,
-                        "initial_module_error_rate": (
-                            srmpgd.initial_module_error_rate
-                        ),
+                        "initial_module_error_rate": (srmpgd.initial_module_error_rate),
                         "final_module_error_rate": srmpgd.final_module_error_rate,
                         "selected_pass_rate": selected_step.pass_rate,
                         "selected_strict_all": selected_step.strict_all,
@@ -738,9 +709,7 @@ class ControlNetBackend(GenerationBackend):
                                 "srl": item.scanning_robust_loss,
                                 "lpips": item.lpips_loss,
                                 "objective": item.objective,
-                                "actual_module_error_rate": (
-                                    item.actual_module_error_rate
-                                ),
+                                "actual_module_error_rate": (item.actual_module_error_rate),
                                 "passed": item.passed,
                                 "total": item.total,
                                 "pass_rate": item.pass_rate,

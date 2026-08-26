@@ -1,4 +1,4 @@
-﻿import time
+import time
 
 
 def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatch):
@@ -55,6 +55,7 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
     assert runtime.json()["generation_config"]["latent_refinement_enabled"] is False
     assert runtime.json()["generation_config"]["guided_rediffusion_enabled"] is False
     assert runtime.json()["generation_config"]["srmpgd_enabled"] is False
+    assert runtime.json()["generation_config"]["srmpgd_protocol"] == "guarded_production"
     assert runtime.json()["generation_config"]["srmpgd_max_step_rms"] == 0.02
     assert runtime.json()["generation_config"]["srmpgd_max_total_delta_rms"] == 0.06
     assert runtime.json()["generation_config"]["srmpgd_max_lpips_loss"] == 0.15
@@ -112,9 +113,7 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
         "clip_aesthetic",
         "hpsv2_1",
     }
-    assert scoring["metrics"]["clip_score"]["formula"] == (
-        "2.5 * max(clip_similarity, 0)"
-    )
+    assert scoring["metrics"]["clip_score"]["formula"] == ("2.5 * max(clip_similarity, 0)")
     assert {item["id"] for item in schema.json()["profiles"]} == {
         "qr_reference",
         "diffqrcoder_stage1",
@@ -122,6 +121,9 @@ def test_api_generation_reports_physical_validation_and_lab(tmp_path, monkeypatc
         "diffqrcoder_paper_srpg",
         "diffqrcoder_paper_srmpgd_guarded",
         "diffqrcoder_paper_srmpgd",
+        "e033_public_demo_srpg",
+        "e033_equation_srmpgd_fp16",
+        "e033_equation_srmpgd_fp32",
         "diffqrcoder_srmpgd",
         "diffqrcoder_srmpgd_robust",
         "diffqrcoder_auto",

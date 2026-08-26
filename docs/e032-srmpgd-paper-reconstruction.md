@@ -150,3 +150,13 @@ Avant toute campagne longue :
 Le test est concluant seulement si la SRL décroît réellement, si `gamma` modifie le pas appliqué et
 si QR-Verify s'améliore sur plusieurs contextes sans effondrement systématique des métriques
 visuelles. Un échec de ce protocole restera à interpréter avec la limite QArt publique.
+
+## Verdict du plan `4fe66e1ff13d8363`
+
+La campagne corrigée est techniquement complète mais son verdict scientifique est négatif : le
+Stage 2 détruit déjà la qualité visuelle, puis les 30 traces SR-MPGD ont un gradient latent nul à
+toutes les itérations. La branche gardée est identique pixel pour pixel au Stage 2 dans 30/30 cas ;
+la branche équations ne diffère que par le bruit numérique d'une nouvelle décompression VAE.
+
+Ne pas relancer E032 et ne pas entraîner le conseiller sur cette archive. Les chiffres, preuves et
+la décision E033 sont consignés dans `docs/e032-results-2026-08-26.md`.

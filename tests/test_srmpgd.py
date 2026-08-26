@@ -8,6 +8,52 @@ from prooftag_qr.qr import generate_qr
 from prooftag_qr.srmpgd import SRMPGDConfig
 
 
+def test_gradient_scale_candidates_descend_to_one_without_exceeding_maximum():
+    from prooftag_qr.srmpgd import _gradient_scale_candidates
+
+    assert _gradient_scale_candidates(32_768.0) == (
+        32_768.0,
+        8_192.0,
+        2_048.0,
+        512.0,
+        128.0,
+        32.0,
+        8.0,
+        2.0,
+        1.0,
+    )
+    assert _gradient_scale_candidates(1.0) == (1.0,)
+
+
+def test_failed_float32_promotion_restores_the_original_vae_dtype(monkeypatch):
+    import sys
+
+    from prooftag_qr.srmpgd import run_srmpgd
+
+    parameter = SimpleNamespace(dtype="float16")
+
+    class PartiallyFailingVAE:
+        def parameters(self):
+            return iter((parameter,))
+
+        def to(self, *, dtype):
+            parameter.dtype = dtype
+            if dtype == "float32":
+                raise RuntimeError("simulated CUDA OOM during VAE promotion")
+            return self
+
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(float32="float32"))
+    with pytest.raises(RuntimeError, match="simulated CUDA OOM"):
+        run_srmpgd(
+            SimpleNamespace(vae=PartiallyFailingVAE()),
+            object(),
+            object(),
+            SRMPGDConfig(decode_precision="float32"),
+        )
+
+    assert parameter.dtype == "float16"
+
+
 def test_robust_srmpgd_loss_keeps_every_scan_transform_differentiable():
     torch = pytest.importorskip("torch")
     from prooftag_qr.srmpgd import _robust_scanning_loss
@@ -391,11 +437,258 @@ def test_paper_equations_runs_fixed_iterations_without_guard_or_step_clipping(mo
     assert result.selected_iteration == 2
     assert result.stop_reason == "max_iterations"
     assert result.steps[0].step_scale == 1.0
-    assert result.steps[0].applied_step_rms == pytest.approx(
-        result.steps[0].next_step_rms
-    )
+    assert result.steps[0].applied_step_rms == pytest.approx(result.steps[0].next_step_rms)
     assert result.steps[0].applied_step_rms > 1e-6
     assert result.steps[1].latent_delta_rms > 2e-6
+
+
+def test_paper_equations_stops_when_positive_srl_has_zero_latent_gradient(monkeypatch):
+    torch = pytest.importorskip("torch")
+    from prooftag_qr import srmpgd
+
+    class ZeroBackward(torch.autograd.Function):
+        @staticmethod
+        def forward(ctx, value):
+            return value
+
+        @staticmethod
+        def backward(ctx, gradient):
+            return torch.zeros_like(gradient)
+
+    class FakeVAE(torch.nn.Module):
+        config = SimpleNamespace(scaling_factor=1.0)
+
+        def __init__(self):
+            super().__init__()
+            self.anchor = torch.nn.Parameter(torch.tensor(1.0), requires_grad=False)
+
+        def decode(self, latent, **kwargs):
+            return (ZeroBackward.apply(latent) * self.anchor,)
+
+    class FakeImageProcessor:
+        def postprocess(self, image, **kwargs):
+            array = (image[0].detach().clamp(-1, 1) / 2 + 0.5).permute(1, 2, 0)
+            return [Image.fromarray(np.rint(array.numpy() * 255).astype(np.uint8), mode="RGB")]
+
+    class ZeroLPIPS(torch.nn.Module):
+        def forward(self, image, reference):
+            return (image - reference).square().mean().reshape(1, 1, 1, 1) * 0
+
+    monkeypatch.setattr(srmpgd, "_load_lpips", lambda pipeline, device, net: ZeroLPIPS())
+    blueprint = generate_qr("https://example.test/zero-gradient", "M", size=128)
+    latent = torch.zeros((1, 3, 128, 128))
+
+    result = srmpgd.run_srmpgd(
+        SimpleNamespace(vae=FakeVAE(), image_processor=FakeImageProcessor()),
+        latent,
+        blueprint,
+        SRMPGDConfig(
+            protocol="paper_equations",
+            max_iterations=4,
+            step_size=1000.0,
+            crop_padding_px=0,
+        ),
+        initial_image=Image.new("RGB", (128, 128), (128, 128, 128)),
+        validation_callback=lambda image, iteration: {"passed": 0, "total": 2},
+    )
+
+    assert len(result.steps) == 1
+    assert result.selected_iteration == 0
+    assert result.stop_reason == "zero_latent_gradient_at_iteration_0"
+    assert result.steps[0].scanning_robust_loss > 0
+    assert result.steps[0].image_gradient_rms > 0
+    assert result.steps[0].gradient_rms == 0
+    assert result.steps[0].applied_step_rms is None
+
+
+def test_loss_scaling_rescues_a_small_gradient_through_reduced_precision_path(monkeypatch):
+    torch = pytest.importorskip("torch")
+    from prooftag_qr import srmpgd
+
+    class BackwardFloor(torch.autograd.Function):
+        @staticmethod
+        def forward(ctx, value):
+            return value
+
+        @staticmethod
+        def backward(ctx, gradient):
+            return torch.where(
+                gradient.abs() < 1e-3,
+                torch.zeros_like(gradient),
+                gradient,
+            )
+
+    class FakeVAE(torch.nn.Module):
+        config = SimpleNamespace(scaling_factor=1.0)
+
+        def __init__(self):
+            super().__init__()
+            self.anchor = torch.nn.Parameter(torch.tensor(1.0), requires_grad=False)
+
+        def decode(self, latent, **kwargs):
+            return (BackwardFloor.apply(latent) * self.anchor,)
+
+    class FakeImageProcessor:
+        def postprocess(self, image, **kwargs):
+            array = (image[0].detach().clamp(-1, 1) / 2 + 0.5).permute(1, 2, 0)
+            return [Image.fromarray(np.rint(array.numpy() * 255).astype(np.uint8), mode="RGB")]
+
+    class ZeroLPIPS(torch.nn.Module):
+        def forward(self, image, reference):
+            return (image - reference).square().mean().reshape(1, 1, 1, 1) * 0
+
+    monkeypatch.setattr(srmpgd, "_load_lpips", lambda pipeline, device, net: ZeroLPIPS())
+    blueprint = generate_qr("https://example.test/loss-scaling", "M", size=128)
+    initial = torch.zeros((1, 3, 128, 128))
+    pipeline = SimpleNamespace(vae=FakeVAE(), image_processor=FakeImageProcessor())
+    common = dict(
+        pipeline=pipeline,
+        initial_latent=initial,
+        blueprint=blueprint,
+        initial_image=Image.new("RGB", (128, 128), (128, 128, 128)),
+        validation_callback=lambda image, iteration: {"passed": 0, "total": 2},
+    )
+
+    unscaled = srmpgd.run_srmpgd(
+        **common,
+        config=SRMPGDConfig(
+            protocol="paper_equations",
+            max_iterations=1,
+            step_size=0.01,
+            gradient_scale=1.0,
+            crop_padding_px=0,
+        ),
+    )
+    scaled = srmpgd.run_srmpgd(
+        **common,
+        config=SRMPGDConfig(
+            protocol="paper_equations",
+            max_iterations=1,
+            step_size=0.01,
+            gradient_scale=32_768.0,
+            crop_padding_px=0,
+        ),
+    )
+
+    assert unscaled.stop_reason == "zero_latent_gradient_at_iteration_0"
+    assert scaled.stop_reason == "max_iterations"
+    assert scaled.steps[0].gradient_rms > 0
+    assert scaled.steps[0].applied_step_rms > 0
+    assert scaled.steps[1].latent_delta_rms > 0
+
+
+def test_loss_scaling_retries_with_a_lower_finite_scale(monkeypatch):
+    torch = pytest.importorskip("torch")
+    from prooftag_qr import srmpgd
+
+    class RejectLargeScale(torch.autograd.Function):
+        @staticmethod
+        def forward(ctx, value):
+            return value
+
+        @staticmethod
+        def backward(ctx, gradient):
+            if float(gradient.detach().abs().max()) > 2_048.0:
+                return torch.full_like(gradient, float("inf"))
+            return gradient
+
+    class FakeVAE(torch.nn.Module):
+        config = SimpleNamespace(scaling_factor=1.0)
+
+        def __init__(self):
+            super().__init__()
+            self.anchor = torch.nn.Parameter(torch.tensor(1.0), requires_grad=False)
+
+        def decode(self, latent, **kwargs):
+            return (latent * self.anchor,)
+
+    class FakeImageProcessor:
+        def postprocess(self, image, **kwargs):
+            array = (image[0].detach().clamp(-1, 1) / 2 + 0.5).permute(1, 2, 0)
+            return [Image.fromarray(np.rint(array.numpy() * 255).astype(np.uint8), mode="RGB")]
+
+    class ZeroLPIPS(torch.nn.Module):
+        def forward(self, image, reference):
+            return (image - reference).square().mean().reshape(1, 1, 1, 1) * 0
+
+    monkeypatch.setattr(srmpgd, "_load_lpips", lambda pipeline, device, net: ZeroLPIPS())
+    blueprint = generate_qr("https://example.test/scale-fallback", "M", size=128)
+    reference = np.asarray(blueprint.image, dtype=np.float32) / 127.5 - 1
+    latent = torch.from_numpy(reference).permute(2, 0, 1).unsqueeze(0)
+
+    result = srmpgd.run_srmpgd(
+        SimpleNamespace(vae=FakeVAE(), image_processor=FakeImageProcessor()),
+        latent,
+        blueprint,
+        SRMPGDConfig(
+            max_iterations=1,
+            step_size=0.01,
+            gradient_scale=32_768.0,
+            crop_padding_px=0,
+            max_initial_module_error_rate=1.0,
+        ),
+        initial_image=blueprint.image,
+        scanning_loss=lambda image, target: RejectLargeScale.apply(
+            (image - target).square().mean()
+        ),
+        validation_callback=lambda image, iteration: {"passed": 0, "total": 2},
+    )
+
+    assert result.steps[0].gradient_scale == 2_048.0
+    assert result.steps[0].gradient_rms > 0
+    assert result.steps[0].applied_step_rms > 0
+
+
+def test_float32_decode_precision_is_scoped_to_srmpgd_and_restored(monkeypatch):
+    torch = pytest.importorskip("torch")
+    from prooftag_qr import srmpgd
+
+    decoded_dtypes = []
+
+    class FakeVAE(torch.nn.Module):
+        config = SimpleNamespace(scaling_factor=1.0)
+
+        def __init__(self):
+            super().__init__()
+            self.anchor = torch.nn.Parameter(
+                torch.tensor(1.0, dtype=torch.float16), requires_grad=False
+            )
+
+        def decode(self, latent, **kwargs):
+            decoded_dtypes.append(latent.dtype)
+            return (latent * self.anchor,)
+
+    class FakeImageProcessor:
+        def postprocess(self, image, **kwargs):
+            array = (image[0].detach().float().clamp(-1, 1) / 2 + 0.5).permute(1, 2, 0)
+            return [Image.fromarray(np.rint(array.numpy() * 255).astype(np.uint8), mode="RGB")]
+
+    class ZeroLPIPS(torch.nn.Module):
+        def forward(self, image, reference):
+            return (image - reference).square().mean().reshape(1, 1, 1, 1) * 0
+
+    monkeypatch.setattr(srmpgd, "_load_lpips", lambda pipeline, device, net: ZeroLPIPS())
+    pipeline = SimpleNamespace(vae=FakeVAE(), image_processor=FakeImageProcessor())
+    blueprint = generate_qr("https://example.test/fp32-scope", "M", size=128)
+
+    result = srmpgd.run_srmpgd(
+        pipeline,
+        torch.zeros((1, 3, 128, 128)),
+        blueprint,
+        SRMPGDConfig(
+            protocol="paper_equations",
+            max_iterations=1,
+            step_size=0.01,
+            decode_precision="float32",
+            crop_padding_px=0,
+        ),
+        initial_image=Image.new("RGB", (128, 128), (128, 128, 128)),
+        validation_callback=lambda image, iteration: {"passed": 0, "total": 2},
+    )
+
+    assert result.steps[0].gradient_rms > 0
+    assert decoded_dtypes and set(decoded_dtypes) == {torch.float32}
+    assert next(pipeline.vae.parameters()).dtype == torch.float16
 
 
 def test_diffqrcoder_v3_crop_has_integer_module_geometry():
@@ -429,6 +722,9 @@ def test_diffqrcoder_v3_crop_has_integer_module_geometry():
     [
         (SRMPGDConfig(max_iterations=0), "max_iterations"),
         (SRMPGDConfig(step_size=0), "step_size"),
+        (SRMPGDConfig(gradient_scale=0.5), "gradient_scale"),
+        (SRMPGDConfig(min_gradient_rms=-1), "min_gradient_rms"),
+        (SRMPGDConfig(decode_precision="unknown"), "decode_precision"),
         (SRMPGDConfig(lpips_weight=-1), "lpips_weight"),
         (SRMPGDConfig(lpips_net="unknown"), "lpips_net"),
         (SRMPGDConfig(crop_padding_px=-2), "crop_padding"),
