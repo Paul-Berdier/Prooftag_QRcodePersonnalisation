@@ -746,6 +746,7 @@ class AdvisorInferenceRunner:
         poll_seconds: float = 15.0,
         maximum_campaign_attempts: int = 2,
         reject_campaigns_with_errors: bool = False,
+        stop_on_first_failed_campaign: bool = False,
         progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         self.plan = plan
@@ -753,6 +754,7 @@ class AdvisorInferenceRunner:
         self.poll_seconds = poll_seconds
         self.maximum_campaign_attempts = maximum_campaign_attempts
         self.reject_campaigns_with_errors = reject_campaigns_with_errors
+        self.stop_on_first_failed_campaign = stop_on_first_failed_campaign
         self.progress_callback = progress_callback
         self.output_dir = Path(output_root) / plan.plan_id
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -813,11 +815,17 @@ class AdvisorInferenceRunner:
                 raise RuntimeError(
                     "stored inference state uses a different campaign error policy"
                 )
+            stored_fail_fast = bool(state.get("stop_on_first_failed_campaign", False))
+            if stored_fail_fast != self.stop_on_first_failed_campaign:
+                raise RuntimeError(
+                    "stored inference state uses a different campaign fail-fast policy"
+                )
             return state
         state = {
             "version": 2,
             "plan_id": self.plan.plan_id,
             "reject_campaigns_with_errors": self.reject_campaigns_with_errors,
+            "stop_on_first_failed_campaign": self.stop_on_first_failed_campaign,
             "status": "running",
             "completed_campaigns": [],
             "failed_campaigns": [],
@@ -1102,6 +1110,10 @@ class AdvisorInferenceRunner:
     def run(self) -> dict[str, Any]:
         handle = self._acquire_lock()
         try:
+            if self.stop_on_first_failed_campaign and self.state["failed_campaigns"]:
+                self.state["status"] = "completed_with_errors"
+                self._save_state()
+                return self.summary()
             for index, base_request in enumerate(self.plan.campaigns):
                 if index in self.state["completed_campaigns"]:
                     if self._completed_export_is_valid(index):
@@ -1182,6 +1194,10 @@ class AdvisorInferenceRunner:
                 if not succeeded and index not in self.state["failed_campaigns"]:
                     self.state["failed_campaigns"].append(index)
                     self._save_state()
+                if not succeeded and self.stop_on_first_failed_campaign:
+                    self.state["status"] = "completed_with_errors"
+                    self._save_state()
+                    return self.summary()
             self.state["status"] = (
                 "completed_with_errors"
                 if self.state["failed_campaigns"]

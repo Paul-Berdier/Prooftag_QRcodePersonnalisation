@@ -398,6 +398,32 @@ def test_paper_equations_runs_fixed_iterations_without_guard_or_step_clipping(mo
     assert result.steps[1].latent_delta_rms > 2e-6
 
 
+def test_diffqrcoder_v3_crop_has_integer_module_geometry():
+    from prooftag_qr.qr import generate_diffqrcoder_qr
+    from prooftag_qr.srmpgd import _module_error_for_canvas
+
+    blueprint = generate_diffqrcoder_qr(
+        "https://ptag.io/t/e032",
+        "M",
+        version=3,
+        mask_pattern=4,
+        module_size=20,
+        border=4,
+    )
+    canvas = blueprint.image.resize((736, 736), Image.Resampling.NEAREST)
+    core_modules = blueprint.matrix.shape[0] - 2 * blueprint.border
+
+    assert blueprint.matrix.shape == (37, 37)
+    assert core_modules == 29
+    assert 736 - 2 * 78 == 580
+    assert 580 // core_modules == 20
+    assert _module_error_for_canvas(
+        canvas,
+        blueprint,
+        crop_padding_px=78,
+    ) == pytest.approx(0.0)
+
+
 @pytest.mark.parametrize(
     ("config", "message"),
     [

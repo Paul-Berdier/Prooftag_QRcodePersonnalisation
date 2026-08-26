@@ -186,6 +186,12 @@ assert (
     == 0.01
 )
 assert (
+    paper_settings["srmpgd_crop_padding_px"]
+    == guarded_settings["srmpgd_crop_padding_px"]
+    == 78
+)
+assert 736 - 2 * paper_settings["srmpgd_crop_padding_px"] == 29 * 20
+assert (
     paper_settings["diffqrcoder_stage2_target_mode"]
     == guarded_settings["diffqrcoder_stage2_target_mode"]
     == "qart_url_fragment"

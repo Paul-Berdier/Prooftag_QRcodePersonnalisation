@@ -209,11 +209,13 @@ def test_web_lab_exposes_only_the_pinned_diffqrcoder_chain():
     assert paper_srmpgd["tools"]["settings"]["srmpgd_protocol"] == "paper_equations"
     assert paper_srmpgd["tools"]["settings"]["srmpgd_step_size"] == 1000.0
     assert paper_srmpgd["tools"]["settings"]["srmpgd_lpips_weight"] == 0.01
+    assert paper_srmpgd["tools"]["settings"]["srmpgd_crop_padding_px"] == 78
     assert paper_srmpgd_guarded["enabled"] is False
     assert (
         paper_srmpgd_guarded["tools"]["settings"]["srmpgd_protocol"]
         == "guarded_production"
     )
+    assert paper_srmpgd_guarded["tools"]["settings"]["srmpgd_crop_padding_px"] == 78
     qart = next(profile for profile in profiles if profile["id"] == "diffqrcoder_qart_srpg")
     automatic = next(profile for profile in profiles if profile["id"] == "diffqrcoder_auto")
     srmpgd = next(profile for profile in profiles if profile["id"] == "diffqrcoder_srmpgd")
@@ -580,6 +582,138 @@ def test_srmpgd_campaign_records_the_exact_srpg_source_run_and_hash(
     assert srmpgd_run.provenance["stage2_latent_sha256"] == latent_sha256
     assert srmpgd_run.provenance["stage2_pairing_status"] == "exact_reuse"
     assert srmpgd_run.quality_metrics["diffqrcoder_stage2_pairing_exact"] == 1.0
+
+
+def test_srmpgd_generation_error_keeps_root_cause_and_run_link(
+    tmp_path,
+    monkeypatch,
+):
+    settings = Settings(
+        data_dir=tmp_path,
+        lab_clip_scoring_enabled=False,
+        device="cpu",
+    )
+    run_repository = RunRepository(tmp_path / "runs.sqlite3")
+    artifact_store = LocalArtifactStore(tmp_path / "artifacts")
+    service = LabService(
+        base_settings=settings,
+        run_repository=run_repository,
+        lab_repository=LabRepository(run_repository.engine),
+        artifact_store=artifact_store,
+        validator=object(),
+    )
+    latent_sha256 = "e" * 64
+    root_error = "ValueError: QR core does not have an integer module geometry"
+
+    class PairingBackend:
+        def __init__(self):
+            self.imported = None
+            self.generated = None
+
+        def import_stage2_state(self, state):
+            self.imported = state
+
+        def export_stage2_state(self):
+            return self.generated
+
+    class FakeGenerationService:
+        def __init__(self, method):
+            self.method = method
+            self.backend = PairingBackend()
+            self.backends = {"controlnet": self.backend}
+            self.last_raw_candidate = None
+
+        def generate(
+            self,
+            request,
+            *,
+            raw_candidate_override=None,
+            target_variant=None,
+            stage1_source_run_id=None,
+        ):
+            raw = raw_candidate_override or Image.new("RGB", (32, 32), "navy")
+            self.last_raw_candidate = raw.copy()
+            is_srmpgd = self.method.tools.srmpgd_enabled
+            if is_srmpgd:
+                assert self.backend.imported is not None
+            run = RunRecord(
+                id=str(uuid.uuid4()),
+                created_at=datetime.now(UTC),
+                completed_at=datetime.now(UTC),
+                status="error" if is_srmpgd else "rejected",
+                backend="controlnet",
+                prompt=request.prompt,
+                payload_hash="f" * 64,
+                seed=request.seed,
+                selected_variant=None if is_srmpgd else target_variant,
+                selection_mode="forced",
+                stage1_reused=raw_candidate_override is not None,
+                stage1_source_run_id=stage1_source_run_id,
+                attempts=1,
+                scan_pass_rate=0.0,
+                exact_payload_match=False,
+                module_error_rate=0.1,
+                generation_ms=1.0,
+                validation_ms=1.0,
+                total_ms=2.0,
+                error=root_error if is_srmpgd else None,
+                provenance={} if is_srmpgd else {"stage2_latent_sha256": latent_sha256},
+            )
+            if not is_srmpgd:
+                self.backend.generated = {
+                    "latent_sha256": latent_sha256,
+                    "source_run_id": None,
+                    "source_method_id": None,
+                }
+                run.image_path = artifact_store.save_image(run.id, raw)
+            run_repository.save(run)
+            return run
+
+    monkeypatch.setattr(
+        service,
+        "_generation_service",
+        lambda method: FakeGenerationService(method),
+    )
+    profiles = laboratory_profiles()
+    srpg = LabMethod.model_validate(
+        {
+            **next(item for item in profiles if item["id"] == "diffqrcoder_paper_srpg"),
+            "enabled": True,
+        }
+    )
+    srmpgd = LabMethod.model_validate(
+        {
+            **next(item for item in profiles if item["id"] == "diffqrcoder_paper_srmpgd"),
+            "enabled": True,
+        }
+    )
+    request = LabCampaignCreate(
+        name="preserve failed SR-MPGD root cause",
+        payload="https://ptag.io/t/e032",
+        prompts=[{"id": "p1", "text": "blue courtyard"}],
+        seeds=[51001],
+        methods=[srpg, srmpgd],
+    )
+    campaign = service.create_campaign(request)
+    try:
+        for _ in range(100):
+            stored = service.lab_repository.get_campaign(campaign["id"])
+            if stored["status"] not in {"queued", "running"}:
+                break
+            time.sleep(0.01)
+        trials = service.lab_repository.list_trials(campaign["id"])
+    finally:
+        service.shutdown()
+
+    assert stored["status"] == "completed_with_errors"
+    failed = next(trial for trial in trials if trial["method_id"] == srmpgd.id)
+    assert failed["status"] == "error"
+    assert failed["generation_run_id"]
+    assert failed["error"] == root_error
+    assert "paired Stage 2 latent mismatch" not in failed["error"]
+    persisted = run_repository.get(failed["generation_run_id"])
+    assert persisted is not None
+    assert persisted.error == root_error
 
 
 def test_lab_limits_cartesian_campaign_size():

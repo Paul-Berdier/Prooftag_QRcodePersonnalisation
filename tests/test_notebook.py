@@ -1180,6 +1180,8 @@ def test_e032_notebook_is_visual_paired_resumable_and_paper_explicit():
     assert "srmpgd_protocol'] == 'paper_equations'" in source
     assert "srmpgd_step_size'] == 1000.0" in source
     assert "srmpgd_lpips_weight'] == 0.01" in source
+    assert "srmpgd_crop_padding_px'] == 78" in source
+    assert "736 - 2 * 78 == 29 * 20" in source
     assert "require_exact_stage1_reuse" in source
     assert "candidate_signature != paper_stage2_signature" in source
     assert "api_runtime = api_json('/v1/runtime')" in source
@@ -1190,6 +1192,15 @@ def test_e032_notebook_is_visual_paired_resumable_and_paper_explicit():
     assert "len(plan.campaigns) == 30" in source
     assert "maximum_campaign_attempts=1" in source
     assert "reject_campaigns_with_errors=True" in source
+    assert "stop_on_first_failed_campaign=True" in source
+    assert "e032-all-trials-diagnostic.csv" in source
+    assert "e032-error-diagnostic.json" in source
+    assert "pd.crosstab(" in source
+    assert "Erreurs complètes — aucune troncature" in source
+    assert "status'].isin(['accepted', 'rejected'])" in source
+    assert "'qr_success': qr_success" in source
+    assert "e032-diagnostic.tar.gz" in source
+    assert "Les campagnes ne sont pas relancées" in source
     assert "stage2_source_latent_sha256 == row.stage2_latent_sha256" in source
     assert "srmpgd_stage2_image_sha256 == parent.final_image_sha256" in source
     assert "finite(row.srmpgd_iteration_zero_exact) == 1.0" in source

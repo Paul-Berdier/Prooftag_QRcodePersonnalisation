@@ -404,6 +404,74 @@ def test_strict_inference_runner_retries_campaigns_completed_with_errors(tmp_pat
     assert all(f"[plan-{plan.plan_id}]" in name for name in posted_names)
 
 
+def test_inference_runner_fail_fast_stops_and_resume_submits_nothing(tmp_path):
+    plan = _plan()
+    runner = AdvisorInferenceRunner(
+        plan=plan,
+        api_url="http://example.invalid",
+        output_root=tmp_path,
+        poll_seconds=0,
+        maximum_campaign_attempts=1,
+        reject_campaigns_with_errors=True,
+        stop_on_first_failed_campaign=True,
+    )
+    calls = []
+
+    def request(method, path, payload=None, *, raw=False):
+        calls.append((method, path, payload, raw))
+        if path.endswith("?limit=100") or path.endswith("?limit=500"):
+            return []
+        if method == "POST":
+            return {"id": "failed-campaign"}
+        if path.endswith("/results.csv"):
+            return (
+                b"trial_id,campaign_id,prompt_id,method_id,status,error\n"
+                b"1,failed-campaign,p,m,error,systematic failure\n"
+            )
+        return {
+            "id": "failed-campaign",
+            "status": "completed_with_errors",
+            "completed_trials": 1,
+            "total_trials": 1,
+            "accepted_trials": 0,
+            "trials": [],
+        }
+
+    runner._request = request
+    first = runner.run()
+
+    assert first["status"] == "completed_with_errors"
+    assert first["completed_campaigns"] == 0
+    assert first["failed_campaigns"] == [0]
+    assert first["exports"] == 1
+    assert runner.state["stop_on_first_failed_campaign"] is True
+    assert len(runner.state["history"]) == 1
+    assert len([item for item in calls if item[0] == "POST"]) == 1
+
+    resumed = AdvisorInferenceRunner(
+        plan=plan,
+        api_url="http://example.invalid",
+        output_root=tmp_path,
+        poll_seconds=0,
+        maximum_campaign_attempts=1,
+        reject_campaigns_with_errors=True,
+        stop_on_first_failed_campaign=True,
+    )
+    resumed._request = lambda *args, **kwargs: pytest.fail(
+        "a failed fail-fast plan must not submit or poll another campaign"
+    )
+    assert resumed.run() == first
+
+    with pytest.raises(RuntimeError, match="different campaign fail-fast policy"):
+        AdvisorInferenceRunner(
+            plan=plan,
+            api_url="http://example.invalid",
+            output_root=tmp_path,
+            reject_campaigns_with_errors=True,
+            stop_on_first_failed_campaign=False,
+        )
+
+
 def test_inference_runner_reuses_only_a_plan_bound_compatible_campaign(tmp_path):
     plan = _plan()
     runner = AdvisorInferenceRunner(

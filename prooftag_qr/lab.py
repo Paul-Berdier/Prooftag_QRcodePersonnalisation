@@ -651,7 +651,9 @@ def laboratory_profiles() -> list[dict[str, Any]]:
                     "srmpgd_step_size": 1000.0,
                     "srmpgd_lpips_weight": 0.01,
                     "srmpgd_lpips_net": "vgg",
-                    "srmpgd_crop_padding_px": -1,
+                    # Public DiffQRCoder decodes to 736 px then crops 78 px per
+                    # side: the 580 px core is exactly 29 QR-v3 modules of 20 px.
+                    "srmpgd_crop_padding_px": 78,
                     "srmpgd_dark_threshold": 0.5,
                     "srmpgd_light_threshold": 0.5,
                     "srmpgd_center_fraction": 1 / 3,
@@ -692,7 +694,9 @@ def laboratory_profiles() -> list[dict[str, Any]]:
                     "srmpgd_step_size": 1000.0,
                     "srmpgd_lpips_weight": 0.01,
                     "srmpgd_lpips_net": "vgg",
-                    "srmpgd_crop_padding_px": -1,
+                    # Use the same integer QR-v3 core geometry as the upstream
+                    # qrcode_padding=78 loss instead of a rounded quiet-zone crop.
+                    "srmpgd_crop_padding_px": 78,
                     "srmpgd_dark_threshold": 0.5,
                     "srmpgd_light_threshold": 0.5,
                     "srmpgd_center_fraction": 1 / 3,
@@ -1049,6 +1053,21 @@ class LabService:
                         target_variant=self._target_variant_for_method(method),
                         stage1_source_run_id=stage1_source_run_id,
                     )
+                    if run.status == "error":
+                        # GenerationService already captured and persisted the root cause.
+                        # Stop here: cache/provenance checks require a completed generation
+                        # and would otherwise replace that useful error with a secondary
+                        # ``expected <hash>, got None`` pairing failure.
+                        self.lab_repository.update_trial(
+                            trial_id,
+                            status="error",
+                            generation_run_id=run.id,
+                            completed_at=datetime.now(UTC),
+                            error=run.error,
+                        )
+                        errors += 1
+                        metrics.LAB_TRIALS.labels(method.id, "error").inc()
+                        continue
                     if stage1_key is not None and stage1_key not in shared_stage1:
                         raw_candidate = generation_service.last_raw_candidate
                         if raw_candidate is not None:

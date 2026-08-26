@@ -79,7 +79,11 @@ from IPython.display import Image as NotebookImage
 from IPython.display import Markdown, clear_output, display
 from PIL import Image
 
-from prooftag_qr.advisor_gallery import download_advisor_gallery, write_gallery_index
+from prooftag_qr.advisor_gallery import (
+    download_advisor_gallery,
+    render_advisor_contact_sheet,
+    write_gallery_index,
+)
 from prooftag_qr.advisor_inference import (
     AdvisorInferencePlan,
     AdvisorInferenceRunner,
@@ -387,6 +391,10 @@ assert paper_srmpgd['tools']['settings']['srmpgd_step_size'] == 1000.0
 assert paper_srmpgd['tools']['settings']['srmpgd_lpips_weight'] == 0.01
 assert guarded_srmpgd['tools']['settings']['srmpgd_protocol'] == 'guarded_production'
 assert guarded_srmpgd['tools']['settings']['srmpgd_max_initial_module_error_rate'] == 1.0
+assert paper_srmpgd['tools']['settings']['srmpgd_crop_padding_px'] == 78
+assert guarded_srmpgd['tools']['settings']['srmpgd_crop_padding_px'] == 78
+# Le VAE produit 736 px. QR v3 sans quiet zone contient 29 modules de 20 px.
+assert 736 - 2 * 78 == 29 * 20
 
 stage2_cache_fields = [
     'srpg_steps', 'diffqrcoder_stage2_strength',
@@ -551,21 +559,193 @@ runner = AdvisorInferenceRunner(
     poll_seconds=POLL_SECONDS,
     maximum_campaign_attempts=1,
     reject_campaigns_with_errors=True,
+    stop_on_first_failed_campaign=True,
     progress_callback=progress,
 )
 print('Plan persistant :', runner.output_dir)
 print('État de reprise :', runner.state_path)
 runner_summary = runner.run() if RUN_E032 else runner.summary()
-if runner_summary['status'] != 'completed':
-    raise RuntimeError(f'Campagne E032 incomplète : {runner_summary}')
 display(pd.DataFrame([runner_summary]).T.rename(columns={0: 'valeur'}))
+"""
+    ),
+    markdown(
+        """## 4 bis. Diagnostic obligatoire avant toute exception
+
+Le runner exporte une campagne même lorsqu'elle se termine avec une vraie erreur. Cette cellule lit
+donc **tous** les CSV, y compris `completed_with_errors`, avant de décider si l'analyse scientifique
+peut continuer. Elle affiche les messages complets, télécharge chaque raster déjà produit et crée
+une archive de diagnostic. Elle ne soumet aucune campagne et ne relance aucune génération GPU.
+"""
+    ),
+    code(
+        """RUN_DIR = runner.output_dir / 'analysis'
+RUN_DIR.mkdir(parents=True, exist_ok=True)
+diagnostic_dir = RUN_DIR / 'campaign-diagnostic'
+diagnostic_dir.mkdir(parents=True, exist_ok=True)
+
+diagnostic_rows = []
+for export_path in sorted(runner.exports_dir.glob('*.csv')):
+    with export_path.open('r', encoding='utf-8', newline='') as stream:
+        for row in csv.DictReader(stream):
+            diagnostic_rows.append({**row, 'export_path': str(export_path)})
+if not diagnostic_rows:
+    raise RuntimeError('Aucun export E032 disponible : impossible de diagnostiquer sans CSV.')
+
+diagnostic_frame = pd.DataFrame(diagnostic_rows)
+diagnostic_frame.to_csv(
+    diagnostic_dir / 'e032-all-trials-diagnostic.csv', index=False
+)
+status_table = pd.crosstab(
+    diagnostic_frame['method_id'], diagnostic_frame['status'], margins=True
+)
+display(Markdown('### Statuts réels par méthode'))
+display(status_table)
+
+error_mask = (
+    diagnostic_frame['status'].eq('error')
+    | diagnostic_frame['error'].fillna('').astype(str).str.strip().ne('')
+)
+error_frame = diagnostic_frame.loc[error_mask].copy()
+error_columns = [
+    'campaign_id', 'prompt_id', 'seed', 'method_id', 'status', 'error',
+    'generation_run_id', 'export_path',
+]
+display(Markdown('### Erreurs complètes — aucune troncature'))
+with pd.option_context(
+    'display.max_colwidth', None,
+    'display.max_rows', max(200, len(error_frame) + 5),
+):
+    display(error_frame[error_columns].sort_values(['method_id', 'prompt_id', 'seed']))
+
+if error_frame.empty:
+    error_groups = pd.DataFrame(columns=['method_id', 'status', 'error', 'count'])
+else:
+    error_groups = (
+        error_frame.groupby(['method_id', 'status', 'error'], dropna=False)
+        .size()
+        .rename('count')
+        .reset_index()
+        .sort_values(['count', 'method_id'], ascending=[False, True])
+    )
+display(Markdown('### Signatures d erreur regroupées'))
+with pd.option_context('display.max_colwidth', None, 'display.max_rows', 200):
+    display(error_groups)
+
+history_statuses = pd.DataFrame(runner.state.get('history', []))
+campaign_status_counts = (
+    history_statuses['status'].value_counts(dropna=False).to_dict()
+    if not history_statuses.empty else {}
+)
+diagnostic_report = {
+    'plan_id': plan.plan_id,
+    'runner_summary': runner_summary,
+    'campaign_status_counts': campaign_status_counts,
+    'trial_status_by_method': {
+        str(method_id): {
+            str(status): int(count)
+            for status, count in values.items()
+        }
+        for method_id, values in diagnostic_frame.groupby('method_id')['status']
+        .value_counts().unstack(fill_value=0).to_dict('index').items()
+    },
+    'error_groups': error_groups.fillna('').to_dict('records'),
+}
+diagnostic_json = diagnostic_dir / 'e032-error-diagnostic.json'
+atomic_json(diagnostic_json, diagnostic_report)
+
+successful = diagnostic_frame[
+    diagnostic_frame['status'].isin(['accepted', 'rejected'])
+    & diagnostic_frame['generation_run_id'].fillna('').astype(str).str.strip().ne('')
+].copy()
+success_entries = []
+for row in successful.to_dict('records'):
+    qr_success = finite(row.get('quality_qr_verify_any_exact'))
+    if qr_success is None:
+        exact_text = str(row.get('exact_payload_match') or '').strip().lower()
+        qr_success = 1.0 if exact_text in {'1', '1.0', 'true'} else 0.0
+    qr_tolerance = finite(row.get('quality_qr_verify_tolerance_score'))
+    if qr_tolerance is None:
+        qr_tolerance = finite(row.get('scan_pass_rate'))
+    saturation_values = [
+        value for value in (
+            finite(row.get('quality_high_saturation_pixel_ratio')),
+            finite(row.get('quality_rgb_clipped_channel_ratio')),
+        ) if value is not None
+    ]
+    success_entries.append({
+        'section': 'completed_output',
+        'campaign_id': row['campaign_id'],
+        'trial_id': row['trial_id'],
+        'prompt_id': row['prompt_id'],
+        'prompt_text': row['prompt_text'],
+        'method_id': row['method_id'],
+        'output_variant': row.get('selected_variant'),
+        'seed': int(row['seed']),
+        'generation_run_id': row['generation_run_id'],
+        'status': row['status'],
+        'qr_success': qr_success,
+        'qr_tolerance': qr_tolerance,
+        'clip_aesthetic': finite(row.get('quality_clip_aesthetic')),
+        'clip_score': finite(row.get('quality_clip_score')),
+        'hpsv2_1': finite(row.get('quality_hpsv2_1')),
+        'saturation_risk': max(saturation_values) if saturation_values else None,
+        'error': row.get('error'),
+    })
+
+diagnostic_gallery = download_advisor_gallery(
+    success_entries,
+    api_url=COLLECTION_API_URL,
+    output_dir=diagnostic_dir / 'successful-images',
+)
+write_gallery_index(diagnostic_gallery, diagnostic_dir)
+download_failures = [row for row in diagnostic_gallery if row.get('download_error')]
+if download_failures:
+    display(Markdown('### Images réussies devenues indisponibles côté API'))
+    with pd.option_context('display.max_colwidth', None):
+        display(pd.DataFrame(download_failures))
+
+sheet_dir = diagnostic_dir / 'successful-contact-sheets'
+sheet_dir.mkdir(exist_ok=True)
+successful_sheets = []
+grouped_success = {}
+for entry in diagnostic_gallery:
+    grouped_success.setdefault(
+        (entry['prompt_id'], int(entry['seed'])), []
+    ).append(entry)
+for (prompt_id, seed), entries in sorted(grouped_success.items()):
+    entries.sort(key=lambda item: METHOD_IDS.index(item['method_id']))
+    sheet_path = sheet_dir / f'{prompt_id}-seed-{seed}.png'
+    render_advisor_contact_sheet(
+        entries,
+        title=f'E032 sorties produites — {prompt_id} — seed {seed}',
+        output_path=sheet_path,
+        columns=4,
+    )
+    successful_sheets.append(sheet_path)
+
+display(Markdown(f'### Rasters déjà produits : {len(diagnostic_gallery)}'))
+for sheet_path in successful_sheets:
+    display(NotebookImage(filename=str(sheet_path), width=1150))
+
+diagnostic_archive = DOWNLOAD_ROOT / f'{plan.plan_id}-e032-diagnostic.tar.gz'
+temporary_diagnostic_archive = diagnostic_archive.with_suffix('.tar.gz.tmp')
+with tarfile.open(temporary_diagnostic_archive, 'w:gz') as bundle:
+    bundle.add(diagnostic_dir, arcname=f'{plan.plan_id}-e032-diagnostic')
+os.replace(temporary_diagnostic_archive, diagnostic_archive)
+print('Diagnostic CSV :', diagnostic_dir / 'e032-all-trials-diagnostic.csv')
+print('Diagnostic JSON :', diagnostic_json)
+print('Archive téléchargeable :', diagnostic_archive)
+
+if runner_summary['status'] != 'completed':
+    raise RuntimeError(
+        'E032 contient de vraies erreurs de trial. Les campagnes ne sont pas relancées. '
+        'Lire le tableau ci-dessus et transmettre l archive de diagnostic.'
+    )
 """
     ),
     markdown("## 5. Matrice finale, qualité et preuve de l'appariement exact"),
     code(
-        """RUN_DIR = runner.output_dir / 'analysis'
-RUN_DIR.mkdir(parents=True, exist_ok=True)
-rows = load_advisor_inference_results(runner.output_dir)
+        """rows = load_advisor_inference_results(runner.output_dir)
 frame = pd.DataFrame(rows)
 if len(frame) != 120:
     raise RuntimeError(f'Matrice E032 incomplète : {len(frame)}/120.')

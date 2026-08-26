@@ -43,6 +43,10 @@ def test_e032_deployment_is_immutable_version_checked_and_ssh_safe():
     assert "== 1000.0" in deployer
     assert 'paper_settings["srmpgd_lpips_weight"]' in deployer
     assert "== 0.01" in deployer
+    assert 'paper_settings["srmpgd_crop_padding_px"]' in deployer
+    assert 'guarded_settings["srmpgd_crop_padding_px"]' in deployer
+    assert "== 78" in deployer
+    assert "736 - 2 * paper_settings" in deployer
     assert ".\\\\scripts\\\\notebook-remote.ps1 -Notebook" in deployer
 
     # Les deux grosses images sont importées par pipe, sans archive temporaire.

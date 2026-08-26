@@ -75,6 +75,65 @@ gardes, arrêts et la sélection externe. Cette paire isole leur effet sans modi
 Le QArt exact des auteurs n'est pas public. Le profil est donc une reconstruction des équations avec
 un proxy QArt public, pas une revendication de reproduction intégrale.
 
+## Incident du premier plan E032
+
+Le premier plan, `48ed7ac799e61502`, s'est terminé avec **30 campagnes sur 30 en
+`completed_with_errors`**. Ce résultat ne mesure pas le SR-MPGD : il provient d'une erreur de
+géométrie commune à tous les contextes.
+
+Le mode automatique de découpe retirait 80 pixels de chaque côté du raster VAE de 736 pixels. Le
+cœur obtenu mesurait donc 576 pixels, alors que le QR version 3 contient 29 modules par côté :
+
+```text
+736 - 2 * 80 = 576
+576 / 29 = 19,862... pixels par module
+```
+
+Cette géométrie non entière est incompatible avec la SRL, qui doit associer chaque cellule du QR à
+un nombre entier de pixels. L'erreur racine est donc le refus
+`QR core does not have an integer module geometry`, avant toute itération interprétable de
+SR-MPGD. Un contrôle de hash exécuté dans le chemin d'échec a ensuite produit l'erreur la plus
+visible dans certains résumés et a masqué ce premier défaut. Le contrôle d'intégrité n'était pas la
+cause de l'échec scientifique ; il était une erreur secondaire de remontée/diagnostic.
+
+La géométrie E032 corrigée est désormais explicite et ne dépend plus du crop automatique :
+
+```text
+padding = 78 pixels
+736 - 2 * 78 = 580
+580 = 29 modules * 20 pixels
+```
+
+Les profils `paper_equations` et `guarded_production` doivent tous deux employer
+`srmpgd_crop_padding_px=78`. Ce paramètre appartient au contrat expérimental : le modifier exige un
+nouveau plan.
+
+### Diagnostic et conservation des preuves
+
+Le notebook collecte les CSV de toutes les campagnes, y compris celles marquées
+`completed_with_errors`, avant de décider si l'analyse peut continuer. Le diagnostic :
+
+- publie les statuts par méthode et les messages d'erreur complets, sans troncature ;
+- regroupe les signatures d'erreur afin de distinguer la cause géométrique du contrôle de hash
+  secondaire ;
+- télécharge toutes les images réellement produites par les essais `accepted` ou `rejected` qui
+  possèdent un `generation_run_id` ;
+- génère des planches-contact par prompt et seed ;
+- conserve les exports, le JSON de diagnostic et les images dans l'archive
+  `48ed7ac799e61502-e032-diagnostic.tar.gz` lorsqu'elle est disponible.
+
+Ces artefacts restent utiles pour l'audit de l'incident et ne doivent pas être supprimés. En
+revanche, ils ne constituent ni une matrice appariée complète, ni des observations valides du
+mécanisme SR-MPGD.
+
+### Décision de reprise
+
+Le plan `48ed7ac799e61502` est **invalide scientifiquement** et ne doit jamais être repris, complété,
+fusionné avec des résultats corrigés ou utilisé pour calculer un taux de succès. La correction du
+crop modifie le contrat d'exécution ; une nouvelle campagne doit donc obtenir un nouveau
+`plan_id`, un nouveau dossier de reprise et de nouveaux exports. L'ancien dossier est conservé en
+lecture seule comme preuve d'incident.
+
 ## Campagne appariée à exécuter
 
 Avant toute campagne longue :

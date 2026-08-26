@@ -1639,3 +1639,24 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
 - **Limite :** le nombre d'itérations et le QArt exact ne sont pas publiés. E032 est une ablation
   contrôlée des équations, pas encore une reproduction revendiquée des 99 % du papier.
 - **Protocole détaillé :** `docs/e032-srmpgd-paper-reconstruction.md`.
+
+## E032 — incident de géométrie du premier plan — 26 août 2026
+
+- **Plan concerné :** `48ed7ac799e61502`; 30/30 campagnes terminées en
+  `completed_with_errors`.
+- **Cause racine :** le crop automatique produisait un cœur de 576 px pour 29 modules, soit
+  `576 / 29 = 19,862...` px par module. La SRL a donc refusé la géométrie avant toute itération
+  SR-MPGD interprétable.
+- **Erreur masquante :** un contrôle de hash exécuté dans le chemin d'échec remontait ensuite plus
+  visiblement que l'erreur géométrique. Le hash n'est pas la cause initiale ; les exports complets
+  permettent de retrouver l'ordre causal des deux erreurs.
+- **Correction :** crop explicite de 78 px sur le raster VAE 736 px :
+  `736 - 2 * 78 = 580 = 29 * 20`. Les deux branches E032, `paper_equations` et
+  `guarded_production`, doivent partager cette géométrie exacte.
+- **Diagnostic conservé :** le notebook lit tous les CSV, y compris les campagnes en erreur,
+  regroupe les messages complets, télécharge les rasters effectivement produits et construit les
+  planches-contact et l'archive de diagnostic. Ces éléments sont des preuves d'incident, pas des
+  résultats SR-MPGD.
+- **Décision scientifique :** le plan `48ed7ac799e61502` est invalide et ne doit être ni repris ni
+  mélangé à la relance. Ses artefacts sont conservés en lecture seule ; le correctif impose un
+  nouveau `plan_id`, un nouveau dossier de reprise et une campagne entièrement nouvelle.
