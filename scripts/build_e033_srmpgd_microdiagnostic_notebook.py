@@ -42,13 +42,15 @@ Les cinq sorties sont produites dans **une seule campagne reprenable** :
 
 Les branches FP16 et FP32 doivent réutiliser exactement le même Stage 2 public. Pour chacune,
 E033 affiche aussi le même latent simplement redécodé par le VAE, sans mise à jour, afin de ne pas
-confondre une différence de précision avec l'effet d'Eq. 14. Les rasters des itérations 0, 1, 2 et
-4 sont téléchargés par leur **URL directe**, même lorsqu'un raster est identique au résultat final
-et n'apparaît donc pas dans la liste d'artefacts de l'API.
+confondre une différence de précision avec l'effet d'Eq. 14. Ce plan correctif s'arrête après une
+seule mise à jour : les rasters des itérations 0 et 1 sont téléchargés par leur **URL directe**,
+même lorsqu'un raster est identique au résultat final et n'apparaît donc pas dans la liste
+d'artefacts de l'API. Quatre mises à jour ne seront autorisées que dans un nouveau plan après
+réussite de cette porte mémoire.
 
-Le verdict primaire porte uniquement sur FP32 : gradient initial fini et strictement positif,
-déplacement latent à l'itération 1 strictement positif, puis SRL minimale des itérations 1 à 4
-strictement inférieure à la SRL initiale. Une porte échouée est un résultat scientifique `STOP`,
+Le verdict primaire porte uniquement sur FP32 : gradients image et latent initiaux finis et
+strictement positifs, pas appliqué et déplacement latent strictement positifs, puis SRL de
+l'itération 1 strictement inférieure à la SRL initiale. Une porte échouée est un résultat `STOP`,
 pas une erreur d'exécution : les planches, traces, CSV et l'archive sont toujours écrits.
 """
     ),
@@ -187,7 +189,7 @@ NEGATIVE_PROMPT = (
     'oversaturated, clipped highlights, posterized colors'
 )
 SEED = 51_001
-MILESTONE_ITERATIONS = [0, 1, 2, 4]
+MILESTONE_ITERATIONS = [0, 1]
 RUN_E033 = True
 POLL_SECONDS = 15.0
 AUTOMATIC_EXPANSION_AUTHORIZED = False
@@ -200,7 +202,7 @@ for directory in [OUTPUT_ROOT, DOWNLOAD_ROOT, ARCHIVE_ROOT]:
 
 assert COLLECTION_PAYLOAD.startswith('https://') and len(COLLECTION_PAYLOAD) <= 64
 assert SEED == 51_001
-assert MILESTONE_ITERATIONS == [0, 1, 2, 4]
+assert MILESTONE_ITERATIONS == [0, 1]
 assert AUTOMATIC_EXPANSION_AUTHORIZED is False
 print('Un prompt × un seed × cinq méthodes = cinq générations finales.')
 """
@@ -280,10 +282,11 @@ assert fp32['tools']['settings']['srmpgd_decode_precision'] == 'float32'
 for method in [fp16, fp32]:
     settings = method['tools']['settings']
     assert settings['srmpgd_protocol'] == 'paper_equations'
-    assert settings['srmpgd_max_iterations'] == 4
+    assert settings['srmpgd_max_iterations'] == 1
     assert settings['srmpgd_step_size'] == 1000.0
     assert settings['srmpgd_gradient_scale'] == 32768.0
     assert settings['srmpgd_lpips_weight'] == 0.01
+    assert settings['srmpgd_lpips_device'] == 'cpu'
 
 stage2_cache_fields = [
     'srpg_steps', 'diffqrcoder_stage2_strength',
@@ -698,7 +701,7 @@ def final_title(entry):
 
 
 fig, axes = plt.subplots(1, 5, figsize=(20, 4.8))
-for axis, method_id in zip(axes, METHOD_IDS):
+for axis, method_id in zip(axes, METHOD_IDS, strict=True):
     entry = gallery_by_method[method_id]
     with Image.open(entry['local_image']) as source:
         axis.imshow(source.convert('RGB'))
@@ -713,10 +716,10 @@ display(NotebookImage(filename=str(final_sheet), width=1400))
 """
     ),
     markdown(
-        """## 7. Télécharger directement les états 000, 001, 002 et 004
+        """## 7. Télécharger directement les états 000 et 001
 
 Cette cellule n'interroge volontairement **pas** `/artifacts`. Elle appelle directement
-`/variants/srmpgd_iteration_000`, puis 001, 002 et 004. Ainsi, l'itération 0 reste téléchargeable
+`/variants/srmpgd_iteration_000`, puis 001. Ainsi, l'itération 0 reste téléchargeable
 même lorsque son contenu est identique au Stage 2 parent et que le catalogue la déduplique.
 """
     ),
@@ -788,7 +791,7 @@ for method_id in MILESTONE_METHOD_IDS:
         except HTTPError as exc:
             if exc.code != 404:
                 raise
-            # Un arrêt numérique à i0 ne publie légitimement pas i1/i2/i4.
+            # Un arrêt numérique à i0 ne publie légitimement pas i1.
             # C'est un résultat scientifique à archiver, pas une panne du runner.
             download_error = 'HTTP 404: jalon absent (arrêt anticipé probable)'
         trace_step = trace_by_iteration.get(iteration, {})
@@ -815,7 +818,7 @@ for method_id in MILESTONE_METHOD_IDS:
 milestones = pd.DataFrame(milestone_rows)
 redecodes = pd.DataFrame(redecode_rows)
 if len(milestones) != len(MILESTONE_METHOD_IDS) * len(MILESTONE_ITERATIONS):
-    raise RuntimeError('Le journal des huit requêtes directes E033 est incomplet.')
+    raise RuntimeError('Le journal des quatre requêtes directes E033 est incomplet.')
 milestones.to_csv(RUN_DIR / 'e033-milestones.csv', index=False)
 redecodes.to_csv(RUN_DIR / 'e033-vae-redecode-controls.csv', index=False)
 REDECODE_CONTROLS_AVAILABLE = bool(
@@ -844,7 +847,7 @@ if DIRECT_ITERATION_ZERO_AVAILABLE and not DIRECT_ITERATION_ZERO_EXACT:
         'Les rasters directs de l itération 0 ne sont pas le Stage 2 public exact.'
     )
 print(
-    'Requêtes directes terminées :', int(milestones.available.sum()), '/ 8 jalons présents ;',
+    'Requêtes directes terminées :', int(milestones.available.sum()), '/ 4 jalons présents ;',
     'itérations 0 exactes =', DIRECT_ITERATION_ZERO_EXACT,
 )
 print(
@@ -855,7 +858,7 @@ missing_milestones = milestones[~milestones.available]
 if not missing_milestones.empty:
     display(Markdown(
         '**Jalons absents :** ils restent dans le CSV avec `available=False`. '
-        'C est le résultat attendu lorsqu une branche s arrête numériquement avant i4.'
+        'C est le résultat attendu lorsqu une branche s arrête numériquement avant i1.'
     ))
     display(missing_milestones.reindex(columns=[
         'method_id', 'iteration', 'direct_endpoint', 'stop_reason', 'download_error',
@@ -948,16 +951,11 @@ PRIMARY_MILESTONES_AVAILABLE = bool(
     and primary_milestones.available.all()
 )
 gradient_0 = finite(primary_steps.get(0, {}).get('gradient_rms'))
+image_gradient_0 = finite(primary_steps.get(0, {}).get('image_gradient_rms'))
+applied_step_0 = finite(primary_steps.get(0, {}).get('applied_step_rms'))
 latent_delta_1 = finite(primary_steps.get(1, {}).get('latent_delta_rms'))
 srl_0 = finite(primary_steps.get(0, {}).get('scanning_robust_loss'))
-srl_candidates = [
-    finite(primary_steps[iteration].get('scanning_robust_loss'))
-    for iteration in range(1, 5)
-    if iteration in primary_steps
-]
-minimum_srl_1_to_4 = min(
-    value for value in srl_candidates if value is not None
-) if any(value is not None for value in srl_candidates) else None
+srl_1 = finite(primary_steps.get(1, {}).get('scanning_robust_loss'))
 
 gate_rows = [
     {
@@ -967,9 +965,9 @@ gate_rows = [
         'réussie': REDECODE_CONTROLS_VERIFIED,
     },
     {
-        'porte': 'jalons_fp32_000_001_002_004_disponibles',
+        'porte': 'jalons_fp32_000_001_disponibles',
         'valeur': int(primary_milestones.available.sum()),
-        'référence': '4/4',
+        'référence': '2/2',
         'réussie': PRIMARY_MILESTONES_AVAILABLE,
     },
     {
@@ -979,10 +977,22 @@ gate_rows = [
         'réussie': DIRECT_ITERATION_ZERO_EXACT,
     },
     {
+        'porte': 'gradient_image_fp32_iteration_0_fini_et_positif',
+        'valeur': image_gradient_0,
+        'référence': '> 0 et fini',
+        'réussie': image_gradient_0 is not None and image_gradient_0 > 0,
+    },
+    {
         'porte': 'gradient_fp32_iteration_0_fini_et_positif',
         'valeur': gradient_0,
         'référence': '> 0 et fini',
         'réussie': gradient_0 is not None and gradient_0 > 0,
+    },
+    {
+        'porte': 'pas_fp32_iteration_0_fini_et_positif',
+        'valeur': applied_step_0,
+        'référence': '> 0 et fini',
+        'réussie': applied_step_0 is not None and applied_step_0 > 0,
     },
     {
         'porte': 'deplacement_latent_fp32_iteration_1_positif',
@@ -991,13 +1001,13 @@ gate_rows = [
         'réussie': latent_delta_1 is not None and latent_delta_1 > 0,
     },
     {
-        'porte': 'srl_fp32_diminue_avant_ou_a_iteration_4',
-        'valeur': minimum_srl_1_to_4,
+        'porte': 'srl_fp32_diminue_a_iteration_1',
+        'valeur': srl_1,
         'référence': f'< SRL0={srl_0}',
         'réussie': (
             srl_0 is not None
-            and minimum_srl_1_to_4 is not None
-            and minimum_srl_1_to_4 < srl_0
+            and srl_1 is not None
+            and srl_1 < srl_0
         ),
     },
 ]
@@ -1012,13 +1022,15 @@ mechanism_verdict = {
     'vae_redecode_controls_available': REDECODE_CONTROLS_AVAILABLE,
     'vae_redecode_controls_verified': REDECODE_CONTROLS_VERIFIED,
     'direct_iteration_zero_exact': DIRECT_ITERATION_ZERO_EXACT,
+    'image_gradient_iteration_0': image_gradient_0,
     'gradient_iteration_0': gradient_0,
+    'applied_step_iteration_0': applied_step_0,
     'latent_delta_iteration_1': latent_delta_1,
     'srl_iteration_0': srl_0,
-    'minimum_srl_iterations_1_to_4': minimum_srl_1_to_4,
+    'srl_iteration_1': srl_1,
     'automatic_expansion_authorized': False,
     'next_action': (
-        'manual_review_then_design_a_small_holdout'
+        'manual_review_then_design_four_iteration_gate'
         if PRIMARY_FP32_GATES_PASSED
         else 'stop_and_fix_numerics_without_expanding'
     ),
@@ -1057,7 +1069,8 @@ report = f'''# Rapport E033 — microdiagnostic SR-MPGD
 
 E033 indique si la chaîne de gradient FP32 produit réellement un déplacement latent et si la
 Scanning Robust Loss décroît sur ce cas unique. Les planches montrent séparément la dégradation
-du Stage 2 et l'effet propre des quatre itérations.
+du Stage 2 et l'effet propre d'une mise à jour. Ce résultat ne valide pas encore quatre
+itérations : elles nécessiteront un nouveau plan après réussite de cette porte.
 
 ## Interprétation interdite
 
@@ -1133,7 +1146,8 @@ print('Copie téléchargeable :', DOWNLOAD_ROOT / archive_path.name)
 else:
     display(Markdown(
         '**STOP mécanistique archivé.** Le gradient, le déplacement latent ou la baisse de SRL '
-        'n est pas démontré. Corriger le mécanisme puis créer un nouveau plan ; ne pas relancer '
+        'n est pas démontré. Corriger le mécanisme puis créer un nouveau plan ; '
+        'ne pas relancer '
         'trente contextes avec ces résultats.'
     ))
 print('Archive :', DOWNLOAD_ROOT / archive_path.name)

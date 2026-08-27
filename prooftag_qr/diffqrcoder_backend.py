@@ -149,6 +149,8 @@ def _offload_unused_pipeline_modules_for_paper_srmpgd(pipe, *, lpips_net: str):
     restoration_errors: list[str] = []
     memory_allocated = getattr(torch.cuda, "memory_allocated", None)
     memory_info = getattr(torch.cuda, "mem_get_info", None)
+    reset_peak_memory_stats = getattr(torch.cuda, "reset_peak_memory_stats", None)
+    max_memory_allocated = getattr(torch.cuda, "max_memory_allocated", None)
 
     def driver_free_bytes():
         if not callable(memory_info):
@@ -166,6 +168,7 @@ def _offload_unused_pipeline_modules_for_paper_srmpgd(pipe, *, lpips_net: str):
         "cuda_driver_free_before_bytes": driver_free_bytes(),
         "cuda_allocated_after_offload_bytes": None,
         "cuda_driver_free_after_offload_bytes": None,
+        "cuda_peak_allocated_bytes": None,
         "cuda_allocated_before_restore_bytes": None,
         "cuda_allocated_after_lpips_offload_bytes": None,
         "cuda_allocated_after_restore_bytes": None,
@@ -196,11 +199,16 @@ def _offload_unused_pipeline_modules_for_paper_srmpgd(pipe, *, lpips_net: str):
             int(memory_allocated()) if callable(memory_allocated) else None
         )
         state["cuda_driver_free_after_offload_bytes"] = driver_free_bytes()
+        if torch.cuda.is_available() and callable(reset_peak_memory_stats):
+            reset_peak_memory_stats()
         yield state
     except BaseException as exc:
         primary_error = exc
         raise
     finally:
+        state["cuda_peak_allocated_bytes"] = (
+            int(max_memory_allocated()) if callable(max_memory_allocated) else None
+        )
         state["cuda_allocated_before_restore_bytes"] = (
             int(memory_allocated()) if callable(memory_allocated) else None
         )
@@ -693,6 +701,7 @@ class UpstreamDiffQRCoderBackend:
             decode_precision=self.settings.srmpgd_decode_precision,
             lpips_weight=self.settings.srmpgd_lpips_weight,
             lpips_net=self.settings.srmpgd_lpips_net,
+            lpips_device=self.settings.srmpgd_lpips_device,
             crop_padding_px=self.settings.srmpgd_crop_padding_px,
             dark_threshold=self.settings.srmpgd_dark_threshold,
             light_threshold=self.settings.srmpgd_light_threshold,
@@ -737,6 +746,7 @@ class UpstreamDiffQRCoderBackend:
                     "cuda_driver_free_before_bytes": None,
                     "cuda_allocated_after_offload_bytes": None,
                     "cuda_driver_free_after_offload_bytes": None,
+                    "cuda_peak_allocated_bytes": None,
                     "cuda_allocated_before_restore_bytes": None,
                     "cuda_allocated_after_lpips_offload_bytes": None,
                     "cuda_allocated_after_restore_bytes": None,
@@ -774,6 +784,10 @@ class UpstreamDiffQRCoderBackend:
                 (
                     "cuda_allocated_before_restore_bytes",
                     "diffqrcoder_srmpgd_cuda_gib_before_restore",
+                ),
+                (
+                    "cuda_peak_allocated_bytes",
+                    "diffqrcoder_srmpgd_cuda_peak_gib",
                 ),
                 (
                     "cuda_allocated_after_lpips_offload_bytes",
@@ -814,17 +828,26 @@ class UpstreamDiffQRCoderBackend:
                 if paper_equations:
                     module_count = len(srmpgd_memory["offloaded_modules"])
                     free_after = srmpgd_memory["cuda_driver_free_after_offload_bytes"]
-                    note = (
+                    phase = getattr(pipe, "_prooftag_srmpgd_phase", "unknown")
+                    note_parts = [
                         "paper SR-MPGD failed after temporarily offloading "
-                        f"{module_count} diffusion modules; "
-                        f"driver_free_after_offload_gib="
-                        f"{float(free_after) / 2**30:.3f}"
-                        if free_after is not None
-                        else (
-                            "paper SR-MPGD failed after temporarily offloading "
-                            f"{module_count} diffusion modules"
+                        f"{module_count} diffusion modules",
+                        f"phase={phase}",
+                        f"stage2_source_run_id={self._stage2_source_run_id or 'unknown'}",
+                        f"stage2_source_method_id={self._stage2_source_method_id or 'unknown'}",
+                        f"stage2_latent_sha256={self._stage2_latent_sha256 or 'unknown'}",
+                        f"stage2_image_sha256={stage2_image_sha256}",
+                    ]
+                    if free_after is not None:
+                        note_parts.append(
+                            f"driver_free_after_offload_gib={float(free_after) / 2**30:.3f}"
                         )
-                    )
+                    note = "; ".join(note_parts)
+                    # ``BaseException.add_note`` is absent from ``str(exc)`` and therefore
+                    # disappeared from campaign exports. Wrap the original error so the next
+                    # technical archive contains the residency proof in its normal error field.
+                    if isinstance(exc, Exception):
+                        raise RuntimeError(f"{type(exc).__name__}: {exc}; {note}") from exc
                     if hasattr(exc, "add_note"):
                         exc.add_note(note)
             raise
@@ -863,6 +886,7 @@ class UpstreamDiffQRCoderBackend:
         )
         self._debug_metadata["srmpgd_trace"] = {
             "protocol": self.settings.srmpgd_protocol,
+            "lpips_device": self.settings.srmpgd_lpips_device,
             "target": "original_qr",
             "selected_iteration": srmpgd.selected_iteration,
             "stop_reason": srmpgd.stop_reason,
@@ -895,6 +919,9 @@ class UpstreamDiffQRCoderBackend:
                     self.settings.srmpgd_decode_precision == "float32"
                 ),
                 "diffqrcoder_srmpgd_lpips_weight": float(self.settings.srmpgd_lpips_weight),
+                "diffqrcoder_srmpgd_lpips_on_cpu": float(
+                    self.settings.srmpgd_lpips_device == "cpu"
+                ),
                 "diffqrcoder_srmpgd_initial_gradient_rms": float(initial_step.gradient_rms or 0.0),
                 "diffqrcoder_srmpgd_initial_image_gradient_rms": float(
                     initial_step.image_gradient_rms or 0.0

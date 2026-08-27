@@ -25,6 +25,211 @@ def test_gradient_scale_candidates_descend_to_one_without_exceeding_maximum():
     assert _gradient_scale_candidates(1.0) == (1.0,)
 
 
+def test_split_image_vjp_matches_the_direct_latent_gradient(monkeypatch):
+    torch = pytest.importorskip("torch")
+    from prooftag_qr import srmpgd
+
+    class ToyVAE(torch.nn.Module):
+        config = SimpleNamespace(scaling_factor=1.0)
+
+        def __init__(self):
+            super().__init__()
+            self.anchor = torch.nn.Parameter(torch.tensor(1.0), requires_grad=False)
+
+        def decode(self, latent, **_kwargs):
+            return ((0.75 * latent + 0.10 * latent.square()) * self.anchor,)
+
+    class FakeImageProcessor:
+        def postprocess(self, image, **_kwargs):
+            array = (image[0].detach().clamp(-1, 1) / 2 + 0.5).permute(1, 2, 0)
+            return [
+                Image.fromarray(
+                    np.rint(array.cpu().numpy() * 255).astype(np.uint8),
+                    mode="RGB",
+                )
+            ]
+
+    class BiasedLPIPS(torch.nn.Module):
+        def forward(self, image, reference):
+            # The bias intentionally gives LPIPS a non-zero image gradient at iteration zero.
+            return (image - reference + 0.125).square().mean().reshape(1, 1, 1, 1)
+
+    def toy_scanning_loss(image, *_args, **_kwargs):
+        loss = (0.70 * image.square() + 0.20 * image).mean()
+        return loss, {"module_error_rate": image.mean() * 0}
+
+    monkeypatch.setattr(srmpgd, "_load_lpips", lambda pipeline, device, net: BiasedLPIPS())
+    monkeypatch.setattr(srmpgd, "scanning_robust_loss", toy_scanning_loss)
+
+    pipeline = SimpleNamespace(vae=ToyVAE(), image_processor=FakeImageProcessor())
+    blueprint = generate_qr("https://example.test/split-vjp", "M", size=128)
+    initial = torch.linspace(-0.4, 0.4, 3 * 128 * 128).reshape(1, 3, 128, 128)
+    step_size = 0.125
+    lpips_weight = 0.30
+
+    direct_latent = initial.detach().clone().requires_grad_(True)
+    direct_decoded = pipeline.vae.decode(direct_latent, return_dict=False)[0].float()
+    direct_unit = (direct_decoded / 2 + 0.5).clamp(0, 1)
+    direct_srl, _ = toy_scanning_loss(direct_unit)
+    with torch.no_grad():
+        reference = pipeline.vae.decode(initial, return_dict=False)[0].float()
+    direct_lpips = BiasedLPIPS()(direct_decoded, reference).mean()
+    direct_gradient = torch.autograd.grad(
+        direct_srl + lpips_weight * direct_lpips,
+        direct_latent,
+    )[0]
+    stage2_image = pipeline.image_processor.postprocess(direct_decoded.detach())[0]
+
+    result = srmpgd.run_srmpgd(
+        pipeline,
+        initial,
+        blueprint,
+        SRMPGDConfig(
+            protocol="paper_equations",
+            max_iterations=1,
+            step_size=step_size,
+            gradient_scale=1.0,
+            lpips_weight=lpips_weight,
+            crop_padding_px=0,
+        ),
+        initial_image=stage2_image,
+        validation_callback=lambda image, iteration: {"passed": 0, "total": 2},
+    )
+
+    split_gradient = (initial - result.latent) / step_size
+    assert result.selected_iteration == 1
+    assert torch.allclose(split_gradient, direct_gradient, rtol=2e-5, atol=2e-6)
+
+
+def test_cpu_lpips_contributes_a_finite_nonzero_latent_gradient(monkeypatch):
+    torch = pytest.importorskip("torch")
+    from prooftag_qr import srmpgd
+
+    class ToyVAE(torch.nn.Module):
+        config = SimpleNamespace(scaling_factor=1.0)
+
+        def __init__(self):
+            super().__init__()
+            self.anchor = torch.nn.Parameter(torch.tensor(1.0), requires_grad=False)
+
+        def decode(self, latent, **_kwargs):
+            return (latent * self.anchor,)
+
+    class FakeImageProcessor:
+        def postprocess(self, image, **_kwargs):
+            array = (image[0].detach().clamp(-1, 1) / 2 + 0.5).permute(1, 2, 0)
+            return [
+                Image.fromarray(
+                    np.rint(array.cpu().numpy() * 255).astype(np.uint8),
+                    mode="RGB",
+                )
+            ]
+
+    class RecordingLPIPS(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.anchor = torch.nn.Parameter(torch.tensor(1.0), requires_grad=False)
+            self.devices = []
+
+        def forward(self, image, reference):
+            self.devices.append((image.device.type, reference.device.type))
+            return (
+                (image - reference + 0.25).square().mean() * self.anchor
+            ).reshape(1, 1, 1, 1)
+
+    lpips_model = RecordingLPIPS()
+    requested_devices = []
+
+    def load_lpips(_pipeline, device, net):
+        assert net == "vgg"
+        requested_devices.append(torch.device(device).type)
+        return lpips_model.to(device=device)
+
+    def zero_scanning_loss(image, *_args, **_kwargs):
+        zero = image.sum() * 0
+        return zero, {"module_error_rate": zero}
+
+    monkeypatch.setattr(srmpgd, "_load_lpips", load_lpips)
+    monkeypatch.setattr(srmpgd, "scanning_robust_loss", zero_scanning_loss)
+
+    pipeline = SimpleNamespace(vae=ToyVAE(), image_processor=FakeImageProcessor())
+    blueprint = generate_qr("https://example.test/cpu-lpips", "M", size=128)
+    initial = torch.zeros((1, 3, 128, 128))
+
+    result = srmpgd.run_srmpgd(
+        pipeline,
+        initial,
+        blueprint,
+        SRMPGDConfig(
+            protocol="paper_equations",
+            max_iterations=1,
+            step_size=0.01,
+            gradient_scale=1.0,
+            lpips_weight=1.0,
+            lpips_device="cpu",
+            crop_padding_px=0,
+        ),
+        initial_image=Image.new("RGB", (128, 128), (127, 127, 127)),
+        validation_callback=lambda image, iteration: {"passed": 0, "total": 2},
+    )
+
+    assert requested_devices == ["cpu"]
+    assert lpips_model.devices and set(lpips_model.devices) == {("cpu", "cpu")}
+    assert result.steps[0].lpips_loss > 0
+    assert result.steps[0].gradient_rms > 0
+    assert np.isfinite(result.steps[0].gradient_rms)
+    assert torch.isfinite(result.latent).all()
+    assert not torch.equal(result.latent, initial)
+
+
+@pytest.mark.parametrize("fail_inside", [False, True])
+def test_run_srmpgd_enables_and_restores_vae_checkpointing(monkeypatch, fail_inside):
+    torch = pytest.importorskip("torch")
+    from prooftag_qr import srmpgd
+
+    class CheckpointableVAE(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.anchor = torch.nn.Parameter(torch.tensor(1.0), requires_grad=False)
+            self.is_gradient_checkpointing = False
+            self.events = []
+
+        def enable_gradient_checkpointing(self):
+            self.events.append("enable")
+            self.is_gradient_checkpointing = True
+
+        def disable_gradient_checkpointing(self):
+            self.events.append("disable")
+            self.is_gradient_checkpointing = False
+
+    vae = CheckpointableVAE()
+    sentinel = object()
+
+    def fake_run(*_args, **_kwargs):
+        assert vae.is_gradient_checkpointing is True
+        vae.events.append("inside")
+        if fail_inside:
+            raise RuntimeError("synthetic SR-MPGD failure")
+        return sentinel
+
+    monkeypatch.setattr(srmpgd, "_run_srmpgd", fake_run)
+    arguments = (
+        SimpleNamespace(vae=vae),
+        object(),
+        object(),
+        SRMPGDConfig(max_iterations=1),
+    )
+
+    if fail_inside:
+        with pytest.raises(RuntimeError, match="synthetic SR-MPGD failure"):
+            srmpgd.run_srmpgd(*arguments)
+    else:
+        assert srmpgd.run_srmpgd(*arguments) is sentinel
+
+    assert vae.events == ["enable", "inside", "disable"]
+    assert vae.is_gradient_checkpointing is False
+
+
 def test_failed_float32_promotion_restores_the_original_vae_dtype(monkeypatch):
     import sys
 
@@ -600,7 +805,9 @@ def test_loss_scaling_retries_with_a_lower_finite_scale(monkeypatch):
             self.anchor = torch.nn.Parameter(torch.tensor(1.0), requires_grad=False)
 
         def decode(self, latent, **kwargs):
-            return (latent * self.anchor,)
+            # Loss scaling is applied to the VAE VJP after the image-space objective
+            # has been released, so the overflow probe belongs on this backward path.
+            return (RejectLargeScale.apply(latent) * self.anchor,)
 
     class FakeImageProcessor:
         def postprocess(self, image, **kwargs):
@@ -628,9 +835,7 @@ def test_loss_scaling_retries_with_a_lower_finite_scale(monkeypatch):
             max_initial_module_error_rate=1.0,
         ),
         initial_image=blueprint.image,
-        scanning_loss=lambda image, target: RejectLargeScale.apply(
-            (image - target).square().mean()
-        ),
+        scanning_loss=lambda image, target: image.sum(),
         validation_callback=lambda image, iteration: {"passed": 0, "total": 2},
     )
 
@@ -727,6 +932,7 @@ def test_diffqrcoder_v3_crop_has_integer_module_geometry():
         (SRMPGDConfig(decode_precision="unknown"), "decode_precision"),
         (SRMPGDConfig(lpips_weight=-1), "lpips_weight"),
         (SRMPGDConfig(lpips_net="unknown"), "lpips_net"),
+        (SRMPGDConfig(lpips_device="unknown"), "lpips_device"),
         (SRMPGDConfig(crop_padding_px=-2), "crop_padding"),
         (
             SRMPGDConfig(max_initial_module_error_rate=1.1),

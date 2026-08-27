@@ -91,6 +91,7 @@ def _legacy_gpu_dependencies_are_pinned_to_the_torch_base_image():
     assert settings.srmpgd_max_step_rms == 0.02
     assert settings.srmpgd_max_total_delta_rms == 0.06
     assert settings.srmpgd_lpips_net == "vgg"
+    assert settings.srmpgd_lpips_device == "model"
     assert settings.srmpgd_crop_padding_px == -1
     assert settings.srmpgd_dark_threshold == 0.5
     assert settings.srmpgd_light_threshold == 0.5
@@ -121,6 +122,8 @@ def _legacy_gpu_dependencies_are_pinned_to_the_torch_base_image():
     assert 'PROOFTAG_QR_SRMPGD_ENABLED: "false"' in manifest
     assert 'PROOFTAG_QR_SRMPGD_STEP_SIZE: "1000.0"' in manifest
     assert 'PROOFTAG_QR_SRMPGD_LPIPS_WEIGHT: "0.01"' in manifest
+    assert "PROOFTAG_QR_SRMPGD_LPIPS_DEVICE: model" in manifest
+    assert "PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True" in manifest
     assert 'PROOFTAG_QR_LATENT_REFINEMENT_ENABLED: "false"' in manifest
     assert 'PROOFTAG_QR_LATENT_REFINEMENT_MAX_LATENT_DELTA: "0.10"' in manifest
     assert 'PROOFTAG_QR_LATENT_REFINEMENT_MAX_MEAN_ABSOLUTE_CHANGE: "0.08"' in manifest

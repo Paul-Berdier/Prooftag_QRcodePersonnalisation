@@ -225,6 +225,10 @@ def test_web_lab_exposes_only_the_pinned_diffqrcoder_chain():
     assert e033_fp16["tools"]["settings"]["srmpgd_decode_precision"] == "model"
     assert e033_fp32["tools"]["settings"]["srmpgd_decode_precision"] == "float32"
     assert e033_fp32["tools"]["settings"]["srmpgd_gradient_scale"] == 32768.0
+    assert e033_fp16["tools"]["settings"]["srmpgd_max_iterations"] == 1
+    assert e033_fp32["tools"]["settings"]["srmpgd_max_iterations"] == 1
+    assert e033_fp16["tools"]["settings"]["srmpgd_lpips_device"] == "cpu"
+    assert e033_fp32["tools"]["settings"]["srmpgd_lpips_device"] == "cpu"
     qart = next(profile for profile in profiles if profile["id"] == "diffqrcoder_qart_srpg")
     automatic = next(profile for profile in profiles if profile["id"] == "diffqrcoder_auto")
     srmpgd = next(profile for profile in profiles if profile["id"] == "diffqrcoder_srmpgd")

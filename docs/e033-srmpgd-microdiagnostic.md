@@ -32,6 +32,8 @@ SHA-256 du latent, le SHA-256 du raster et l'identité de l'itération zéro. Le
   au latent ;
 - arrêt explicite lorsqu'une SRL positive possède un gradient image ou latent nul ;
 - promotion FP32 limitée au VAE et restauration garantie, y compris après un échec de conversion ;
+- gradient de `SRL + 0,01 LPIPS` calculé en espace image, puis VJP VAE recalculé séparément avec
+  checkpointing ; LPIPS/VGG est placé sur CPU pour les deux branches E033 ;
 - témoin visuel du même latent redécodé sans aucun pas, afin de séparer l'effet de la précision VAE
   de l'effet de la descente.
 
@@ -41,15 +43,15 @@ Le notebook affiche d'abord une planche des cinq sorties finales, puis une planc
 
 - le Stage 2 parent ;
 - le latent redécodé sans mise à jour ;
-- les itérations directes 0, 1, 2 et 4.
+- les itérations directes 0 et 1.
 
 Un arrêt précoce laisse une case explicite `absent / 404` et un enregistrement
 `available=False` ; il ne se transforme pas en faux résultat. La branche FP32 ne passe que si :
 
-1. ses témoins et jalons sont disponibles et intègres ;
-2. son gradient initial est fini et strictement positif ;
-3. le latent s'est déplacé à l'itération 1 ;
-4. la SRL minimale des itérations 1 à 4 est inférieure à la SRL initiale.
+1. ses témoins et ses deux jalons sont disponibles et intègres ;
+2. ses gradients image et latent initiaux sont finis et strictement positifs ;
+3. le pas appliqué à l'itération 0 et le déplacement latent à l'itération 1 sont positifs ;
+4. la SRL de l'itération 1 est inférieure à la SRL initiale.
 
 Un PASS est seulement une preuve mécanistique locale. Il ne prouve ni la généralisation, ni la
 probabilité de scan téléphone, ni une amélioration esthétique. Aucun élargissement automatique
@@ -69,6 +71,48 @@ branches FP16 et FP32, chacune répétée deux fois par l'ancien runner. La caus
 d'offload temporaire des modules de diffusion sont consignés dans
 `docs/e033-technical-incident-2026-08-26.md`. Cette archive reste une preuve d'incident ; la relance
 corrective doit obligatoirement créer un nouveau plan.
+
+Le plan correctif `82549caa971652bb`, exécuté le 27 août, confirme que l'orchestration est réparée
+mais que l'offload seul ne suffit pas. Une seule campagne et une seule tentative ont conservé les
+trois témoins, puis les deux branches SR-MPGD ont échoué par OOM :
+
+- FP16 : 19,63 Gio utilisés, 39,12 Mio libres, allocation de 266 Mio refusée ;
+- FP32 : 19,57 Gio utilisés, 95,12 Mio libres, allocation de 530 Mio refusée.
+
+Le VAE produit un raster complet de 736 x 736 px ; le crop exact de 78 px isole ensuite le cœur
+580 px, mais ne réduit pas le graphe du décodeur. Le graphe VAE, la SRL et LPIPS/VGG étaient encore
+vivants simultanément. Aucun état SR-MPGD, gradient ou déplacement latent de ce plan n'est donc
+interprétable. L'archive technique et ses dix checksums valides prouvent l'incident, pas
+l'appariement du latent dans les deux branches interrompues.
+
+## Chemin de gradient mémoire borné
+
+La prochaine relance conserve l'objectif d'Eq. 13, `SRL + 0,01 LPIPS`, mais évalue sa règle de
+chaîne en deux niveaux :
+
+1. calcul de `d(SRL)/dx` et de `d(LPIPS)/dx` sur le raster/cœur image, dans deux graphes séparés ;
+2. libération de ces graphes, nouveau calcul du seul décodeur VAE avec checkpointing, puis VJP
+   `(dx/dz)^T dL/dx` pour obtenir le gradient latent exact d'Eq. 14.
+
+Cette décomposition ne modifie ni la fonction objectif ni `gamma`. Elle empêche seulement le VAE
+736 px et LPIPS/VGG d'occuper simultanément la RTX. Les métriques scalaires et le raster de
+diagnostic sont calculés sans conserver de graphe.
+
+## Porte séquentielle révisée
+
+E033 ne commence plus directement avec quatre itérations :
+
+1. **Gate 1 itération :** même prompt, seed et latent parent ; SHA-256 d'appariement, raster
+   d'itération zéro, gradients image/latent, pas appliqué, déplacement latent, mémoire et baisse
+   de SRL entre 0 et 1 doivent tous être prouvés ;
+2. **Gate 4 itérations :** uniquement après PASS du premier plan, nouveau plan immutable avec les
+   jalons 0, 1, 2 et 4 et les mêmes contrôles ;
+3. **Extension :** toujours interdite tant que le gate quatre itérations n'a pas conclu sans OOM,
+   gradient nul, divergence ou perte d'appariement.
+
+Le Stage 2 public du plan `82549caa971652bb` réduit le MER de 24,62 % à 1,90 % tout en restant à
+0/37 QR-Verify. Il reste un parent expérimental utile, mais ne doit pas être confondu avec un QR
+validé ni avec un succès SR-MPGD.
 
 ## Exécution
 

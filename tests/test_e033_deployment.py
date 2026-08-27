@@ -30,9 +30,11 @@ def test_e033_deployment_is_immutable_cpu_orchestrated_and_ssh_safe():
     assert "e033_equation_srmpgd_fp16" in deployer
     assert "e033_equation_srmpgd_fp32" in deployer
     assert 'settings["diffqrcoder_stage2_initialization"] == "public_random"' in deployer
-    assert 'settings["srmpgd_max_iterations"] == 4' in deployer
+    assert 'settings["srmpgd_max_iterations"] == 1' in deployer
     assert 'settings["srmpgd_gradient_scale"] == 32768.0' in deployer
     assert 'settings["srmpgd_decode_precision"] == precision' in deployer
+    assert 'settings["srmpgd_lpips_device"] == "cpu"' in deployer
+    assert 'os.environ["PYTORCH_CUDA_ALLOC_CONF"] == "expandable_segments:True"' in deployer
     assert ".\\\\scripts\\\\notebook-remote.ps1 -Notebook" in deployer
 
     assert 'docker save "$image" | sudo k3s ctr images import -' in app_deployer

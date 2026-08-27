@@ -45,6 +45,10 @@ class SRMPGDConfig:
     decode_precision: Literal["model", "float32"] = "model"
     lpips_weight: float = 0.10
     lpips_net: str = "vgg"
+    # ``cpu`` preserves the same frozen LPIPS network and objective while moving its weights,
+    # activations and backward pass out of constrained GPU memory. The resulting image gradient
+    # is copied back before the exact VAE vector-Jacobian product.
+    lpips_device: Literal["model", "cpu"] = "model"
     crop_padding_px: int = -1
     dark_threshold: float = 0.5
     light_threshold: float = 0.5
@@ -144,6 +148,8 @@ def _validate_config(config: SRMPGDConfig) -> None:
         raise ValueError("lpips_weight cannot be negative")
     if config.lpips_net not in {"alex", "vgg", "squeeze"}:
         raise ValueError("lpips_net must be alex, vgg or squeeze")
+    if config.lpips_device not in {"model", "cpu"}:
+        raise ValueError("lpips_device must be model or cpu")
     if config.crop_padding_px < -1:
         raise ValueError("crop_padding_px must be -1 (automatic) or non-negative")
     if not 0 < config.dark_threshold <= config.light_threshold < 1:
@@ -276,13 +282,14 @@ def _core_blueprint(
     )
 
 
-def _decode_latent(
-    pipeline: Any,
-    latent: Any,
-    *,
-    blueprint: QRBlueprint,
-    config: SRMPGDConfig,
-) -> tuple[Any, Image.Image]:
+def _decode_latent_tensor(pipeline: Any, latent: Any) -> Any:
+    """Decode a latent without materializing a PIL image.
+
+    SR-MPGD needs this lower-level form for a memory-bounded vector-Jacobian product. Keeping
+    LPIPS and the VAE graph alive at the same time consumed the complete 20 GiB E033 GPU. The
+    split VJP recomputes only this VAE graph after the image-space objective graph is released.
+    """
+
     import torch
 
     vae = pipeline.vae
@@ -296,6 +303,17 @@ def _decode_latent(
             latent.to(dtype=vae_dtype) / scaling_factor,
             return_dict=False,
         )[0]
+    return decoded
+
+
+def _decode_latent(
+    pipeline: Any,
+    latent: Any,
+    *,
+    blueprint: QRBlueprint,
+    config: SRMPGDConfig,
+) -> tuple[Any, Image.Image]:
+    decoded = _decode_latent_tensor(pipeline, latent)
     image = pipeline.image_processor.postprocess(
         decoded.detach(), output_type="pil", do_denormalize=[True]
     )[0].convert("RGB")
@@ -471,9 +489,17 @@ def _run_srmpgd(
     device = initial_latent.device
     initial = initial_latent.detach().to(dtype=torch.float32).clone()
     working = initial.clone()
-    lpips_model = _load_lpips(pipeline, device=device, net=config.lpips_net)
+    lpips_device = torch.device("cpu") if config.lpips_device == "cpu" else device
+    pipeline._prooftag_srmpgd_phase = f"lpips_{config.lpips_device}_load"
+    lpips_model = _load_lpips(pipeline, device=lpips_device, net=config.lpips_net)
     started = time.perf_counter()
 
+    def mark_phase(value: str) -> None:
+        # Kept on the pipeline so an outer campaign error can persist where a CUDA OOM happened.
+        # The value is tiny and does not retain any tensor or autograd graph.
+        pipeline._prooftag_srmpgd_phase = value
+
+    mark_phase("initial_vae_decode")
     with torch.no_grad():
         reference_decoded, decoded_reference_image = _decode_latent(
             pipeline,
@@ -533,6 +559,47 @@ def _run_srmpgd(
         center_fraction=config.center_fraction,
     )
 
+    def srl_terms(decoded_core):
+        decoded_unit = (decoded_core / 2 + 0.5).clamp(0, 1)
+        diagnostic_srl, diagnostics = scanning_robust_loss(
+            decoded_unit,
+            core_blueprint,
+            functional_weight=1.0,
+            center_fraction=config.center_fraction,
+            dark_threshold=config.dark_threshold,
+            light_threshold=config.light_threshold,
+            layout=layout,
+        )
+        # The paper defines Eq. 13 with its own SRL (Eq. 1-6). The public repository
+        # exposes a related but numerically different loss, so the faithful audit mode
+        # deliberately uses our equation-level implementation above.
+        if scanning_loss is not None and not paper_equations:
+            srl, robust_components = _robust_scanning_loss(
+                decoded_unit,
+                target_core,
+                scanning_loss,
+                config,
+            )
+        else:
+            srl = diagnostic_srl
+            robust_components = {
+                "base": diagnostic_srl,
+                "blur": None,
+                "downscale": None,
+                "brightness": None,
+                "contrast": None,
+            }
+        return srl, diagnostics, robust_components
+
+    lpips_parameter = next(iter(lpips_model.parameters()), None)
+    lpips_dtype = lpips_parameter.dtype if lpips_parameter is not None else reference_core.dtype
+
+    def lpips_term(decoded_core):
+        return lpips_model(
+            decoded_core.to(device=lpips_device, dtype=lpips_dtype),
+            reference_core.to(device=lpips_device, dtype=lpips_dtype),
+        ).mean()
+
     states: list[tuple[SRMPGDStep, Any, Image.Image]] = []
     stop_reason = "max_iterations"
     initial_module_error_rate = _module_error_for_canvas(
@@ -545,13 +612,18 @@ def _run_srmpgd(
     for iteration in range(config.max_iterations + 1):
         iteration_stop_reason = None
         with torch.enable_grad():
-            working = working.detach().requires_grad_(True)
-            decoded, decoded_image = _decode_latent(
-                pipeline,
-                working,
-                blueprint=blueprint,
-                config=config,
-            )
+            working = working.detach()
+            # First obtain the candidate raster and scalar diagnostics without retaining a VAE
+            # or LPIPS graph. The gradient is computed below as two exact chain-rule pieces:
+            # image objective gradient, then a separately recomputed VAE vector-Jacobian product.
+            mark_phase(f"iteration_{iteration}_diagnostic_vae_decode")
+            with torch.no_grad():
+                decoded, decoded_image = _decode_latent(
+                    pipeline,
+                    working,
+                    blueprint=blueprint,
+                    config=config,
+                )
             # Iteration zero is the exact raster emitted by Stage 2. Re-decoding its
             # latent can introduce VAE reconstruction errors and is therefore only
             # used by the differentiable objective, never as the no-op candidate.
@@ -560,45 +632,13 @@ def _run_srmpgd(
                 crop_tensor_to_qr_core(decoded.float(), geometry)
                 if config.crop_padding_px == -1
                 else _crop_tensor(decoded.float(), config.crop_padding_px)
-            )
-            decoded_unit = (decoded_core / 2 + 0.5).clamp(0, 1)
-            diagnostic_srl, diagnostics = scanning_robust_loss(
-                decoded_unit,
-                core_blueprint,
-                functional_weight=1.0,
-                center_fraction=config.center_fraction,
-                dark_threshold=config.dark_threshold,
-                light_threshold=config.light_threshold,
-                layout=layout,
-            )
-            # The paper defines Eq. 13 with its own SRL (Eq. 1-6). The public repository
-            # exposes a related but numerically different loss, so the faithful audit mode
-            # deliberately uses our equation-level implementation above.
-            if scanning_loss is not None and not paper_equations:
-                srl, robust_components = _robust_scanning_loss(
-                    decoded_unit,
-                    target_core,
-                    scanning_loss,
-                    config,
-                )
-            else:
-                srl = diagnostic_srl
-                robust_components = {
-                    "base": diagnostic_srl,
-                    "blur": None,
-                    "downscale": None,
-                    "brightness": None,
-                    "contrast": None,
-                }
-            lpips_parameter = next(iter(lpips_model.parameters()), None)
-            lpips_dtype = (
-                lpips_parameter.dtype if lpips_parameter is not None else decoded_core.dtype
-            )
-            lpips_loss = lpips_model(
-                decoded_core.to(dtype=lpips_dtype),
-                reference_core.to(dtype=lpips_dtype),
-            ).mean()
-            objective = srl + config.lpips_weight * lpips_loss
+            ).detach()
+            with torch.no_grad():
+                srl, diagnostics, robust_components = srl_terms(decoded_core)
+                lpips_loss = lpips_term(decoded_core)
+                srl_value = float(srl.detach().cpu())
+                lpips_value = float(lpips_loss.detach().cpu())
+                objective_value = srl_value + config.lpips_weight * lpips_value
             validation = _validation_values(
                 validation_callback(image, iteration) if validation_callback else None
             )
@@ -619,7 +659,7 @@ def _run_srmpgd(
                 paper_equations
                 or iteration == 0
                 or (
-                    float(lpips_loss.detach().cpu()) <= config.max_lpips_loss
+                    lpips_value <= config.max_lpips_loss
                     and latent_delta_rms <= config.max_total_delta_rms + 1e-8
                     and changes["mean_absolute_change"] <= config.max_mean_absolute_change
                     and changes["saturation_mean_increase"] <= config.max_saturation_mean_increase
@@ -655,54 +695,99 @@ def _run_srmpgd(
             elif (
                 paper_equations or not validation["strict_all"]
             ) and iteration < config.max_iterations:
-                # Diagnose the SRL before crossing the VAE. A positive SRL with a zero
-                # image-space gradient means that clamping/early stopping made the QR
-                # objective locally dead. E032 previously continued for 20 iterations in
-                # this state and mislabeled a VAE re-decode as SR-MPGD progress.
-                image_gradient = torch.autograd.grad(
-                    srl,
-                    decoded_core,
+                # Diagnose SRL on an image-space leaf. This deliberately has no VAE or LPIPS
+                # graph attached: a positive SRL with a zero image gradient means the QR
+                # objective itself is locally dead.
+                mark_phase(f"iteration_{iteration}_srl_image_gradient")
+                srl_core = decoded_core.detach().requires_grad_(True)
+                image_srl, _, _ = srl_terms(srl_core)
+                srl_image_gradient = torch.autograd.grad(
+                    image_srl,
+                    srl_core,
                     only_inputs=True,
-                    retain_graph=True,
                     allow_unused=True,
                 )[0]
                 image_gradient_rms = (
                     0.0
-                    if image_gradient is None
-                    else float(image_gradient.square().mean().sqrt().detach().cpu())
+                    if srl_image_gradient is None
+                    else float(srl_image_gradient.square().mean().sqrt().detach().cpu())
                 )
+                del srl_core, image_srl
+
+                mark_phase(f"iteration_{iteration}_lpips_{config.lpips_device}_image_gradient")
+                lpips_core = decoded_core.detach().requires_grad_(True)
+                image_lpips = lpips_term(lpips_core)
+                lpips_image_gradient = torch.autograd.grad(
+                    image_lpips,
+                    lpips_core,
+                    only_inputs=True,
+                    allow_unused=True,
+                )[0]
+                del lpips_core, image_lpips
+
+                if srl_image_gradient is None and lpips_image_gradient is None:
+                    objective_image_gradient = None
+                else:
+                    objective_image_gradient = torch.zeros_like(decoded_core)
+                    if srl_image_gradient is not None:
+                        objective_image_gradient.add_(srl_image_gradient)
+                    if lpips_image_gradient is not None and config.lpips_weight:
+                        objective_image_gradient.add_(
+                            lpips_image_gradient.to(device=device),
+                            alpha=config.lpips_weight,
+                        )
+                del srl_image_gradient, lpips_image_gradient
+
                 # FP16 VAE backward paths can underflow even when the mathematical
                 # gradient is non-zero. Loss scaling is algebraically neutral because the
                 # gradient is divided by the exact same factor before Eq. 14 is applied.
                 # Start at the configured scale to avoid FP16 underflow. If that scale
-                # overflows, retry deterministically with smaller powers of four down to
-                # one. The retained graph is released with the iteration locals.
-                for candidate_scale in _gradient_scale_candidates(config.gradient_scale):
-                    candidate_gradient = (
-                        torch.autograd.grad(
-                            objective * candidate_scale,
-                            working,
+                # overflows, retry deterministically with smaller powers of four down to one.
+                #
+                # Eq. 14 is evaluated with the exact chain rule in two memory-bounded pieces:
+                #   dL/dx from SRL + LPIPS, then (dx/dz)^T dL/dx through a fresh VAE decode.
+                # This is mathematically equivalent to one autograd call, but LPIPS/VGG and
+                # the VAE backward graph are never resident simultaneously. E033 showed that
+                # the combined graph exceeded 20 GiB even after diffusion-module offload.
+                if objective_image_gradient is not None and torch.isfinite(
+                    objective_image_gradient
+                ).all():
+                    for candidate_scale in _gradient_scale_candidates(config.gradient_scale):
+                        mark_phase(
+                            f"iteration_{iteration}_vae_vjp_scale_{candidate_scale:g}"
+                        )
+                        vjp_working = working.detach().requires_grad_(True)
+                        vjp_decoded = _decode_latent_tensor(pipeline, vjp_working)
+                        vjp_core = (
+                            crop_tensor_to_qr_core(vjp_decoded.float(), geometry)
+                            if config.crop_padding_px == -1
+                            else _crop_tensor(vjp_decoded.float(), config.crop_padding_px)
+                        )
+                        candidate_gradient = torch.autograd.grad(
+                            vjp_core,
+                            vjp_working,
+                            grad_outputs=(
+                                objective_image_gradient.to(dtype=vjp_core.dtype)
+                                * candidate_scale
+                            ),
                             only_inputs=True,
-                            retain_graph=True,
-                        )[0]
-                        / candidate_scale
-                    )
-                    if torch.isfinite(candidate_gradient).all():
-                        gradient = candidate_gradient
-                        effective_gradient_scale = candidate_scale
-                        break
+                        )[0] / candidate_scale
+                        del vjp_core, vjp_decoded, vjp_working
+                        if torch.isfinite(candidate_gradient).all():
+                            gradient = candidate_gradient
+                            effective_gradient_scale = candidate_scale
+                            break
+                        del candidate_gradient
+                del objective_image_gradient
                 if gradient is None:
                     iteration_stop_reason = f"non_finite_gradient_at_iteration_{iteration}"
                 else:
                     gradient_rms = float(gradient.square().mean().sqrt().detach().cpu())
                     next_step_rms = config.step_size * gradient_rms
-                    if (
-                        float(srl.detach().cpu()) > 0
-                        and image_gradient_rms <= config.min_gradient_rms
-                    ):
+                    if srl_value > 0 and image_gradient_rms <= config.min_gradient_rms:
                         iteration_stop_reason = f"zero_image_gradient_at_iteration_{iteration}"
                     elif (
-                        float(objective.detach().cpu()) > 0
+                        objective_value > 0
                         and gradient_rms <= config.min_gradient_rms
                     ):
                         iteration_stop_reason = f"zero_latent_gradient_at_iteration_{iteration}"
@@ -730,9 +815,9 @@ def _run_srmpgd(
             step = SRMPGDStep(
                 iteration=iteration,
                 elapsed_s=time.perf_counter() - started,
-                scanning_robust_loss=float(srl.detach().cpu()),
-                lpips_loss=float(lpips_loss.detach().cpu()),
-                objective=float(objective.detach().cpu()),
+                scanning_robust_loss=srl_value,
+                lpips_loss=lpips_value,
+                objective=objective_value,
                 surrogate_module_error_rate=float(diagnostics["module_error_rate"].detach().cpu()),
                 actual_module_error_rate=actual_module_error_rate,
                 gradient_rms=gradient_rms,
@@ -801,6 +886,7 @@ def _run_srmpgd(
         reference_image
     ):
         raise RuntimeError("SR-MPGD iteration zero changed the Stage-2 raster")
+    mark_phase("completed")
     return SRMPGDResult(
         image=selected_image,
         latent=selected_latent,
@@ -827,11 +913,13 @@ def run_srmpgd(
     validation_callback: ValidationCallback | None = None,
     preview_callback: PreviewCallback | None = None,
 ) -> SRMPGDResult:
-    """Run SR-MPGD and restore the pipeline VAE precision on every exit path.
+    """Run SR-MPGD and restore VAE precision/checkpointing on every exit path.
 
     Promoting only the VAE for the short post-processing loop is materially cheaper than
     promoting UNet/ControlNet, and it isolates the FP16-backward underflow observed by E032.
-    The original dtype is restored even if a numerical assertion or callback fails.
+    Decoder gradient checkpointing recomputes intermediate activations during Eq. 14 instead of
+    retaining the full 736 px decoder graph. The original state is restored even if a numerical
+    assertion or callback fails.
     """
     import torch
 
@@ -839,8 +927,15 @@ def run_srmpgd(
     vae = pipeline.vae
     original_dtype = next(vae.parameters()).dtype
     promote_vae = config.decode_precision == "float32" and original_dtype != torch.float32
+    checkpointing_was_enabled = bool(getattr(vae, "is_gradient_checkpointing", False))
+    enable_checkpointing = getattr(vae, "enable_gradient_checkpointing", None)
+    disable_checkpointing = getattr(vae, "disable_gradient_checkpointing", None)
+    checkpointing_enabled_here = False
     primary_error: BaseException | None = None
     try:
+        if not checkpointing_was_enabled and callable(enable_checkpointing):
+            enable_checkpointing()
+            checkpointing_enabled_here = True
         if promote_vae:
             vae.to(dtype=torch.float32)
         return _run_srmpgd(
@@ -857,6 +952,7 @@ def run_srmpgd(
         primary_error = exc
         raise
     finally:
+        restoration_errors: list[str] = []
         if promote_vae:
             try:
                 # Always run the restoration after a requested promotion. Checking only
@@ -864,9 +960,20 @@ def run_srmpgd(
                 # failed halfway through (for example after a CUDA OOM).
                 vae.to(dtype=original_dtype)
             except Exception as restore_error:
-                if primary_error is None:
-                    raise
-                primary_error.add_note(
-                    "SR-MPGD also failed to restore the VAE precision: "
+                restoration_errors.append(
+                    "VAE precision: "
                     f"{type(restore_error).__name__}: {restore_error}"
                 )
+        if checkpointing_enabled_here and callable(disable_checkpointing):
+            try:
+                disable_checkpointing()
+            except Exception as restore_error:
+                restoration_errors.append(
+                    "VAE gradient checkpointing: "
+                    f"{type(restore_error).__name__}: {restore_error}"
+                )
+        if restoration_errors:
+            message = "SR-MPGD restoration failed: " + "; ".join(restoration_errors)
+            if primary_error is None:
+                raise RuntimeError(message)
+            primary_error.add_note(message)

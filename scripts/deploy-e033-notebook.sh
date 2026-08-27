@@ -151,6 +151,7 @@ kubectl exec -n "$namespace" "deployment/${notebook_deployment}" -c notebook -- 
 kubectl exec -i -n "$namespace" "deployment/${api_deployment}" -c api -- \
   python - <<'PY'
 import json
+import os
 import urllib.request
 
 ready = json.load(urllib.request.urlopen("http://127.0.0.1:8080/readyz"))
@@ -164,6 +165,7 @@ required = {
     "e033_equation_srmpgd_fp32",
 }
 assert ready["status"] == "ready"
+assert os.environ["PYTORCH_CUDA_ALLOC_CONF"] == "expandable_segments:True"
 assert required <= set(profiles), sorted(required - set(profiles))
 
 public = profiles["e033_public_demo_srpg"]
@@ -183,11 +185,12 @@ for profile, precision in ((fp16, "model"), (fp32, "float32")):
     assert profile["output_variant"] == "srmpgd"
     settings = profile["tools"]["settings"]
     assert settings["srmpgd_protocol"] == "paper_equations"
-    assert settings["srmpgd_max_iterations"] == 4
+    assert settings["srmpgd_max_iterations"] == 1
     assert settings["srmpgd_step_size"] == 1000.0
     assert settings["srmpgd_gradient_scale"] == 32768.0
     assert settings["srmpgd_min_gradient_rms"] == 1e-12
     assert settings["srmpgd_decode_precision"] == precision
+    assert settings["srmpgd_lpips_device"] == "cpu"
     assert settings["srmpgd_lpips_weight"] == 0.01
     assert settings["srmpgd_crop_padding_px"] == 78
 print("Schéma E033 vérifié:", sorted(required))

@@ -21,7 +21,7 @@ def test_e033_notebook_is_one_resumable_paired_microdiagnostic():
     assert "e033-srmpgd-microdiagnostic-v1" in source
     assert "e033_simple_greenhouse" in source
     assert "SEED = 51_001" in source
-    assert "MILESTONE_ITERATIONS = [0, 1, 2, 4]" in source
+    assert "MILESTONE_ITERATIONS = [0, 1]" in source
     assert "AUTOMATIC_EXPANSION_AUTHORIZED = False" in source
     assert "len(plan.campaigns) == 1" in source
     assert "plan.public['campaign_count'] == 1" in source
@@ -47,6 +47,8 @@ def test_e033_notebook_is_one_resumable_paired_microdiagnostic():
     assert "srmpgd_decode_precision'] == 'model'" in source
     assert "srmpgd_decode_precision'] == 'float32'" in source
     assert "srmpgd_gradient_scale'] == 32768.0" in source
+    assert "srmpgd_max_iterations'] == 1" in source
+    assert "srmpgd_lpips_device'] == 'cpu'" in source
     assert "candidate_signature != public_stage2_signature" in source
 
 
@@ -90,9 +92,11 @@ def test_e033_contact_sheets_precede_fp32_verdict_and_archive_is_unconditional()
     assert final_sheet < milestone_sheet < gates < archive < final_reading
 
     assert "gradient_0 is not None and gradient_0 > 0" in source
+    assert "image_gradient_0 is not None and image_gradient_0 > 0" in source
+    assert "applied_step_0 is not None and applied_step_0 > 0" in source
     assert "latent_delta_1 is not None and latent_delta_1 > 0" in source
-    assert "minimum_srl_1_to_4 < srl_0" in source
-    assert "range(1, 5)" in source
+    assert "srl_1 < srl_0" in source
+    assert "manual_review_then_design_four_iteration_gate" in source
     assert "primary_fp32_gates_passed" in source
     assert "stop_and_fix_numerics_without_expanding" in source
     assert "Archive créée même en cas de STOP" in source

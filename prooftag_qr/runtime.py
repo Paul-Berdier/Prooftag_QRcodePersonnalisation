@@ -141,6 +141,7 @@ def runtime_info(
             "srmpgd_decode_precision": settings.srmpgd_decode_precision,
             "srmpgd_lpips_weight": settings.srmpgd_lpips_weight,
             "srmpgd_lpips_net": settings.srmpgd_lpips_net,
+            "srmpgd_lpips_device": settings.srmpgd_lpips_device,
             "srmpgd_crop_padding_px": settings.srmpgd_crop_padding_px,
             "srmpgd_dark_threshold": settings.srmpgd_dark_threshold,
             "srmpgd_light_threshold": settings.srmpgd_light_threshold,

@@ -1709,3 +1709,40 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
 - **Décision :** conserver le plan en lecture seule et relancer sous un nouveau commit/digest/plan.
   La validation CUDA réelle reste requise avant tout PASS scientifique.
 - **Rapport :** `docs/e033-technical-incident-2026-08-26.md`.
+
+## E033 - second incident VRAM et décision VJP - 27 août 2026
+
+- **Plan :** `82549caa971652bb`, une campagne, un prompt, un seed et cinq trials.
+- **Archive technique :**
+  `82549caa971652bb-e033-srmpgd-microdiagnostic-v1-technical-failure.tar.gz`, SHA-256
+  `3534cf4e22761f7027bf4fd237016a8cdb38a86cdfbf756c18d8250e3cf3c360` ; dix fichiers sur
+  dix conformes à `checksums.json`, aucun payload non manifesté.
+- **Orchestration :** une seule tentative, état terminal sans campagne active, export complet de
+  cinq lignes. Trois témoins sont conservés et deux branches SR-MPGD sont en erreur. Le runner ne
+  répète plus une OOM déterministe.
+- **Stage 1 :** QR-Verify `0/37`, MER `24,62 %`, CLIP-AES `7,086`, HPS `0,300`.
+- **Stage 2 PDF :** QR-Verify `0/37`, MER `9,04 %`, CLIP-AES `2,922`, HPS `0,088`, saturation
+  moyenne `0,695` et garde de divergence déclenchée.
+- **Stage 2 public :** QR-Verify `0/37`, MER `1,90 %`, CLIP-AES `6,882`, HPS `0,223`, sans
+  divergence. Son latent parent porte le SHA-256
+  `215346a50b3223b3250f2fe3af2a35a3937779601db957fa4a1b09bae3565b7b`.
+- **FP16 :** OOM avant sortie ; 19,63 Gio processus, 18,81 Gio alloués par PyTorch, 615 Mio
+  réservés non alloués, 39,12 Mio libres et allocation de 266 Mio refusée.
+- **FP32 :** OOM avant sortie ; 19,57 Gio processus, 18,99 Gio alloués, 374,19 Mio réservés non
+  alloués, 95,12 Mio libres et allocation de 530 Mio refusée.
+- **Limite de provenance :** les erreurs précèdent l'enregistrement du SHA du Stage 2 importé par
+  les branches SR-MPGD. L'appariement avec le parent public est prévu mais pas encore prouvé.
+- **Cause consolidée :** l'offload des modules de diffusion ne suffit pas. Le VAE décode le raster
+  complet 736 px ; le crop `736 - 2 * 78 = 580 = 29 * 20` garantit la géométrie QR mais ne réduit
+  pas les activations du décodeur. Le graphe VAE 736 px, la SRL, LPIPS/VGG et les graphes retenus
+  dépassent ensemble les 20 Gio.
+- **Décision algorithmique :** calculer séparément `d(SRL)/dx` et `d(LPIPS)/dx`, libérer leurs
+  graphes, puis recalculer un décodeur VAE checkpointé et appliquer le VJP
+  `(dx/dz)^T dL/dx`. Cette factorisation conserve exactement `SRL + 0,01 LPIPS` et Eq. 14.
+- **Porte suivante :** un nouveau plan limité à une itération doit prouver appariement SHA,
+  itération zéro exacte, gradients finis non nuls, pas et déplacement latent non nuls, absence
+  d'OOM et baisse de SRL. Quatre itérations ne seront autorisées que dans un plan ultérieur après
+  ce PASS ; aucune campagne multi-prompt avant cette seconde porte.
+- **Décision scientifique :** progrès d'observabilité seulement. E033 reste STOP et ne valide ni
+  SR-MPGD, ni une amélioration de scannabilité.
+- **Rapport consolidé :** `docs/e033-technical-incident-2026-08-26.md`.

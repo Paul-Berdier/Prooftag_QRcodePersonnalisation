@@ -156,6 +156,7 @@ class Settings(BaseSettings):
     srmpgd_decode_precision: Literal["model", "float32"] = "model"
     srmpgd_lpips_weight: float = Field(default=0.10, ge=0.0, le=100.0)
     srmpgd_lpips_net: Literal["alex", "vgg", "squeeze"] = "vgg"
+    srmpgd_lpips_device: Literal["model", "cpu"] = "model"
     srmpgd_crop_padding_px: int = Field(default=-1, ge=-1, le=256)
     srmpgd_dark_threshold: float = Field(default=0.5, gt=0.0, lt=1.0)
     srmpgd_light_threshold: float = Field(default=0.5, gt=0.0, lt=1.0)
