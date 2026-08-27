@@ -45,6 +45,9 @@ def _srmpgd_step_zero() -> SRMPGDStep:
         worst_scenario_pass_rate=0.5,
         gradient_rms=None,
         image_gradient_rms=None,
+        lpips_image_gradient_rms=0.03,
+        weighted_lpips_image_gradient_rms=0.0003,
+        objective_image_gradient_rms=0.02,
         gradient_scale=32_768.0,
         next_step_rms=None,
         applied_step_rms=None,
@@ -89,6 +92,8 @@ def test_upstream_srmpgd_iteration_zero_receives_and_returns_exact_stage2_raster
             duration_s=0.1,
             initial_module_error_rate=0.1,
             final_module_error_rate=0.1,
+            lpips_reference_mode="paper_stage2_float",
+            lpips_reference_image_sha256=stage2_hash,
         )
 
     monkeypatch.setattr(backend_module, "run_srmpgd", fake_run_srmpgd)
@@ -120,6 +125,26 @@ def test_upstream_srmpgd_iteration_zero_receives_and_returns_exact_stage2_raster
     assert backend.debug_metadata()["srmpgd_stage2_image_sha256"] == stage2_hash
     assert backend.debug_metadata()["srmpgd_selected_image_sha256"] == stage2_hash
     assert backend.debug_metadata()["srmpgd_trace"]["initial_redecoded_image_sha256"] == stage2_hash
+    assert backend.debug_metadata()["srmpgd_trace"]["lpips_reference_mode"] == (
+        "paper_stage2_float"
+    )
+    assert backend.debug_metadata()["srmpgd_trace"]["lpips_reference_image_sha256"] == (
+        stage2_hash
+    )
+    trace_step = backend.debug_metadata()["srmpgd_trace"]["steps"][0]
+    assert trace_step["lpips_image_gradient_rms"] == pytest.approx(0.03)
+    assert trace_step["weighted_lpips_image_gradient_rms"] == pytest.approx(0.0003)
+    assert trace_step["objective_image_gradient_rms"] == pytest.approx(0.02)
+    diagnostics = backend.diagnostics()
+    assert diagnostics["diffqrcoder_srmpgd_initial_lpips_image_gradient_rms"] == pytest.approx(
+        0.03
+    )
+    assert diagnostics[
+        "diffqrcoder_srmpgd_initial_weighted_lpips_image_gradient_rms"
+    ] == pytest.approx(0.0003)
+    assert diagnostics[
+        "diffqrcoder_srmpgd_initial_objective_image_gradient_rms"
+    ] == pytest.approx(0.02)
     assert backend.provenance()["srmpgd_stage2_image_sha256"] == stage2_hash
     assert backend.provenance()["srmpgd_selected_image_sha256"] == stage2_hash
 
@@ -203,6 +228,8 @@ def test_paper_srmpgd_offloads_diffusion_modules_and_skips_upstream_srpg(monkeyp
             duration_s=0.1,
             initial_module_error_rate=0.1,
             final_module_error_rate=0.1,
+            lpips_reference_mode="paper_stage2_float",
+            lpips_reference_image_sha256=image_sha256(kwargs["initial_image"]),
         )
 
     monkeypatch.setattr(backend_module, "run_srmpgd", fake_run_srmpgd)

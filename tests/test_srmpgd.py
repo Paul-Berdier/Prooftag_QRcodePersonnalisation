@@ -28,6 +28,7 @@ def test_gradient_scale_candidates_descend_to_one_without_exceeding_maximum():
 def test_split_image_vjp_matches_the_direct_latent_gradient(monkeypatch):
     torch = pytest.importorskip("torch")
     from prooftag_qr import srmpgd
+    from prooftag_qr.quality import image_sha256
 
     class ToyVAE(torch.nn.Module):
         config = SimpleNamespace(scaling_factor=1.0)
@@ -69,16 +70,28 @@ def test_split_image_vjp_matches_the_direct_latent_gradient(monkeypatch):
 
     direct_latent = initial.detach().clone().requires_grad_(True)
     direct_decoded = pipeline.vae.decode(direct_latent, return_dict=False)[0].float()
+    stage2_image = pipeline.image_processor.postprocess(direct_decoded.detach())[0]
+    reference = direct_decoded.detach()
     direct_unit = (direct_decoded / 2 + 0.5).clamp(0, 1)
     direct_srl, _ = toy_scanning_loss(direct_unit)
-    with torch.no_grad():
-        reference = pipeline.vae.decode(initial, return_dict=False)[0].float()
     direct_lpips = BiasedLPIPS()(direct_decoded, reference).mean()
+    direct_srl_image_gradient = torch.autograd.grad(
+        direct_srl,
+        direct_decoded,
+        retain_graph=True,
+    )[0]
+    direct_lpips_image_gradient = torch.autograd.grad(
+        direct_lpips,
+        direct_decoded,
+        retain_graph=True,
+    )[0]
+    direct_objective_image_gradient = (
+        direct_srl_image_gradient + lpips_weight * direct_lpips_image_gradient
+    )
     direct_gradient = torch.autograd.grad(
         direct_srl + lpips_weight * direct_lpips,
         direct_latent,
     )[0]
-    stage2_image = pipeline.image_processor.postprocess(direct_decoded.detach())[0]
 
     result = srmpgd.run_srmpgd(
         pipeline,
@@ -97,8 +110,32 @@ def test_split_image_vjp_matches_the_direct_latent_gradient(monkeypatch):
     )
 
     split_gradient = (initial - result.latent) / step_size
+    update = result.steps[0]
     assert result.selected_iteration == 1
     assert torch.allclose(split_gradient, direct_gradient, rtol=2e-5, atol=2e-6)
+    assert update.image_gradient_rms == pytest.approx(
+        float(direct_srl_image_gradient.square().mean().sqrt()),
+        rel=2e-5,
+    )
+    assert update.lpips_image_gradient_rms == pytest.approx(
+        float(direct_lpips_image_gradient.square().mean().sqrt()),
+        rel=2e-5,
+    )
+    assert update.weighted_lpips_image_gradient_rms == pytest.approx(
+        lpips_weight * update.lpips_image_gradient_rms,
+        rel=2e-5,
+    )
+    assert update.objective_image_gradient_rms == pytest.approx(
+        float(direct_objective_image_gradient.square().mean().sqrt()),
+        rel=2e-5,
+    )
+    assert update.image_sha256 == image_sha256(stage2_image)
+    assert result.steps[1].image_sha256 == image_sha256(result.image)
+    # The final state has no outgoing update, so gradient telemetry belongs to
+    # iteration zero: it is the update that produces i1.
+    assert result.steps[1].lpips_image_gradient_rms is None
+    assert result.lpips_reference_mode == "paper_stage2_float"
+    assert result.lpips_reference_image_sha256 == image_sha256(stage2_image)
 
 
 def test_cpu_lpips_contributes_a_finite_nonzero_latent_gradient(monkeypatch):
@@ -130,9 +167,11 @@ def test_cpu_lpips_contributes_a_finite_nonzero_latent_gradient(monkeypatch):
             super().__init__()
             self.anchor = torch.nn.Parameter(torch.tensor(1.0), requires_grad=False)
             self.devices = []
+            self.reference_means = []
 
         def forward(self, image, reference):
             self.devices.append((image.device.type, reference.device.type))
+            self.reference_means.append(float(reference.detach().mean()))
             return (
                 (image - reference + 0.25).square().mean() * self.anchor
             ).reshape(1, 1, 1, 1)
@@ -175,7 +214,15 @@ def test_cpu_lpips_contributes_a_finite_nonzero_latent_gradient(monkeypatch):
 
     assert requested_devices == ["cpu"]
     assert lpips_model.devices and set(lpips_model.devices) == {("cpu", "cpu")}
+    assert lpips_model.reference_means
+    assert all(value == pytest.approx(0.0) for value in lpips_model.reference_means)
     assert result.steps[0].lpips_loss > 0
+    assert result.steps[0].image_gradient_rms == pytest.approx(0.0)
+    assert result.steps[0].lpips_image_gradient_rms > 0
+    assert result.steps[0].weighted_lpips_image_gradient_rms > 0
+    assert result.steps[0].objective_image_gradient_rms == pytest.approx(
+        result.steps[0].weighted_lpips_image_gradient_rms
+    )
     assert result.steps[0].gradient_rms > 0
     assert np.isfinite(result.steps[0].gradient_rms)
     assert torch.isfinite(result.latent).all()
@@ -366,6 +413,11 @@ def test_srmpgd_uses_exact_latent_original_qr_and_stops_on_strict_validation(mon
     assert result.steps[0].applied_step_rms <= 0.02
     assert result.steps[0].eligible_for_selection is True
     assert result.steps[0].lpips_loss == pytest.approx(0.0, abs=1e-7)
+    assert result.steps[0].lpips_image_gradient_rms == pytest.approx(0.0, abs=1e-9)
+    assert result.steps[0].weighted_lpips_image_gradient_rms == pytest.approx(
+        0.0, abs=1e-11
+    )
+    assert result.lpips_reference_mode == "paper_stage2_float"
     assert result.image.size == blueprint.image.size
     assert scanning_loss_calls == [((1, 3, 128, 128), (1, 1, 128, 128))] * 2
 

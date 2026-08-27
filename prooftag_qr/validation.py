@@ -450,6 +450,36 @@ class ConservativeQRVerifyScore:
         }
 
 
+def canonical_conservative_qr_verify_evidence(
+    score: ConservativeQRVerifyScore,
+) -> dict[str, Any]:
+    """Return deterministic scientific evidence for one conservative score.
+
+    Cache state, filesystem paths, wall-clock creation time and per-preset latency
+    describe how the score was obtained, not its QR verdict.  Excluding them keeps
+    a persisted audit byte-identical when a second run reads the same content-
+    addressed score from cache.
+    """
+
+    evidence = score.to_dict()
+    for field in ("cache_hit", "cache_path", "created_at_utc"):
+        evidence.pop(field, None)
+    canonical_runs = []
+    for run in evidence.get("runs", []):
+        canonical_run = dict(run)
+        canonical_run["preset_results"] = [
+            {
+                key: value
+                for key, value in dict(preset).items()
+                if key != "latency_ms"
+            }
+            for preset in run.get("preset_results", [])
+        ]
+        canonical_runs.append(canonical_run)
+    evidence["runs"] = canonical_runs
+    return evidence
+
+
 class ConservativeQRVerifyScorer:
     """Run QR-Verify repeatedly and persist one conservative raster verdict.
 

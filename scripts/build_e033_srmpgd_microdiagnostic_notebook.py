@@ -874,7 +874,11 @@ if not missing_milestones.empty:
 redecode_lookup = {
     row.method_id: row for row in redecodes.itertuples(index=False)
 }
-fig, axes = plt.subplots(2, 6, figsize=(21, 7.8))
+milestone_column_count = 2 + len(MILESTONE_ITERATIONS)
+fig, axes = plt.subplots(
+    len(MILESTONE_METHOD_IDS), milestone_column_count,
+    figsize=(3.5 * milestone_column_count, 7.8),
+)
 for row_index, method_id in enumerate(MILESTONE_METHOD_IDS):
     parent_entry = gallery_by_method['e033_public_demo_srpg']
     with Image.open(parent_entry['local_image']) as source:

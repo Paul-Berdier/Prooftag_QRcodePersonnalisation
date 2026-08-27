@@ -79,6 +79,7 @@ def test_e033_notebook_proves_pairing_and_downloads_milestones_directly():
     assert "PRIMARY_MILESTONES_AVAILABLE" in source
     assert "primary_steps.get(1, {}).get('latent_delta_rms')" in source
     assert "len(milestones) != len(MILESTONE_METHOD_IDS) * len(MILESTONE_ITERATIONS)" in source
+    assert "milestone_column_count = 2 + len(MILESTONE_ITERATIONS)" in source
 
 
 def test_e033_contact_sheets_precede_fp32_verdict_and_archive_is_unconditional():

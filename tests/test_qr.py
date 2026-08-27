@@ -25,6 +25,7 @@ from prooftag_qr.validation import (
     QRValidator,
     QRVerifyDecoder,
     WeChatQRCodeDecoder,
+    canonical_conservative_qr_verify_evidence,
     compare_validation_to_reference,
     image_raster_sha256,
 )
@@ -223,6 +224,17 @@ def test_conservative_qr_verify_cache_is_reused_by_raster_payload_and_version(tm
     assert second.payload_sha256 == first.payload_sha256
     assert second.conservative_tolerance_score == first.conservative_tolerance_score
     assert second.runs == first.runs
+    first_evidence = canonical_conservative_qr_verify_evidence(first)
+    second_evidence = canonical_conservative_qr_verify_evidence(second)
+    assert second_evidence == first_evidence
+    assert "cache_hit" not in first_evidence
+    assert "cache_path" not in first_evidence
+    assert "created_at_utc" not in first_evidence
+    assert all(
+        "latency_ms" not in preset
+        for run in first_evidence["runs"]
+        for preset in run["preset_results"]
+    )
 
 
 def test_conservative_qr_verify_cache_key_changes_with_raster_payload_and_version(tmp_path):

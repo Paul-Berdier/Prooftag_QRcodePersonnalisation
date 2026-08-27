@@ -177,6 +177,8 @@ def test_web_lab_exposes_only_the_pinned_diffqrcoder_chain():
         "e033_public_demo_srpg",
         "e033_equation_srmpgd_fp16",
         "e033_equation_srmpgd_fp32",
+        "e034_equation_srmpgd_fp16",
+        "e034_equation_srmpgd_fp32",
         "diffqrcoder_srmpgd",
         "diffqrcoder_srmpgd_robust",
         "diffqrcoder_auto",
@@ -219,6 +221,12 @@ def test_web_lab_exposes_only_the_pinned_diffqrcoder_chain():
     e033_fp32 = next(
         profile for profile in profiles if profile["id"] == "e033_equation_srmpgd_fp32"
     )
+    e034_fp16 = next(
+        profile for profile in profiles if profile["id"] == "e034_equation_srmpgd_fp16"
+    )
+    e034_fp32 = next(
+        profile for profile in profiles if profile["id"] == "e034_equation_srmpgd_fp32"
+    )
     assert e033_stage2["tools"]["settings"]["srpg_qr_weight"] == 50.0
     assert e033_stage2["tools"]["settings"]["srpg_perceptual_weight"] == 20.0
     assert e033_stage2["tools"]["settings"]["diffqrcoder_stage2_initialization"] == "public_random"
@@ -229,6 +237,23 @@ def test_web_lab_exposes_only_the_pinned_diffqrcoder_chain():
     assert e033_fp32["tools"]["settings"]["srmpgd_max_iterations"] == 1
     assert e033_fp16["tools"]["settings"]["srmpgd_lpips_device"] == "cpu"
     assert e033_fp32["tools"]["settings"]["srmpgd_lpips_device"] == "cpu"
+    for e033_profile, e034_profile in (
+        (e033_fp16, e034_fp16),
+        (e033_fp32, e034_fp32),
+    ):
+        assert e034_profile["enabled"] is False
+        assert e034_profile["backend"] == e033_profile["backend"]
+        assert e034_profile["output_variant"] == e033_profile["output_variant"]
+        assert e034_profile["reuse_stage1"] == e033_profile["reuse_stage1"]
+        assert e034_profile["generation"] == e033_profile["generation"]
+        assert e034_profile["model"] == e033_profile["model"]
+        assert e034_profile["tools"] == {
+            **e033_profile["tools"],
+            "settings": {
+                **e033_profile["tools"]["settings"],
+                "srmpgd_max_iterations": 4,
+            },
+        }
     qart = next(profile for profile in profiles if profile["id"] == "diffqrcoder_qart_srpg")
     automatic = next(profile for profile in profiles if profile["id"] == "diffqrcoder_auto")
     srmpgd = next(profile for profile in profiles if profile["id"] == "diffqrcoder_srmpgd")
@@ -303,6 +328,12 @@ def test_srmpgd_reuses_the_matching_srpg_stage2_cache_key(tmp_path):
     )
     e033_fp32 = LabMethod.model_validate(
         next(item for item in profiles if item["id"] == "e033_equation_srmpgd_fp32")
+    )
+    e034_fp16 = LabMethod.model_validate(
+        next(item for item in profiles if item["id"] == "e034_equation_srmpgd_fp16")
+    )
+    e034_fp32 = LabMethod.model_validate(
+        next(item for item in profiles if item["id"] == "e034_equation_srmpgd_fp32")
     )
     try:
         srpg_key = service._stage2_cache_key(
@@ -385,6 +416,22 @@ def test_srmpgd_reuses_the_matching_srpg_stage2_cache_key(tmp_path):
             "M",
             "https://ptag.io/t/cache",
         )
+        e034_fp16_key = service._stage2_cache_key(
+            e034_fp16,
+            "blue courtyard",
+            "easynegative",
+            51001,
+            "M",
+            "https://ptag.io/t/cache",
+        )
+        e034_fp32_key = service._stage2_cache_key(
+            e034_fp32,
+            "blue courtyard",
+            "easynegative",
+            51001,
+            "M",
+            "https://ptag.io/t/cache",
+        )
     finally:
         service.shutdown()
 
@@ -394,6 +441,7 @@ def test_srmpgd_reuses_the_matching_srpg_stage2_cache_key(tmp_path):
     assert paper_srpg_key == paper_srmpgd_key
     assert paper_srpg_key == paper_srmpgd_guarded_key
     assert e033_stage2_key == e033_fp16_key == e033_fp32_key
+    assert e033_stage2_key == e034_fp16_key == e034_fp32_key
 
 
 def test_stage2_cache_key_uses_effective_math_not_debug_settings(tmp_path):

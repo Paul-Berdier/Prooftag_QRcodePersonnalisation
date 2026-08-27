@@ -1746,3 +1746,56 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
 - **Décision scientifique :** progrès d'observabilité seulement. E033 reste STOP et ne valide ni
   SR-MPGD, ni une amélioration de scannabilité.
 - **Rapport consolidé :** `docs/e033-technical-incident-2026-08-26.md`.
+
+## E033 - gate SR-MPGD à une itération réussi - 27 août 2026
+
+- **Plan :** `f2b9c0df72cd8cd4`, commit `8f66ac910023`, une campagne, une tentative, cinq
+  trials et aucune erreur technique.
+- **Archive :** `f2b9c0df72cd8cd4-e033-srmpgd-microdiagnostic-v1.tar.gz`, SHA-256
+  `2f71c0d9ec1f8bf7b037262bd1b8e2b3935d73a0c379205251cfc9f5afe16f62` ; 28 artefacts
+  sur 28 conformes au manifeste et aucun fichier supplémentaire.
+- **Mémoire :** aucune OOM. Pic SR-MPGD `5,686 Gio` en précision modèle et `6,658 Gio` en
+  FP32 après offload de trois modules (`2,503 Gio`) et LPIPS/VGG sur CPU.
+- **Appariement :** Stage 1 et Stage 2 exacts pour les quatre branches dépendantes ; i0 FP16 et
+  i0 FP32 sont pixel-identiques au Stage 2 public parent.
+- **Mécanisme FP32 :** gradient image `2,5058e-7`, gradient latent `7,8558e-6`, pas et delta
+  latent `0,0078558` ; SRL `0,00392238 → 0,00115172` (`-70,64 %`) et objectif total
+  `0,00392238 → 0,00116415` (`-70,32 %`).
+- **QR :** MER `1,7836 % → 1,4269 %`, mais QR-Verify reste `0/37`. Le PASS est numérique et
+  local ; ce n'est pas un succès de scannabilité.
+- **Esthétique :** parent / FP32 : CLIP-AES `6,9186 / 6,8723`, CLIPScore
+  `0,73764 / 0,73480`, HPS `0,221759 / 0,221677`. La revue des rasters ne montre ni taches ni
+  saturation destructive. FP16 et FP32 i1 ont un PSNR mutuel de `61,71 dB`.
+- **Limite LPIPS :** LPIPS vaut zéro à i0 ; la voie CPU est exécutée, mais sa contribution
+  différentielle non nulle ne pourra être auditée qu'à partir du pas suivant.
+- **Périmètre :** le parent SR-MPGD est la recette démo publique `public_random` à cible binaire,
+  pas le Stage 2 PDF QArt. Le mode papier teste la SRL Eq. 1-6 sans les augmentations robustes ; le
+  témoin VAE n'a pas encore ses propres SRL, MER et QR-Verify.
+- **Décision :** concevoir un nouveau gate immutable de quatre itérations sur la même paire,
+  avec jalons i0/i1/i2/i4, télémétrie séparée du gradient LPIPS et scores du témoin VAE. Toujours
+  aucune extension multi-prompt avant ce second PASS.
+- **Rapport :** `docs/e033-results-2026-08-27.md`.
+
+## E034 - porte SR-MPGD appariée à quatre itérations - 27 août 2026
+
+- **But :** prolonger uniquement la paire E033 réussie jusqu'à quatre mises à jour, sur le même
+  prompt, seed, payload et parent Stage 2 public, avant toute extension multi-prompt.
+- **Matrice :** quatre sorties dans une campagne reprenable : Stage 1, parent
+  `e033_public_demo_srpg`, puis Eq. 13-14 à quatre itérations en précision VAE modèle et FP32.
+- **Jalons :** rasters directs `i0/i1/i2/i4`, trace complète `i0..i4`, témoins VAE sans mise à
+  jour et hashes d'appariement du Stage 1, du parent, du latent et de l'état initial.
+- **Télémétrie :** gradients image séparés SRL/LPIPS/objectif, contribution LPIPS pondérée,
+  gradient latent VJP, pas appliqué, déplacement latent, objectif, SRL, MER, pic CUDA agrégé et
+  phase courante en cas d'OOM.
+- **Audit Eq. 13 :** la référence LPIPS est le tenseur flottant figé `x0 = D(z0)` défini en
+  Sec. 3.2, avec mode et SHA-256 témoin vérifiés. LPIPS et son gradient doivent être nuls à `i0`,
+  puis le gradient doit devenir actif de `i1` à `i3`. Un raster PIL quantifié ajouterait une
+  opération absente du papier. Le dépôt public utilise ici l'image Stage 1, différence
+  explicitement séparée de la reconstruction des Eq. 13-14 du PDF.
+- **Mesure :** QR-Verify/MER, MAE, clipping et saturation sont calculés sur le parent, les témoins
+  VAE et les jalons afin d'isoler l'effet réel d'Eq. 14. CLIP-Aesthetic, CLIPScore et HPS v2.1
+  restent liés aux quatre sorties finales ; le PSNR compare les sorties finales FP16/FP32.
+- **Décision :** verdicts mécanisme, progrès QR, payload QR-Verify exact et préservation visuelle
+  restent séparés. Production et élargissement automatique restent interdits ; un STOP technique
+  ou scientifique est archivé sans régénération GPU implicite.
+- **Protocole :** `docs/e034-srmpgd-four-iteration-gate.md`.

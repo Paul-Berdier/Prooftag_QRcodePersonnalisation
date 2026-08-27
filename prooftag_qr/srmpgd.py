@@ -111,6 +111,16 @@ class SRMPGDStep:
     downscale_scanning_loss: float | None
     brightness_scanning_loss: float | None
     contrast_scanning_loss: float | None
+    # Image-space gradient telemetry for the update from this iteration to the
+    # next one. ``image_gradient_rms`` above remains the historical SRL-only
+    # value for backward compatibility.
+    lpips_image_gradient_rms: float | None = None
+    weighted_lpips_image_gradient_rms: float | None = None
+    objective_image_gradient_rms: float | None = None
+    # Canonical decoded RGB raster hash. This binds each trace row to the
+    # directly downloadable milestone and prevents a stale/aliased preview
+    # from being interpreted as an optimizer state.
+    image_sha256: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,6 +134,8 @@ class SRMPGDResult:
     duration_s: float
     initial_module_error_rate: float
     final_module_error_rate: float
+    lpips_reference_mode: str
+    lpips_reference_image_sha256: str
 
 
 ValidationCallback = Callable[[Image.Image, int], Mapping[str, Any]]
@@ -516,6 +528,17 @@ def _run_srmpgd(
             raise ValueError(
                 "initial_image and decoded initial_latent must have identical dimensions"
             )
+        # In Sec. 3.2 the paper defines x0 = D(z0), then Eq. 13 regularizes every
+        # updated D(z_i) against that fixed x0.  Keep this floating-point decode:
+        # a PIL round-trip would add clamp/uint8 quantization that is absent from
+        # Eqs. 13-14.  The public repository is a separate implementation variant
+        # and passes the Stage-1 image instead; ``paper_equations`` must not do so.
+        reference_tensor = reference_decoded.float().detach()
+        lpips_reference_mode = "paper_stage2_float"
+        if reference_tensor.shape != reference_decoded.shape:
+            raise ValueError(
+                "LPIPS Stage-2 reference and decoded latent must have identical shapes"
+            )
         if config.crop_padding_px == -1:
             geometry = qr_core_geometry(
                 blueprint,
@@ -523,14 +546,14 @@ def _run_srmpgd(
                 reference_decoded.shape[-1],
             )
             reference_core = crop_tensor_to_qr_core(
-                reference_decoded.float(),
+                reference_tensor,
                 geometry,
             ).detach()
             core_blueprint = geometry.blueprint
             resolved_crop_padding_px = geometry.left
         else:
             reference_core = _crop_tensor(
-                reference_decoded.float(),
+                reference_tensor,
                 config.crop_padding_px,
             ).detach()
             core_blueprint = _core_blueprint(
@@ -617,13 +640,20 @@ def _run_srmpgd(
             # or LPIPS graph. The gradient is computed below as two exact chain-rule pieces:
             # image objective gradient, then a separately recomputed VAE vector-Jacobian product.
             mark_phase(f"iteration_{iteration}_diagnostic_vae_decode")
-            with torch.no_grad():
-                decoded, decoded_image = _decode_latent(
-                    pipeline,
-                    working,
-                    blueprint=blueprint,
-                    config=config,
-                )
+            if iteration == 0:
+                # Reuse the exact floating-point D(z0) frozen for Eq. 13. Besides
+                # avoiding one redundant VAE pass, this makes the mathematical
+                # identity LPIPS(D(z0), x0) = 0 directly auditable.
+                decoded = reference_decoded
+                decoded_image = decoded_reference_image.copy()
+            else:
+                with torch.no_grad():
+                    decoded, decoded_image = _decode_latent(
+                        pipeline,
+                        working,
+                        blueprint=blueprint,
+                        config=config,
+                    )
             # Iteration zero is the exact raster emitted by Stage 2. Re-decoding its
             # latent can introduce VAE reconstruction errors and is therefore only
             # used by the differentiable objective, never as the no-op candidate.
@@ -683,6 +713,9 @@ def _run_srmpgd(
             gradient = None
             gradient_rms = None
             image_gradient_rms = None
+            lpips_image_gradient_rms = None
+            weighted_lpips_image_gradient_rms = None
+            objective_image_gradient_rms = None
             effective_gradient_scale = None
             next_step_rms = None
             applied_step_rms = None
@@ -723,6 +756,16 @@ def _run_srmpgd(
                     only_inputs=True,
                     allow_unused=True,
                 )[0]
+                lpips_image_gradient_rms = (
+                    0.0
+                    if lpips_image_gradient is None
+                    else float(
+                        lpips_image_gradient.square().mean().sqrt().detach().cpu()
+                    )
+                )
+                weighted_lpips_image_gradient_rms = (
+                    config.lpips_weight * lpips_image_gradient_rms
+                )
                 del lpips_core, image_lpips
 
                 if srl_image_gradient is None and lpips_image_gradient is None:
@@ -736,6 +779,13 @@ def _run_srmpgd(
                             lpips_image_gradient.to(device=device),
                             alpha=config.lpips_weight,
                         )
+                objective_image_gradient_rms = (
+                    None
+                    if objective_image_gradient is None
+                    else float(
+                        objective_image_gradient.square().mean().sqrt().detach().cpu()
+                    )
+                )
                 del srl_image_gradient, lpips_image_gradient
 
                 # FP16 VAE backward paths can underflow even when the mathematical
@@ -822,6 +872,10 @@ def _run_srmpgd(
                 actual_module_error_rate=actual_module_error_rate,
                 gradient_rms=gradient_rms,
                 image_gradient_rms=image_gradient_rms,
+                lpips_image_gradient_rms=lpips_image_gradient_rms,
+                weighted_lpips_image_gradient_rms=weighted_lpips_image_gradient_rms,
+                objective_image_gradient_rms=objective_image_gradient_rms,
+                image_sha256=image_sha256(image),
                 gradient_scale=effective_gradient_scale,
                 next_step_rms=next_step_rms,
                 applied_step_rms=applied_step_rms,
@@ -899,6 +953,8 @@ def _run_srmpgd(
             reference_image, blueprint, crop_padding_px=resolved_crop_padding_px
         ),
         final_module_error_rate=selected_step.actual_module_error_rate,
+        lpips_reference_mode=lpips_reference_mode,
+        lpips_reference_image_sha256=image_sha256(decoded_reference_image),
     )
 
 

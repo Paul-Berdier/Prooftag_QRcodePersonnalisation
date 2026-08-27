@@ -892,6 +892,8 @@ class UpstreamDiffQRCoderBackend:
             "stop_reason": srmpgd.stop_reason,
             "initial_stage2_image_sha256": stage2_image_sha256,
             "initial_redecoded_image_sha256": image_sha256(srmpgd.initial_redecoded_image),
+            "lpips_reference_mode": srmpgd.lpips_reference_mode,
+            "lpips_reference_image_sha256": srmpgd.lpips_reference_image_sha256,
             "initial_redecode_change": initial_redecode_change,
             "robust_loss_enabled": any(
                 value > 0
@@ -925,6 +927,15 @@ class UpstreamDiffQRCoderBackend:
                 "diffqrcoder_srmpgd_initial_gradient_rms": float(initial_step.gradient_rms or 0.0),
                 "diffqrcoder_srmpgd_initial_image_gradient_rms": float(
                     initial_step.image_gradient_rms or 0.0
+                ),
+                "diffqrcoder_srmpgd_initial_lpips_image_gradient_rms": float(
+                    initial_step.lpips_image_gradient_rms or 0.0
+                ),
+                "diffqrcoder_srmpgd_initial_weighted_lpips_image_gradient_rms": float(
+                    initial_step.weighted_lpips_image_gradient_rms or 0.0
+                ),
+                "diffqrcoder_srmpgd_initial_objective_image_gradient_rms": float(
+                    initial_step.objective_image_gradient_rms or 0.0
                 ),
                 "diffqrcoder_srmpgd_zero_gradient_stop": float(
                     srmpgd.stop_reason.startswith("zero_")

@@ -114,6 +114,19 @@ Le Stage 2 public du plan `82549caa971652bb` réduit le MER de 24,62 % à 1,90 %
 0/37 QR-Verify. Il reste un parent expérimental utile, mais ne doit pas être confondu avec un QR
 validé ni avec un succès SR-MPGD.
 
+## Résultat du gate à une itération
+
+Le plan `f2b9c0df72cd8cd4`, exécuté le 27 août sous le commit `8f66ac910023`, valide enfin le
+mécanisme local : aucune erreur ni OOM, appariement exact, i0 pixel-identique au Stage 2 parent,
+gradients image et latent non nuls, déplacement latent `0,0078558`, SRL réduite de `70,64 %` et
+MER réduit de `1,7836 %` à `1,4269 %`. Les branches FP16 et FP32 sont presque identiques et ne
+présentent pas de saturation destructive.
+
+Le résultat reste cependant `0/37` QR-Verify avant et après la mise à jour. E033 autorise donc le
+design du gate quatre itérations, pas une extension multi-prompt ni une revendication de
+scannabilité. L'audit complet, les métriques mémoire et les limites d'interprétation sont consignés
+dans `docs/e033-results-2026-08-27.md`.
+
 ## Exécution
 
 Après avoir commité et poussé le dépôt, exécuter sur le serveur :

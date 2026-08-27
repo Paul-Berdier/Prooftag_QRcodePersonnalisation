@@ -17,7 +17,7 @@ expected_notebook_path="/workspace/notebooks/${expected_notebook}"
 advisor_mode=0
 offline_mode=0
 case "$expected_notebook" in
-  21_e026_prompt_parameter_advisor.ipynb|22_e027_srmpgd_policy_holdout.ipynb|23_e028_hierarchical_prompt_advisor.ipynb|24_e029_srmpgd_exact_raster_recovery.ipynb|26_e031_prospective_stage2_holdout.ipynb|27_e032_srmpgd_paper_reconstruction.ipynb|28_e033_srmpgd_microdiagnostic.ipynb)
+  21_e026_prompt_parameter_advisor.ipynb|22_e027_srmpgd_policy_holdout.ipynb|23_e028_hierarchical_prompt_advisor.ipynb|24_e029_srmpgd_exact_raster_recovery.ipynb|26_e031_prospective_stage2_holdout.ipynb|27_e032_srmpgd_paper_reconstruction.ipynb|28_e033_srmpgd_microdiagnostic.ipynb|29_e034_srmpgd_four_iteration_gate.ipynb)
     advisor_mode=1
     ;;
   25_e030_reliable_qrverify_cascade.ipynb)
@@ -222,6 +222,51 @@ restore_previous_state() {
 }
 
 case "$command_name" in
+  deploy-prepare)
+    notebook_replicas="$(replicas_or_zero "$notebook_deployment" "$namespace")"
+    if [[ "$notebook_replicas" -gt 0 ]]; then
+      echo "Un notebook est deja actif. L'arreter avant de preparer un deploiement." >&2
+      exit 1
+    fi
+    api_replicas="$(replicas_or_zero "$api_deployment" "$namespace")"
+    vllm_replicas="$(replicas_or_zero vllm vllm)"
+    write_previous_state "$api_replicas" "$vllm_replicas"
+    rollback() {
+      echo "Echec de la preparation, restauration de l'etat GPU precedent" >&2
+      restore_previous_state
+    }
+    trap rollback ERR
+    prepare_runtime
+    trap - ERR
+    echo "Etat GPU memorise avant deploiement : API=${api_replicas}, vLLM=${vllm_replicas}." >&2
+    ;;
+  deploy-start)
+    if [[ ! -f "$state_file" ]]; then
+      echo "Etat GPU precedent absent. Utiliser deploy-prepare avant deploy-start." >&2
+      exit 1
+    fi
+    # Validate the prepared state before touching any workload. Unlike start,
+    # deploy-start must never replace it with the temporary API=1/vLLM=0 state.
+    read_previous_state
+    ensure_token
+    notebook_replicas="$(replicas_or_zero "$notebook_deployment" "$namespace")"
+    if [[ "$notebook_replicas" -gt 0 ]]; then
+      verify_running_notebook
+      print_token
+      exit 0
+    fi
+    rollback() {
+      echo "Echec du notebook, restauration de l'etat GPU precedent" >&2
+      restore_previous_state
+    }
+    trap rollback ERR
+    prepare_runtime
+    kubectl scale "deployment/${notebook_deployment}" -n "$namespace" --replicas=1 >/dev/null
+    kubectl rollout status "deployment/${notebook_deployment}" -n "$namespace" --timeout=1200s
+    verify_running_notebook
+    trap - ERR
+    print_token
+    ;;
   start)
     ensure_token
     notebook_replicas="$(replicas_or_zero "$notebook_deployment" "$namespace")"
@@ -267,7 +312,7 @@ case "$command_name" in
     kubectl get deployment,pod,service -n "$namespace" -l app=prooftag-qr-notebook
     ;;
   *)
-    echo "Usage: $0 {start|reset|stop|status}" >&2
+    echo "Usage: $0 {deploy-prepare|deploy-start|start|reset|stop|status}" >&2
     exit 2
     ;;
 esac

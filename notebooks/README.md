@@ -380,7 +380,7 @@ Le protocole et ses limites sont dans
 E033 remplace toute nouvelle grande campagne tant que le mécanisme n'est pas démontré. Il compare
 sur un seul prompt apparié le Stage 2 E032, la recette publique DiffQRCoder, puis les équations
 13-14 en précision VAE modèle et FP32. Il affiche le même latent redécodé sans update ainsi que les
-états directs 0, 1, 2 et 4 ; gradient, déplacement latent et baisse de SRL sont des portes
+états directs 0 et 1 ; gradient, déplacement latent et baisse de SRL sont des portes
 obligatoires. Un arrêt numérique reste visible et archivé, sans lancer d'autres prompts.
 
 ```powershell
@@ -390,6 +390,32 @@ obligatoires. Un arrêt numérique reste visible et archivé, sans lancer d'autr
 Le déploiement immuable de l'API et du notebook se fait d'abord sur le serveur avec
 `bash scripts/deploy-e033-notebook.sh`. Protocole et limites :
 [`../docs/e033-srmpgd-microdiagnostic.md`](../docs/e033-srmpgd-microdiagnostic.md).
+
+## E034 — porte SR-MPGD à quatre itérations
+
+E034 ne recommence pas E033. Il reproduit bit à bit son Stage 1, son Stage 2 public et son latent,
+puis prolonge seulement les branches SR-MPGD FP16/FP32 jusqu'à quatre mises à jour. Il affiche le
+parent, le témoin VAE sans update et les états i0/i1/i2/i4, tous rescannés localement avec
+QR-Verify conservateur et accompagnés du MER, de la saturation et du clipping. La trace sépare
+les gradients SRL, LPIPS et objectif complet. La référence LPIPS est le tenseur flottant
+`x0 = D(z0)` exigé par l'Eq. 13 — sans quantification PIL — ; son mode et son SHA-256 témoin sont
+contrôlés.
+
+Après commit/push/pull, déployer sur le serveur :
+
+```bash
+bash scripts/deploy-e034-notebook.sh
+```
+
+Puis ouvrir depuis PowerShell sur le PC :
+
+```powershell
+.\scripts\notebook-remote.ps1 -Notebook 29_e034_srmpgd_four_iteration_gate.ipynb
+```
+
+Lancer **Run > Run All Cells** une fois. Une coupure reprend le même plan ; une campagne terminale
+en erreur n'est jamais soumise une seconde fois. L'archive finale sépare les verdicts mécanisme,
+scan logiciel et garde visuelle, sans autoriser automatiquement une campagne multi-prompt.
 
 Pour remplir ce dataset pendant une absence sans laisser Jupyter ouvert, E026W lance un Job
 Kubernetes CPU reprenable et réserve la RTX à l'API. Le plan borné contient 300 prompts, 16
