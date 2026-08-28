@@ -1,0 +1,65 @@
+E036 — ZIP À EXTRAIRE À LA RACINE DU DÉPÔT
+===========================================
+
+Base préparée pour le dépôt Prooftag_QRcodePersonnalisation après E035.
+Aucun fichier E033/E034/E035 n'est remplacé.
+
+NOUVEAUX FICHIERS
+------------------
+.github/workflows/e036-cpu-checks.yml
+deploy/k8s/e036-trust-region-job.yaml
+docs/e036-gamma1000-trust-region.md
+notebooks/31_e036_gamma1000_trust_region.ipynb
+prooftag_qr/e036_trust_region.py
+scripts/build_e036_gamma1000_trust_region_notebook.py
+scripts/deploy-e036-notebook.sh
+scripts/e036-remote.ps1
+scripts/run-e036-trust-region.sh
+tests/test_e036_deployment.py
+tests/test_e036_notebook.py
+tests/test_e036_trust_region.py
+
+BUT
+---
+Comparer, sur le même parent E035 :
+- E035 paper,
+- E035 upstream non contraint,
+- E036 gamma=1000 global trust,
+- E036 gamma=1000 strict trust,
+- E036 gamma=1000 local preserve.
+
+Le notebook affiche le contact sheet ET chacune des images finales en grand.
+
+WORKFLOW
+--------
+PC Windows : extraire ce ZIP à la racine du dépôt, puis commit/push.
+
+Serveur SSH :
+  cd ~/apps/Prooftag_QRcodePersonnalisation
+  git fetch origin
+  git switch main
+  git pull --ff-only origin main
+  bash scripts/deploy-e036-notebook.sh
+  bash scripts/run-e036-trust-region.sh
+
+PC Windows :
+  .\scripts\e036-remote.ps1
+
+Dans Jupyter :
+  Run > Run All Cells
+
+SORTIES ATTENDUES
+-----------------
+/data/e036-gamma1000-trust-region-v1/verdict.json
+/data/e036-gamma1000-trust-region-v1/branch-summary.csv
+/data/e036-gamma1000-trust-region-v1/qr-verify-evidence.json
+/data/e036-gamma1000-trust-region-v1/e036-final-contact-sheet.png
+/data/e036-gamma1000-trust-region-v1/<branche>/images/iteration-004.png
+
+IMPORTANT
+---------
+- gamma brut reste 1000 dans toutes les branches.
+- E036 ne régénère ni Stage 1 ni Stage 2.
+- E036 réutilise le parent immuable E035 déjà créé.
+- E036 réutilise les résultats E035 pour la comparaison visuelle.
+- aucune sortie E036 n'est déclarée production-ready automatiquement.

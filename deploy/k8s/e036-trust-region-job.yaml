@@ -1,0 +1,84 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: __JOB_NAME__
+  namespace: __NAMESPACE__
+  labels:
+    app: prooftag-qr-e036
+    app.kubernetes.io/name: prooftag-qr-e036
+    app.kubernetes.io/part-of: prooftag-qr
+    prooftag.io/experiment: e036-gamma1000-perceptual-trust-region-v1
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: prooftag-qr-e036
+        prooftag.io/experiment: e036-gamma1000-perceptual-trust-region-v1
+    spec:
+      restartPolicy: Never
+      runtimeClassName: nvidia
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: e036
+          image: __IMAGE__
+          imagePullPolicy: IfNotPresent
+          command: [python, -m, prooftag_qr.e036_trust_region]
+          args:
+            - --parent-dir
+            - __PARENT_DIR__
+            - --e035-results-dir
+            - __E035_RESULTS_DIR__
+            - --output-dir
+            - __RESULTS_DIR__
+            - --expected-parent-commit
+            - __EXPECTED_PARENT_COMMIT__
+          envFrom:
+            - configMapRef:
+                name: prooftag-qr-config
+          env:
+            - name: PROOFTAG_QR_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: prooftag-qr-database
+                  key: password
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: prooftag-huggingface
+                  key: token
+                  optional: true
+            - name: PYTORCH_CUDA_ALLOC_CONF
+              value: expandable_segments:True
+            - name: CUBLAS_WORKSPACE_CONFIG
+              value: ":4096:8"
+          resources:
+            requests:
+              cpu: "2"
+              memory: 12Gi
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "12"
+              memory: 32Gi
+              nvidia.com/gpu: "1"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: model-cache
+              mountPath: /cache
+            - name: shared-memory
+              mountPath: /dev/shm
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: prooftag-qr-data
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: prooftag-qr-model-cache
+        - name: shared-memory
+          emptyDir:
+            medium: Memory
+            sizeLimit: 4Gi

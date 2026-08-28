@@ -1,0 +1,33 @@
+name: E036 CPU checks
+
+on:
+  push:
+    paths:
+      - "prooftag_qr/e036_trust_region.py"
+      - "scripts/build_e036_gamma1000_trust_region_notebook.py"
+      - "notebooks/31_e036_gamma1000_trust_region.ipynb"
+      - "scripts/deploy-e036-notebook.sh"
+      - "scripts/run-e036-trust-region.sh"
+      - "deploy/k8s/e036-trust-region-job.yaml"
+      - "tests/test_e036_*.py"
+  pull_request:
+    paths:
+      - "prooftag_qr/e036_trust_region.py"
+      - "scripts/build_e036_gamma1000_trust_region_notebook.py"
+      - "notebooks/31_e036_gamma1000_trust_region.ipynb"
+      - "scripts/deploy-e036-notebook.sh"
+      - "scripts/run-e036-trust-region.sh"
+      - "deploy/k8s/e036-trust-region-job.yaml"
+      - "tests/test_e036_*.py"
+
+jobs:
+  cpu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e '.[notebook,optimizer]'
+      - run: pytest -q tests/test_e036_trust_region.py tests/test_e036_notebook.py tests/test_e036_deployment.py

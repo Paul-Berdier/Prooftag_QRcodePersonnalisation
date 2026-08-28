@@ -1,0 +1,93 @@
+{
+  "baseline_checked_commit": "55ad50f3c774cadfc5b341ac780575c5f4213d76",
+  "comparison_images": [
+    "parent_fp32",
+    "e035_paper",
+    "e035_upstream",
+    "e036_gamma1000_global_trust",
+    "e036_gamma1000_strict_trust",
+    "e036_gamma1000_local_preserve"
+  ],
+  "experiment": "e036-gamma1000-perceptual-trust-region-v1",
+  "extract_at_repository_root": true,
+  "files": [
+    {
+      "path": ".github/workflows/e036-cpu-checks.yml",
+      "sha256": "dce5c18a1808ea9e7d001abf975c6dbe7181b3ef27e995f49fce80c9615f7c95",
+      "size_bytes": 1114
+    },
+    {
+      "path": "E036_A_LIRE.txt",
+      "sha256": "1209f832fa56fac2ea668496b40131e6a66ffde5f33e45dfabb40fd54c85586a",
+      "size_bytes": 1981
+    },
+    {
+      "path": "deploy/k8s/e036-trust-region-job.yaml",
+      "sha256": "d9f46cbed4948e0db9bbc999fd516f86d8e56defce3ce9535dc0391f30447662",
+      "size_bytes": 2501
+    },
+    {
+      "path": "docs/e036-gamma1000-trust-region.md",
+      "sha256": "d06170ec3b1b9ce21f2f11ab5e731302174f911cc62880ee60b745b0090fec9f",
+      "size_bytes": 2931
+    },
+    {
+      "path": "notebooks/31_e036_gamma1000_trust_region.ipynb",
+      "sha256": "bc56a4fedaadf4d991a5930ea119e7a8be137e8a5654f4a53fb4ce2f10490ed3",
+      "size_bytes": 10197
+    },
+    {
+      "path": "prooftag_qr/e036_trust_region.py",
+      "sha256": "688bbe6ca0c48328f74b27e2ce053100858a4feac0f4bd6a29eb6158c852fb6b",
+      "size_bytes": 35188
+    },
+    {
+      "path": "scripts/build_e036_gamma1000_trust_region_notebook.py",
+      "sha256": "b210af22f546d3333aac33b4373d93e63deb2328c9e070d231d809dab53b20e1",
+      "size_bytes": 8226
+    },
+    {
+      "path": "scripts/deploy-e036-notebook.sh",
+      "sha256": "dd3438a8b7e6d2b10a6f02ed425896a5ba1080db68fe0df2da866d8f832124d1",
+      "size_bytes": 7291
+    },
+    {
+      "path": "scripts/e036-remote.ps1",
+      "sha256": "d3261a94a85511097a64d05ae588beee683352532a2a666b62df94407e20e57f",
+      "size_bytes": 3720
+    },
+    {
+      "path": "scripts/run-e036-trust-region.sh",
+      "sha256": "20c3c9f5cf13232ffd3995240363ffa91e271f930fbc0749993c047e2afae462",
+      "size_bytes": 5942
+    },
+    {
+      "path": "tests/test_e036_deployment.py",
+      "sha256": "01197385de161f6d192d0e19fea9193bd5db7fcab5645a0bec508a337bc2c723",
+      "size_bytes": 1038
+    },
+    {
+      "path": "tests/test_e036_notebook.py",
+      "sha256": "80a5a7c2c3e1832536db79c23b4172e387a9ec9eefa336d2279e7f9e951cfb22",
+      "size_bytes": 1206
+    },
+    {
+      "path": "tests/test_e036_trust_region.py",
+      "sha256": "c8c86dd9ae2d50403bb349ae0d269ec2121a050d121c9080dd91ada4b6780662",
+      "size_bytes": 1743
+    }
+  ],
+  "gamma": 1000.0,
+  "new_files_only": true,
+  "repository": "Paul-Berdier/Prooftag_QRcodePersonnalisation",
+  "requires_existing": [
+    "prooftag_qr/e035_loss_fidelity.py",
+    "prooftag_qr/e035_losses.py",
+    "prooftag_qr/e035_parent_artifact.py",
+    "scripts/deploy-app-image.sh",
+    "scripts/deploy-notebook-image.sh",
+    "/data/e035-parent-v1",
+    "/data/e035-loss-fidelity-gate-v1"
+  ],
+  "schema": "prooftag.e036.patch.v1"
+}
