@@ -1,0 +1,22 @@
+E037 — PROSPECTIVE GLOBAL TRUST MINI-HOLDOUT
+
+Ce patch ajoute uniquement E037. Il ne modifie pas E034/E035/E036.
+
+Ordre normal :
+1. extraire ce ZIP a la racine du depot local ;
+2. commit + push ;
+3. pull sur pcIA ;
+4. bash scripts/deploy-e037-notebook.sh ;
+5. bash scripts/run-e037-holdout.sh ;
+6. apres "E037 TERMINE", lancer .\scripts\e037-remote.ps1 depuis PowerShell ;
+7. Run All Cells dans le notebook 32.
+
+Le notebook affiche :
+- le verdict ;
+- le tableau des 10 cas ;
+- le contact sheet global ;
+- les 10 comparaisons parent/final ;
+- QR-Verify par cas ;
+- le chemin et le SHA-256 de l'archive scientifique.
+
+Le runner n'utilise PAS kubectl logs -f afin d'eviter le probleme fsnotify/inotify vu sur E036.

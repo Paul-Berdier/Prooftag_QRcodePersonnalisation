@@ -1,0 +1,82 @@
+{
+  "adds_only": true,
+  "expected_precondition": {
+    "e036_decision": "PREPARE_MINI_HOLDOUT_WITH_WINNER",
+    "e036_gamma": 1000.0,
+    "e036_winner": "e036_gamma1000_global_trust"
+  },
+  "extract_at": "repository root",
+  "files": [
+    {
+      "path": ".github/workflows/e037-cpu-checks.yml",
+      "sha256": "a83c25c570e95c027714d56e21504ddd7c131d746b29d9c41ebbc36a946c1a30",
+      "size_bytes": 1187
+    },
+    {
+      "path": "E037_A_LIRE.txt",
+      "sha256": "7ba11a7e370a21a1f247efa90e08fc7442d08f8d832b1e03a9b0bff944aafab8",
+      "size_bytes": 714
+    },
+    {
+      "path": "deploy/k8s/e037-holdout-job.yaml",
+      "sha256": "973cc3e20e33849ca8528642a3294ed56014385563c5997ddaf83df8c32259ef",
+      "size_bytes": 2430
+    },
+    {
+      "path": "docs/e037-prospective-global-trust-holdout.md",
+      "sha256": "45d066a9dc16905df7f5e797c5d8321133cee909397f97a3f6d3091efc33211b",
+      "size_bytes": 1894
+    },
+    {
+      "path": "notebooks/32_e037_prospective_global_trust_holdout.ipynb",
+      "sha256": "31912022c530f8ca5af71abfc72521cfe506dcb360b44263211e697f2eff188d",
+      "size_bytes": 7548
+    },
+    {
+      "path": "prooftag_qr/e037_holdout.py",
+      "sha256": "8627c16254024f299aedce156b6d23d716754c302383a01d24a5ee1321d4a4aa",
+      "size_bytes": 26031
+    },
+    {
+      "path": "scripts/build_e037_prospective_global_trust_holdout_notebook.py",
+      "sha256": "5a0d04af505f58cbc286210235b568c2e1e7069f5fb5446bbe7166c5b3e1ba99",
+      "size_bytes": 6358
+    },
+    {
+      "path": "scripts/deploy-e037-notebook.sh",
+      "sha256": "730eacb315c5f3e79f0e70fd752857e0662e9df331530631cf63bebe1140d7ab",
+      "size_bytes": 7190
+    },
+    {
+      "path": "scripts/download-e037-results.sh",
+      "sha256": "493a3a3c72f93bba9a5157c4269330ea5bc5fbecef7032355f1ce2e9a1180f51",
+      "size_bytes": 1406
+    },
+    {
+      "path": "scripts/e037-remote.ps1",
+      "sha256": "2b48faa84138328ab9c3db59b3b2a45e62ef2b148c6b26dbbd23c2e3eb5e6789",
+      "size_bytes": 4751
+    },
+    {
+      "path": "scripts/run-e037-holdout.sh",
+      "sha256": "15b81740a4113a693bce7c8718646768a137d28708d41a00b2e5717009851c72",
+      "size_bytes": 6982
+    },
+    {
+      "path": "tests/test_e037_deployment.py",
+      "sha256": "3b7b430cccef77ac4fddf21ba95f53df92ea9219fbb6612b88ad8459bbdccc89",
+      "size_bytes": 1304
+    },
+    {
+      "path": "tests/test_e037_holdout.py",
+      "sha256": "138cf4572c1143004eac4d3fdee953e553bc4a84a9e14116eb89cbc681d46e55",
+      "size_bytes": 1271
+    },
+    {
+      "path": "tests/test_e037_notebook.py",
+      "sha256": "e2ab484527d135174977236a46369bca944b1a8b73f2607619d847732b913357",
+      "size_bytes": 1229
+    }
+  ],
+  "patch": "E037 prospective global trust mini-holdout"
+}
