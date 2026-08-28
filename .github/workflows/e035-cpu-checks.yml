@@ -1,0 +1,50 @@
+name: E035 CPU checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  e035-cpu:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install CPU test stack
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.6.0
+          python -m pip install '.[dev,notebook]' safetensors==0.5.2
+      - name: Rebuild deterministic E035 notebook
+        run: |
+          python scripts/build_e035_srmpgd_loss_fidelity_gate_notebook.py
+          git diff --exit-code -- notebooks/30_e035_srmpgd_loss_fidelity_gate.ipynb
+      - name: Ruff
+        run: |
+          ruff check \
+            prooftag_qr/e035_losses.py \
+            prooftag_qr/e035_parent_artifact.py \
+            prooftag_qr/e035_loss_fidelity.py \
+            prooftag_qr/e035_parent_capture.py \
+            scripts/export_e035_parent_artifact.py \
+            scripts/run_e035_loss_fidelity_gate.py \
+            scripts/capture_e035_parent.py \
+            scripts/build_e035_srmpgd_loss_fidelity_gate_notebook.py \
+            tests/test_e035_losses.py \
+            tests/test_e035_parent_artifact.py \
+            tests/test_e035_parent_capture_contract.py \
+            tests/test_e035_notebook.py \
+            tests/test_e035_deployment.py \
+            tests/test_e035_runner_contract.py
+      - name: Pytest E035 CPU suite
+        run: python -m pytest -q tests/test_e035_*.py
+      - name: Shell syntax
+        run: bash -n scripts/deploy-e035-notebook.sh
