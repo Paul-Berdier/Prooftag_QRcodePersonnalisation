@@ -1,0 +1,80 @@
+{
+  "patch": "Prooftag E039 SR-MPGD limiter + scan-aware",
+  "experiment": "e039-srmpgd-limiter-scanaware-v1",
+  "base_expected": "current main containing E038",
+  "gamma": 1000.0,
+  "gamma_preserved": true,
+  "file_count_excluding_manifest": 14,
+  "files": [
+    {
+      "path": ".github/workflows/e039-cpu-checks.yml",
+      "size_bytes": 1215,
+      "sha256": "50cee8b97eeeac5cfeccb6f50e66c677b2fe0346c9e84e9fd0932e32ab088445"
+    },
+    {
+      "path": "E039_A_LIRE.txt",
+      "size_bytes": 671,
+      "sha256": "a144d07b04cb806f5c0fefd429247e29195dba199140ae450e8083310995adce"
+    },
+    {
+      "path": "deploy/k8s/e039-limiter-scanaware-job.yaml",
+      "size_bytes": 2486,
+      "sha256": "a1ecb64965e767f0b191a828ea19e8504a9c570a0b12eeeea12d7c0d084526a6"
+    },
+    {
+      "path": "docs/e039-srmpgd-limiter-scanaware.md",
+      "size_bytes": 1539,
+      "sha256": "e1f5e7c96faef9cdd73f2505a467a5ef301049ae67cb13a83b20b3385ea79b6e"
+    },
+    {
+      "path": "notebooks/34_e039_srmpgd_limiter_scanaware.ipynb",
+      "size_bytes": 9486,
+      "sha256": "14da32b9185e5bf15767523219ff2542b58e15556b918fb6ae90ddd1b0703a1f"
+    },
+    {
+      "path": "prooftag_qr/e039_limiter_scanaware.py",
+      "size_bytes": 43402,
+      "sha256": "44554f8b00ceb36eea8a1a66b9d6bca3f8b90a1fd5a50bf6162f7e7e3ad4c095"
+    },
+    {
+      "path": "scripts/build_e039_limiter_scanaware_notebook.py",
+      "size_bytes": 7563,
+      "sha256": "55cbe5d52e6aaf42c283b571208e8abe38f9a8f6f95ce97bb13d8aacadf41bb7"
+    },
+    {
+      "path": "scripts/deploy-e039-notebook.sh",
+      "size_bytes": 5474,
+      "sha256": "6f13a74453265fb90da14364bcc8dc6e46a3b3e7f504095141af1a9cf5492c2f"
+    },
+    {
+      "path": "scripts/download-e039-results.sh",
+      "size_bytes": 1238,
+      "sha256": "2d707da4cb6ff94f6403f6eb0e7ff9880d2f076478819b8aa731972e923aaf6f"
+    },
+    {
+      "path": "scripts/e039-remote.ps1",
+      "size_bytes": 4766,
+      "sha256": "399ca7e9e61d9e3578991d2bf9fb3a2531c996847f450daa0df1bb363d45724f"
+    },
+    {
+      "path": "scripts/run-e039-limiter-scanaware.sh",
+      "size_bytes": 7358,
+      "sha256": "30ae43a2b3f86fd9c8be9a6283fde0ea3ef6164989ab552ab32e030d3576df98"
+    },
+    {
+      "path": "tests/test_e039_deployment.py",
+      "size_bytes": 978,
+      "sha256": "1a057be02370c15e910ee9c365e28ce719578db782ee4cc35e2ee82d64cb248b"
+    },
+    {
+      "path": "tests/test_e039_limiter_scanaware.py",
+      "size_bytes": 1520,
+      "sha256": "02aa04429ef83c83489150dac86cd6bcbd78570f5f2d2235bdb483bb11959746"
+    },
+    {
+      "path": "tests/test_e039_notebook.py",
+      "size_bytes": 943,
+      "sha256": "e2f2db96f7b28397f1183074cd3700922980bd6833acff7a0d65cd0a411aa185"
+    }
+  ]
+}

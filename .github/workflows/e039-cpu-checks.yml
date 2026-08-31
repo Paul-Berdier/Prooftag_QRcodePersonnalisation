@@ -1,0 +1,35 @@
+name: E039 CPU checks
+
+on:
+  push:
+    paths:
+      - "prooftag_qr/e039_limiter_scanaware.py"
+      - "scripts/build_e039_limiter_scanaware_notebook.py"
+      - "notebooks/34_e039_srmpgd_limiter_scanaware.ipynb"
+      - "scripts/deploy-e039-notebook.sh"
+      - "scripts/run-e039-limiter-scanaware.sh"
+      - "scripts/e039-remote.ps1"
+      - "deploy/k8s/e039-limiter-scanaware-job.yaml"
+      - "tests/test_e039_*.py"
+  pull_request:
+    paths:
+      - "prooftag_qr/e039_limiter_scanaware.py"
+      - "scripts/build_e039_limiter_scanaware_notebook.py"
+      - "notebooks/34_e039_srmpgd_limiter_scanaware.ipynb"
+      - "scripts/deploy-e039-notebook.sh"
+      - "scripts/run-e039-limiter-scanaware.sh"
+      - "scripts/e039-remote.ps1"
+      - "deploy/k8s/e039-limiter-scanaware-job.yaml"
+      - "tests/test_e039_*.py"
+
+jobs:
+  cpu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e '.[dev,notebook,optimizer]'
+      - run: pytest -q tests/test_e039_limiter_scanaware.py tests/test_e039_notebook.py tests/test_e039_deployment.py
