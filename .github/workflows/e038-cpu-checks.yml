@@ -1,0 +1,35 @@
+name: E038 CPU checks
+
+on:
+  push:
+    paths:
+      - "prooftag_qr/e038_recipe_frontier.py"
+      - "scripts/build_e038_recipe_frontier_notebook.py"
+      - "notebooks/33_e038_srmpgd_ssr_aesthetic_frontier.ipynb"
+      - "scripts/deploy-e038-notebook.sh"
+      - "scripts/run-e038-recipe-frontier.sh"
+      - "scripts/e038-remote.ps1"
+      - "deploy/k8s/e038-recipe-frontier-job.yaml"
+      - "tests/test_e038_*.py"
+  pull_request:
+    paths:
+      - "prooftag_qr/e038_recipe_frontier.py"
+      - "scripts/build_e038_recipe_frontier_notebook.py"
+      - "notebooks/33_e038_srmpgd_ssr_aesthetic_frontier.ipynb"
+      - "scripts/deploy-e038-notebook.sh"
+      - "scripts/run-e038-recipe-frontier.sh"
+      - "scripts/e038-remote.ps1"
+      - "deploy/k8s/e038-recipe-frontier-job.yaml"
+      - "tests/test_e038_*.py"
+
+jobs:
+  cpu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e '.[dev,notebook,optimizer]'
+      - run: pytest -q tests/test_e038_recipe_frontier.py tests/test_e038_notebook.py tests/test_e038_deployment.py

@@ -1,0 +1,86 @@
+{
+  "schema": "prooftag.e038.patch-manifest.v1",
+  "base_repository": "Paul-Berdier/Prooftag_QRcodePersonnalisation",
+  "base_commit_observed": "a8d00f4d7a5ae923ef1ee907de68457979702835",
+  "experiment": "e038-srmpgd-ssr-aesthetic-frontier-v1",
+  "extract_at": "repository root",
+  "overwrites_existing_files": false,
+  "file_count_excluding_manifest": 15,
+  "files": [
+    {
+      "path": ".github/workflows/e038-cpu-checks.yml",
+      "size_bytes": 1207,
+      "sha256": "34b4f45f77d7b29bc4d31811acd95a4f63a0706c9f94edc6316d0564dca1f09b"
+    },
+    {
+      "path": "E038_A_LIRE.txt",
+      "size_bytes": 1948,
+      "sha256": "572c4d9aecc740c534f94135628b22a54bb8b075c0ef320a9e1313e8af22e892"
+    },
+    {
+      "path": "deploy/k8s/e038-recipe-frontier-job.yaml",
+      "size_bytes": 2489,
+      "sha256": "646510f5c8c69f6625cd688d1002595042d884d9d76ba702ec757110e4e497c1"
+    },
+    {
+      "path": "docs/e038-historical-srmpgd-baselines.json",
+      "size_bytes": 1334,
+      "sha256": "7b34adc7831d5bfc0e344488ba13679ee8ffecbc22845911221497f59cc6286d"
+    },
+    {
+      "path": "docs/e038-srmpgd-ssr-aesthetic-frontier.md",
+      "size_bytes": 3346,
+      "sha256": "b65917337e30097b5a281f3da8654177dc39ab5f51334e772e91c6fcb6c0a650"
+    },
+    {
+      "path": "notebooks/33_e038_srmpgd_ssr_aesthetic_frontier.ipynb",
+      "size_bytes": 12933,
+      "sha256": "65d0e2ae1169a5df19ba906b9469ba4d92e42bddf61b7006afeba16c24eb9431"
+    },
+    {
+      "path": "prooftag_qr/e038_recipe_frontier.py",
+      "size_bytes": 48770,
+      "sha256": "fa18f65fbc3c5f1c11695b15f333573c3e680f8228a44f324b4e27a9c9f26fd4"
+    },
+    {
+      "path": "scripts/build_e038_recipe_frontier_notebook.py",
+      "size_bytes": 10296,
+      "sha256": "573b12cd0e79bf1fbe8bee824e986b6a1e80333602381350fe9a5cbcaa00f398"
+    },
+    {
+      "path": "scripts/deploy-e038-notebook.sh",
+      "size_bytes": 5545,
+      "sha256": "e41e6bf8d123e52c31810edf14724c9d5d38c46d40b269c70ea24eaf683c1107"
+    },
+    {
+      "path": "scripts/download-e038-results.sh",
+      "size_bytes": 1253,
+      "sha256": "08c4cb85d372dd3fa1a91b482217c8ad40b5d1b30dfda98d8eced945db6be654"
+    },
+    {
+      "path": "scripts/e038-remote.ps1",
+      "size_bytes": 4426,
+      "sha256": "42f0d6defbd2a1d2bd5c548a825a52ce0aad71c9a8e771df6d03691bd67cf91a"
+    },
+    {
+      "path": "scripts/run-e038-recipe-frontier.sh",
+      "size_bytes": 7781,
+      "sha256": "9a16a4f012f3e7d5be29102f12dafc77c07ee074b5ff9c44e61e869a0ec7cc38"
+    },
+    {
+      "path": "tests/test_e038_deployment.py",
+      "size_bytes": 1954,
+      "sha256": "3ee08a4a287e284d04c75f38b16fb00abcb0151588145a4a41380279e133b76f"
+    },
+    {
+      "path": "tests/test_e038_notebook.py",
+      "size_bytes": 1155,
+      "sha256": "54c87885f329442aa1e8cca7b71bab6b5fd3eae748c914ce40244ab39bd8cdb2"
+    },
+    {
+      "path": "tests/test_e038_recipe_frontier.py",
+      "size_bytes": 1596,
+      "sha256": "83ab93bb7575628f91e11debb73d0191cd5695fc03341fb1bcb71ba303ffd579"
+    }
+  ]
+}

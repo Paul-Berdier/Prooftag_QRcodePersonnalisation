@@ -1,0 +1,40 @@
+{
+  "schema": "prooftag.e038.historical-srmpgd-baselines.v1",
+  "note": "E033/E034 are numeric historical references only. E035/E036/E038 are the same-parent visual frontier used for causal recipe comparison.",
+  "methods": [
+    {
+      "method": "E033 parent Stage2 public",
+      "qr_verify_exact_presets": 0,
+      "ssr": 0.0,
+      "module_error_rate": 0.017836,
+      "clip_aesthetic": 6.9186,
+      "clip_score": 0.73764,
+      "hpsv2_1": 0.221759,
+      "source": "docs/e033-results-2026-08-27.md"
+    },
+    {
+      "method": "E033 SR-MPGD FP32 i1",
+      "gamma": 1000.0,
+      "iterations": 1,
+      "qr_verify_exact_presets": 0,
+      "ssr": 0.0,
+      "module_error_rate": 0.014269,
+      "latent_step_rms": 0.0078558,
+      "mean_absolute_change": 0.001658,
+      "clip_aesthetic": 6.8723,
+      "clip_score": 0.73480,
+      "hpsv2_1": 0.221677,
+      "source": "docs/e033-results-2026-08-27.md"
+    },
+    {
+      "method": "E034 paper SR-MPGD FP32 i4",
+      "gamma": 1000.0,
+      "iterations": 4,
+      "qr_verify_exact_presets": 0,
+      "ssr": 0.0,
+      "module_error_rate": 0.015457788347205707,
+      "source": "E034 executed artifact / docs/e034-srmpgd-four-iteration-gate.md",
+      "note": "Historical E034 parent reproduction differed from the later frozen E035 parent; numeric reference only."
+    }
+  ]
+}
