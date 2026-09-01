@@ -1,0 +1,16 @@
+E041 — gamma + motifs fonctionnels
+
+Nouveau prompt et nouveau parent Stage1/Stage2.
+Gamma testés : 50, 100, 250, 500, 1000, 2000.
+Gamma 1000 = baseline historique, PAS valeur imposée.
+Rayon = 0.20, scanaware_v2, checkpoints i0..i8.
+Phase B = top 3 checkpoints sûrs x tone factors 0/.05/.10/.15/.20/.30.
+
+Après extraction/commit/push/pull :
+  bash scripts/deploy-e041-notebooks.sh
+  bash scripts/run-e041-gamma-functional-frontier.sh
+Puis Windows :
+  .\scripts\e041-remote.ps1
+  .\scripts\e041-remote.ps1 -Pipeline
+
+Ne pas utiliser logs -f. Une sortie PARTIAL n'est jamais supprimée automatiquement.

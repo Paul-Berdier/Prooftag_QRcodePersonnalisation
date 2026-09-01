@@ -1,0 +1,33 @@
+name: E041 CPU checks
+on:
+  push:
+    paths:
+      - 'prooftag_qr/e041_gamma_functional_frontier.py'
+      - 'scripts/*e041*'
+      - 'deploy/k8s/e041-*'
+      - 'notebooks/37_e041_*'
+      - 'notebooks/38_e041_*'
+      - 'tests/test_e041_*'
+  pull_request:
+    paths:
+      - 'prooftag_qr/e041_gamma_functional_frontier.py'
+      - 'scripts/*e041*'
+      - 'deploy/k8s/e041-*'
+      - 'notebooks/37_e041_*'
+      - 'notebooks/38_e041_*'
+      - 'tests/test_e041_*'
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pytest pyyaml
+      - run: python scripts/build_e041_gamma_frontier_notebook.py
+      - run: python scripts/build_e041_final_pipeline_notebook.py
+      - run: python -m py_compile prooftag_qr/e041_gamma_functional_frontier.py scripts/build_e041_gamma_frontier_notebook.py scripts/build_e041_final_pipeline_notebook.py
+      - run: bash -n scripts/run-e041-gamma-functional-frontier.sh scripts/deploy-e041-notebooks.sh scripts/download-e041-results.sh
+      - run: python -c "import yaml; yaml.safe_load(open('deploy/k8s/e041-gamma-functional-frontier-job.yaml',encoding='utf-8'))"
+      - run: pytest -q tests/test_e041_gamma_functional_frontier.py tests/test_e041_deployment.py tests/test_e041_notebooks.py
