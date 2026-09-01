@@ -1,0 +1,20 @@
+E041 HOTFIX — Phase B 736px geometry + recovery
+
+Cause du crash:
+- parent SR-MPGD réel: 736x736; LPIPS crop 78px => coeur 580x580.
+- l'ancien renforcement fonctionnel passait par repair_qr_modules(), qui redimensionnait vers 740x740.
+- LPIPS comparait donc 584x584 à 580x580.
+- les facteurs >0.12 étaient aussi plafonnés à 0.12 dans le chemin générique.
+
+Correction:
+- tonification fonctionnelle directe sur 736x736 / padding 78 / coeur 29x29 / 20px module.
+- aucun resize 740px.
+- tous les facteurs E041 restent distincts.
+- data modules inchangés pixel pour pixel par ce post-traitement.
+- reprise depuis les 54 checkpoints Phase A et 3 bases déjà calculés.
+- aucun Stage 1, Stage 2 ou SR-MPGD recalculé.
+
+Après extraction/push/pull:
+1. bash scripts/deploy-e041-notebooks.sh
+2. bash scripts/recover-e041-phase-b.sh
+3. NE PAS relancer run-e041-gamma-functional-frontier.sh

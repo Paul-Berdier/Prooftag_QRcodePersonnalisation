@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - 'prooftag_qr/e041_gamma_functional_frontier.py'
+      - 'prooftag_qr/e041_recover_phase_b.py'
       - 'scripts/*e041*'
       - 'deploy/k8s/e041-*'
       - 'notebooks/37_e041_*'
@@ -11,6 +12,7 @@ on:
   pull_request:
     paths:
       - 'prooftag_qr/e041_gamma_functional_frontier.py'
+      - 'prooftag_qr/e041_recover_phase_b.py'
       - 'scripts/*e041*'
       - 'deploy/k8s/e041-*'
       - 'notebooks/37_e041_*'
@@ -27,7 +29,7 @@ jobs:
       - run: pip install pytest pyyaml
       - run: python scripts/build_e041_gamma_frontier_notebook.py
       - run: python scripts/build_e041_final_pipeline_notebook.py
-      - run: python -m py_compile prooftag_qr/e041_gamma_functional_frontier.py scripts/build_e041_gamma_frontier_notebook.py scripts/build_e041_final_pipeline_notebook.py
-      - run: bash -n scripts/run-e041-gamma-functional-frontier.sh scripts/deploy-e041-notebooks.sh scripts/download-e041-results.sh
-      - run: python -c "import yaml; yaml.safe_load(open('deploy/k8s/e041-gamma-functional-frontier-job.yaml',encoding='utf-8'))"
-      - run: pytest -q tests/test_e041_gamma_functional_frontier.py tests/test_e041_deployment.py tests/test_e041_notebooks.py
+      - run: python -m py_compile prooftag_qr/e041_gamma_functional_frontier.py prooftag_qr/e041_recover_phase_b.py scripts/build_e041_gamma_frontier_notebook.py scripts/build_e041_final_pipeline_notebook.py
+      - run: bash -n scripts/run-e041-gamma-functional-frontier.sh scripts/recover-e041-phase-b.sh scripts/deploy-e041-notebooks.sh scripts/download-e041-results.sh
+      - run: python -c "import yaml; [yaml.safe_load(open(p,encoding='utf-8')) for p in ['deploy/k8s/e041-gamma-functional-frontier-job.yaml','deploy/k8s/e041-phase-b-recovery-job.yaml']]"
+      - run: pytest -q tests/test_e041_gamma_functional_frontier.py tests/test_e041_phase_b_hotfix.py tests/test_e041_deployment.py tests/test_e041_notebooks.py

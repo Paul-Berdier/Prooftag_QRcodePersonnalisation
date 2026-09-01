@@ -182,6 +182,62 @@ def _gamma_recipe(gamma: float) -> E040Recipe:
     )
 
 
+def _functional_tone_exact_diffqrcoder(
+    candidate: Image.Image,
+    blueprint: Any,
+    factor: float,
+) -> Image.Image:
+    """Tone only QR functional modules on DiffQRCoder's exact 736px raster.
+
+    E041 must not call the generic ``repair_qr_modules`` path here because that
+    helper resizes to ``blueprint.image.size`` (740x740). Our Stage-2/SR-MPGD
+    raster is 736x736 and the optimized QR core is exactly 580x580: 29 modules
+    of 20px after the 78px DiffQRCoder crop. This helper preserves the canvas
+    geometry and leaves every data-module pixel untouched.
+
+    ``factor == 0`` is the untouched control. For positive factors the value is
+    the residual artwork fraction: smaller values move functional modules more
+    strongly toward their target black/white tone.
+    """
+    from .qr import functional_pattern_mask
+
+    factor = float(factor)
+    if factor == 0.0:
+        return candidate.convert("RGB").copy()
+    if not 0.0 < factor <= 1.0:
+        raise ValueError("functional tone factor must be 0 or in (0, 1]")
+
+    source_image = candidate.convert("RGB")
+    border = int(blueprint.border)
+    matrix = blueprint.matrix[border:-border, border:-border] if border else blueprint.matrix
+    functional = functional_pattern_mask(blueprint)
+    functional = functional[border:-border, border:-border] if border else functional
+    expected_core = int(matrix.shape[0]) * QR_MODULE_SIZE
+    expected_canvas = expected_core + 2 * QR_PADDING_PX
+    if matrix.shape != (29, 29):
+        raise ValueError(f"E041 expects a 29x29 QR core, got {matrix.shape}")
+    if source_image.size != (expected_canvas, expected_canvas):
+        raise ValueError(
+            f"E041 exact functional toning expects {expected_canvas}x{expected_canvas}, "
+            f"got {source_image.size}"
+        )
+
+    source = np.asarray(source_image, dtype=np.uint8).copy()
+    for row in range(matrix.shape[0]):
+        for col in range(matrix.shape[1]):
+            if not bool(functional[row, col]):
+                continue
+            y0 = QR_PADDING_PX + row * QR_MODULE_SIZE
+            y1 = y0 + QR_MODULE_SIZE
+            x0 = QR_PADDING_PX + col * QR_MODULE_SIZE
+            x1 = x0 + QR_MODULE_SIZE
+            region = source[y0:y1, x0:x1].astype(np.float32)
+            target_dark = bool(matrix[row, col])
+            toned = region * factor if target_dark else 255.0 - (255.0 - region) * factor
+            source[y0:y1, x0:x1] = np.rint(toned).clip(0, 255).astype(np.uint8)
+    return Image.fromarray(source, mode="RGB")
+
+
 def _rank_key(row: dict[str, Any]) -> tuple[Any, ...]:
     return (
         -int(row["qr_verify_exact_presets"]),
@@ -200,9 +256,19 @@ def _lpips_core_scores(reference: Image.Image, variants: dict[str, Image.Image])
     model = lpips.LPIPS(net="vgg", verbose=False).requires_grad_(False).eval().cpu()
 
     def tensor(image: Image.Image) -> Any:
-        core = image.convert("RGB").crop(
-            (QR_PADDING_PX, QR_PADDING_PX, image.width - QR_PADDING_PX, image.height - QR_PADDING_PX)
+        source = image.convert("RGB")
+        expected_canvas = 2 * QR_PADDING_PX + 29 * QR_MODULE_SIZE
+        if source.size != (expected_canvas, expected_canvas):
+            raise ValueError(
+                f"LPIPS E041 expects {expected_canvas}x{expected_canvas} scan-ready rasters, "
+                f"got {source.size}"
+            )
+        core = source.crop(
+            (QR_PADDING_PX, QR_PADDING_PX, source.width - QR_PADDING_PX, source.height - QR_PADDING_PX)
         )
+        expected_core = 29 * QR_MODULE_SIZE
+        if core.size != (expected_core, expected_core):
+            raise ValueError(f"LPIPS E041 core must be {expected_core}x{expected_core}, got {core.size}")
         array = np.asarray(core, dtype=np.float32) / 255.0
         return torch.from_numpy(array).permute(2, 0, 1).unsqueeze(0).mul(2).sub(1)
 
@@ -319,7 +385,7 @@ def run_e041(
     import torch
     from .config import Settings
     from .diffqrcoder_backend import UpstreamDiffQRCoderBackend
-    from .qr import generate_diffqrcoder_qr, prepare_scan_ready_image
+    from .qr import generate_diffqrcoder_qr
 
     if not torch.cuda.is_available():
         raise RuntimeError("E041 requires CUDA")
@@ -499,16 +565,7 @@ def run_e041(
         for factor in FUNCTIONAL_TONE_FACTORS:
             factor_token = f"{int(round(factor * 100)):02d}"
             key = f"{base_key}__tone{factor_token}"
-            if factor == 0.0:
-                image = base_image.copy()
-            else:
-                image = prepare_scan_ready_image(
-                    base_image,
-                    blueprint,
-                    quiet_zone_mode="adaptive_light",
-                    quiet_zone_minimum_luminance=0.90,
-                    functional_pattern_tone_factor=factor,
-                )
+            image = _functional_tone_exact_diffqrcoder(base_image, blueprint, factor)
             image_path = phase_b_root / base_key / f"tone-{factor_token}.png"
             _save_png(image_path, image)
             phase_b_images[key] = image

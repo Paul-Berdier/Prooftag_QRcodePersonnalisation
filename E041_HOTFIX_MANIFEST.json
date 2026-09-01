@@ -1,0 +1,61 @@
+{
+  "base_commit_observed": "44a94f5b456ba790d1a0b048675bccb2ef741f19",
+  "cause": "Phase-B functional toning resized 736px SR-MPGD rasters to 740px via generic repair_qr_modules; LPIPS then compared 584px and 580px cores. Generic functional tone path also capped requested factors above 0.12.",
+  "files": [
+    {
+      "path": ".github/workflows/e041-cpu-checks.yml",
+      "sha256": "faf970ab30419eae7c1d163b4db27d5f515a1d2f62570f5ab5a81750a49d06e9",
+      "size_bytes": 1625
+    },
+    {
+      "path": "E041_HOTFIX_A_LIRE.txt",
+      "sha256": "87fe2ef5f823becdd30404039fb43f288e5a973667407d66edc29d7152df60c0",
+      "size_bytes": 889
+    },
+    {
+      "path": "deploy/k8s/e041-phase-b-recovery-job.yaml",
+      "sha256": "21c4aa423a519e53fdbc8da47aa05c840d7b15aba44479a190df709a19453caf",
+      "size_bytes": 1890
+    },
+    {
+      "path": "prooftag_qr/e041_gamma_functional_frontier.py",
+      "sha256": "08c2ca26003f25aeb32408224bf88933e80675849023948d57b91ebc1d200728",
+      "size_bytes": 32203
+    },
+    {
+      "path": "prooftag_qr/e041_recover_phase_b.py",
+      "sha256": "b489eec4d4591765e904a70a5e8a35c9eb87c18d05fa2faa2d2b7b32a5b4dd46",
+      "size_bytes": 14552
+    },
+    {
+      "path": "scripts/deploy-e041-notebooks.sh",
+      "sha256": "359bf82a51a65714587bb1ac1b4b703dd5090e879c7064b1b3e89d72a5ba6bf0",
+      "size_bytes": 2653
+    },
+    {
+      "path": "scripts/recover-e041-phase-b.sh",
+      "sha256": "37f811a5080b08496818fe1396b75f97b3dbb487498651ae8c2a60452b1d011a",
+      "size_bytes": 4367
+    },
+    {
+      "path": "tests/test_e041_gamma_functional_frontier.py",
+      "sha256": "05dc620186fec623e6d8bc1f4b7b8284661c9c8404f0fbcae3d0a227059deb1e",
+      "size_bytes": 1291
+    },
+    {
+      "path": "tests/test_e041_phase_b_hotfix.py",
+      "sha256": "d067270cb3f44bf390c9d0a3160e7df6ea9dd4e39836ac5b9ccaee5cd88bfccc",
+      "size_bytes": 894
+    }
+  ],
+  "geometry": {
+    "canvas_px": 736,
+    "core_modules": 29,
+    "core_px": 580,
+    "module_px": 20,
+    "padding_px": 78
+  },
+  "gpu_required_for_recovery": false,
+  "hotfix": "e041-phase-b-exact-geometry-recovery-v1",
+  "recovery": "reuse 54 Phase-A checkpoints + 3 selected bases; regenerate and rescore only 18 Phase-B raster variants; no Stage1/Stage2/SR-MPGD rerun"
+}

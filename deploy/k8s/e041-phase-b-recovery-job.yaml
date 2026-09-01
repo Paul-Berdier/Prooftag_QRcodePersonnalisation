@@ -1,0 +1,65 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: __JOB_NAME__
+  namespace: __NAMESPACE__
+  labels:
+    app: prooftag-qr-e041-recover
+    app.kubernetes.io/name: prooftag-qr-e041-recover
+    app.kubernetes.io/part-of: prooftag-qr
+    prooftag.io/experiment: e041-gamma-functional-pattern-frontier-v1
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: prooftag-qr-e041-recover
+        prooftag.io/experiment: e041-gamma-functional-pattern-frontier-v1
+    spec:
+      restartPolicy: Never
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: recover
+          image: __IMAGE__
+          imagePullPolicy: IfNotPresent
+          command: [python, -m, prooftag_qr.e041_recover_phase_b]
+          args:
+            - --output-dir
+            - __RESULTS_DIR__
+          envFrom:
+            - configMapRef:
+                name: prooftag-qr-config
+          env:
+            - name: PROOFTAG_QR_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: prooftag-qr-database
+                  key: password
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: prooftag-huggingface
+                  key: token
+                  optional: true
+          resources:
+            requests:
+              cpu: "2"
+              memory: 8Gi
+            limits:
+              cpu: "12"
+              memory: 32Gi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: model-cache
+              mountPath: /cache
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: prooftag-qr-data
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: prooftag-qr-model-cache

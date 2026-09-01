@@ -9,6 +9,7 @@ notebook_deployment="${PROOFTAG_QR_NOTEBOOK_DEPLOYMENT:-prooftag-qr-notebook}"
 kubectl_bin="${KUBECTL:-kubectl}"
 for nb in "$frontier" "$pipeline"; do [[ -f "notebooks/$nb" ]] || { echo "Notebook E041 absent: $nb" >&2; exit 1; }; done
 [[ -f prooftag_qr/e041_gamma_functional_frontier.py ]] || { echo "Runner E041 absent." >&2; exit 1; }
+[[ -f prooftag_qr/e041_recover_phase_b.py ]] || { echo "Recovery E041 absent." >&2; exit 1; }
 [[ -z "$(git status --porcelain)" ]] || { echo "Commit/push/pull avant E041." >&2; exit 1; }
 
 "$kubectl_bin" scale deployment "$notebook_deployment" -n "$namespace" --replicas=0 >/dev/null || true
@@ -28,7 +29,13 @@ assert e.GAMMAS == (50.0, 100.0, 250.0, 500.0, 1000.0, 2000.0)
 assert e.LATENT_RADIUS_RMS == 0.2
 assert len(e.FUNCTIONAL_TONE_FACTORS) == 6
 assert e.PROMPT != 'a sunlit greenhouse filled with tomato plants and terracotta pots, botanical photograph'
-print('E041 runtime OK:', e.PROMPT)
+from PIL import Image
+from prooftag_qr.qr import generate_diffqrcoder_qr
+import prooftag_qr.e041_recover_phase_b
+b = generate_diffqrcoder_qr('https://ptag.io/t/e041', 'M', version=3, mask_pattern=4, module_size=20)
+o = e._functional_tone_exact_diffqrcoder(Image.new('RGB', (736,736), 'gray'), b, 0.2)
+assert o.size == (736,736)
+print('E041 runtime + Phase-B geometry hotfix OK:', e.PROMPT)
 PY
 "$kubectl_bin" scale deployment "$notebook_deployment" -n "$namespace" --replicas=0 >/dev/null || true
 echo "===== E041 PRÊT ====="

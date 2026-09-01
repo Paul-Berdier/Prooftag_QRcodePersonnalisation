@@ -21,6 +21,8 @@ def test_e041_prompt_is_not_e040_greenhouse():
 
 def test_e041_does_not_project_data_modules():
     source = MODULE.read_text(encoding='utf-8')
-    assert 'functional_pattern_tone_factor=factor' in source
-    assert 'prepare_scan_ready_image' in source
+    assert '_functional_tone_exact_diffqrcoder' in source
+    assert 'functional_pattern_mask' in source
+    assert 'if not bool(functional[row, col])' in source
+    assert 'prepare_scan_ready_image(' not in source
     assert 'data modules are not projected' in source
