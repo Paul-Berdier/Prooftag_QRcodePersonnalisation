@@ -1,0 +1,33 @@
+E042 HOTFIX — NVIDIA RuntimeClass
+
+Cause exacte:
+- le Job E042 decode demandait bien nvidia.com/gpu: "1";
+- mais il n'avait pas `runtimeClassName: nvidia`;
+- E041, qui avait effectivement accès à CUDA, possède cette RuntimeClass;
+- le pod E042 était donc planifié avec une ressource GPU mais lancé sans le runtime
+  NVIDIA attendu par ce cluster, d'où torch.cuda.is_available() == False.
+
+Correction:
+- ajout de `runtimeClassName: nvidia` dans
+  deploy/k8s/e042-decode-selected-latents-job.yaml;
+- test de non-régression dans tests/test_e042_deployment.py.
+
+Aucun changement:
+- E041;
+- latents/checkpoints;
+- algorithme E042;
+- gamma;
+- Stage1 / Stage2 / SR-MPGD;
+- Job CPU de diagnostic.
+
+Le crash CUDA se produit AVANT output_dir.mkdir() dans run_decode_phase.
+Il n'est donc normalement pas nécessaire de supprimer /data/e042-*.
+Le script supprime/recrée le Job Kubernetes au prochain lancement.
+
+Après extraction:
+1. commit / push;
+2. pull serveur;
+3. rebuild de l'image API uniquement pour garder la provenance du nouveau commit:
+   bash scripts/deploy-app-image.sh
+4. relancer:
+   bash scripts/run-e042-decoder-diagnostic.sh

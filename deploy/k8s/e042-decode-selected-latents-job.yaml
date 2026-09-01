@@ -17,6 +17,7 @@ spec:
         prooftag.io/experiment: e042-decoder-failure-localization-v1
     spec:
       restartPolicy: Never
+      runtimeClassName: nvidia
       terminationGracePeriodSeconds: 60
       securityContext:
         fsGroup: 10001

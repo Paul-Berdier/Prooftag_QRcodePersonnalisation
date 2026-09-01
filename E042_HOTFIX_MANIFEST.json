@@ -1,0 +1,22 @@
+{
+  "base_commit_observed": "72b2d0284dc8baba199e9b51a411425c175abcfa",
+  "cause": "E042 GPU Job requested nvidia.com/gpu but omitted runtimeClassName: nvidia",
+  "scientific_state_recomputed": false,
+  "files": [
+    {
+      "path": "E042_HOTFIX_A_LIRE.txt",
+      "size_bytes": 1143,
+      "sha256": "c850afdd5e37adb273220622f328575cccc416b851d3879fc8e419ca1f01cb6d"
+    },
+    {
+      "path": "deploy/k8s/e042-decode-selected-latents-job.yaml",
+      "size_bytes": 2496,
+      "sha256": "5e83b78b6a329cf03b3619152fe9458e02c0ccaa9497e67c7b969ff7a271d11e"
+    },
+    {
+      "path": "tests/test_e042_deployment.py",
+      "size_bytes": 1344,
+      "sha256": "b5ee472b1a53c6de6adcdfb0d83b205217560ce6e0b602a24d6ced637ad82c04"
+    }
+  ]
+}
