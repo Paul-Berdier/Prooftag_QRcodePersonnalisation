@@ -1,0 +1,31 @@
+name: E040 CPU checks
+on:
+  push:
+    paths:
+      - "prooftag_qr/e040_*.py"
+      - "scripts/build_e040_*.py"
+      - "notebooks/35_e040_*.ipynb"
+      - "notebooks/36_final_qr_pipeline_visualizer.ipynb"
+      - "scripts/*e040*"
+      - "deploy/k8s/e040-checkpoint-frontier-job.yaml"
+      - "tests/test_e040_*.py"
+  pull_request:
+    paths:
+      - "prooftag_qr/e040_*.py"
+      - "scripts/build_e040_*.py"
+      - "notebooks/35_e040_*.ipynb"
+      - "notebooks/36_final_qr_pipeline_visualizer.ipynb"
+      - "scripts/*e040*"
+      - "deploy/k8s/e040-checkpoint-frontier-job.yaml"
+      - "tests/test_e040_*.py"
+jobs:
+  cpu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e '.[dev,notebook,optimizer]'
+      - run: pytest -q tests/test_e040_checkpoint_frontier.py tests/test_e040_notebooks.py tests/test_e040_deployment.py

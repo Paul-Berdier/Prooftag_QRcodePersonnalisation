@@ -1,0 +1,114 @@
+{
+  "patch": "Prooftag E040 SR-MPGD checkpoint frontier + final QR pipeline visualizer",
+  "experiment": "e040-srmpgd-checkpoint-frontier-v1",
+  "base_repository": "Paul-Berdier/Prooftag_QRcodePersonnalisation",
+  "base_observed_main_commit": "7fb824d5dd05cefbb91edfbd9972bd05cdbd19fd",
+  "created_date": "2026-09-01",
+  "gamma_fixed": 1000.0,
+  "radii": [
+    0.15,
+    0.175,
+    0.2,
+    0.225,
+    0.25
+  ],
+  "max_iterations": 8,
+  "checkpoint_count_expected": 45,
+  "model_integration": {
+    "advisor": "E026/E031 recommendation preview; never replaces QR-Verify",
+    "e016_surrogate": "research score/tie-break only when surrogate-card promotion.research_usable=true"
+  },
+  "notebooks": [
+    "notebooks/35_e040_srmpgd_checkpoint_frontier.ipynb",
+    "notebooks/36_final_qr_pipeline_visualizer.ipynb"
+  ],
+  "additive_patch": true,
+  "overwrites_existing_files": false,
+  "files": [
+    {
+      "path": ".github/workflows/e040-cpu-checks.yml",
+      "size_bytes": 1010,
+      "sha256": "591851b4ce8d3d6dd7819d7d3cf801ea27636b6c4f2c5528d70a6972aa3f3aae"
+    },
+    {
+      "path": "E040_A_LIRE.txt",
+      "size_bytes": 760,
+      "sha256": "07ef0bbf4b82ef62123946b2ea7af890fef8d8546b82cd98bd317be0253222f9"
+    },
+    {
+      "path": "deploy/k8s/e040-checkpoint-frontier-job.yaml",
+      "size_bytes": 2492,
+      "sha256": "5d4f60ec0de832a1629741b97d95b3b83921cd75cd345bfced3811122f0ffe94"
+    },
+    {
+      "path": "docs/e040-srmpgd-checkpoint-and-final-pipeline.md",
+      "size_bytes": 1905,
+      "sha256": "45c25646c177315c2b104052f473a31633f8f1819e455148c73bce109629807f"
+    },
+    {
+      "path": "notebooks/35_e040_srmpgd_checkpoint_frontier.ipynb",
+      "size_bytes": 8298,
+      "sha256": "e0ae68a75f838e4926cd4a57fa5af2e897db2ec7dcd94f690b8951fab967c168"
+    },
+    {
+      "path": "notebooks/36_final_qr_pipeline_visualizer.ipynb",
+      "size_bytes": 7443,
+      "sha256": "8f8af0abb62b4b6efef38150a1018a84bd41e0e1e20d7e65d3ce1f095eef2f97"
+    },
+    {
+      "path": "prooftag_qr/e040_checkpoint_frontier.py",
+      "size_bytes": 34631,
+      "sha256": "ad02f9984babfa0fa0b5663ef68c6156282c281f7e7c4f2dc618a015e2c7d79d"
+    },
+    {
+      "path": "prooftag_qr/e040_model_bridge.py",
+      "size_bytes": 6873,
+      "sha256": "d89cca3b3128cc6ff7ddcae6531b7601e0785851f08f67323d29735f920409fc"
+    },
+    {
+      "path": "scripts/build_e040_checkpoint_notebook.py",
+      "size_bytes": 6154,
+      "sha256": "c4e62edeafdecd917bb70d35e7dca4953bd821c288cf64fd7d2ae151eff19a93"
+    },
+    {
+      "path": "scripts/build_e040_final_pipeline_notebook.py",
+      "size_bytes": 5512,
+      "sha256": "7680ed8e3b62e9df92f8b840f971d265eeb7e7f338905b6cdd5393019f7c484e"
+    },
+    {
+      "path": "scripts/deploy-e040-notebooks.sh",
+      "size_bytes": 3349,
+      "sha256": "e86cfc584668669dd135a373de2fdafb75bfa402d626d21aab360736314bb6ff"
+    },
+    {
+      "path": "scripts/download-e040-results.sh",
+      "size_bytes": 1023,
+      "sha256": "5e745727a4bdc9b39fc1bcb4bd75bc21bf2451cc66c50b1bc91dbe0e7a30ce29"
+    },
+    {
+      "path": "scripts/e040-remote.ps1",
+      "size_bytes": 2848,
+      "sha256": "0ee98f9a9912d9a185d8d03386b93f7c922cdc4227a162c2ead0b5c73a58bb87"
+    },
+    {
+      "path": "scripts/run-e040-checkpoint-frontier.sh",
+      "size_bytes": 6723,
+      "sha256": "02d7a36bc9200a310ff87e6630a1d31ec8bd8cf37324a910c406f9960561ba1f"
+    },
+    {
+      "path": "tests/test_e040_checkpoint_frontier.py",
+      "size_bytes": 915,
+      "sha256": "280dcfdf400a16066ab7cb7705dfa1c73befac69a3632411ea1b5649dbae4665"
+    },
+    {
+      "path": "tests/test_e040_deployment.py",
+      "size_bytes": 918,
+      "sha256": "36f5312bbd4d23f7c9ee0093ebc8a3d862dab0f0a1e3992d6ac75d4ecb0c1425"
+    },
+    {
+      "path": "tests/test_e040_notebooks.py",
+      "size_bytes": 1034,
+      "sha256": "336debf6f208a005b66bb5e252f1841bf0eb421029fe957edc6b8f051f76fa07"
+    }
+  ]
+}
