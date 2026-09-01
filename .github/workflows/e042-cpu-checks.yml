@@ -1,0 +1,33 @@
+name: E042 CPU checks
+on:
+  push:
+    paths:
+      - 'prooftag_qr/e042_decoder_failure_localization.py'
+      - 'scripts/*e042*'
+      - 'deploy/k8s/e042-*'
+      - 'notebooks/39_e042_*'
+      - 'notebooks/40_e042_*'
+      - 'tests/test_e042_*'
+  pull_request:
+    paths:
+      - 'prooftag_qr/e042_decoder_failure_localization.py'
+      - 'scripts/*e042*'
+      - 'deploy/k8s/e042-*'
+      - 'notebooks/39_e042_*'
+      - 'notebooks/40_e042_*'
+      - 'tests/test_e042_*'
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pytest pyyaml
+      - run: python scripts/build_e042_decoder_diagnostic_notebook.py
+      - run: python scripts/build_e042_diagnostic_pipeline_notebook.py
+      - run: python -m py_compile prooftag_qr/e042_decoder_failure_localization.py scripts/build_e042_decoder_diagnostic_notebook.py scripts/build_e042_diagnostic_pipeline_notebook.py
+      - run: bash -n scripts/run-e042-decoder-diagnostic.sh scripts/deploy-e042-notebooks.sh scripts/download-e042-results.sh
+      - run: python -c "import yaml; [yaml.safe_load(open(p,encoding='utf-8')) for p in ['deploy/k8s/e042-decode-selected-latents-job.yaml','deploy/k8s/e042-decoder-diagnostic-job.yaml']]"
+      - run: pytest -q tests/test_e042_decoder_diagnostic.py tests/test_e042_deployment.py

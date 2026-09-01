@@ -1,0 +1,71 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: __JOB_NAME__
+  namespace: __NAMESPACE__
+  labels:
+    app: prooftag-qr-e042-diagnose
+    app.kubernetes.io/name: prooftag-qr-e042-diagnose
+    app.kubernetes.io/part-of: prooftag-qr
+    prooftag.io/experiment: e042-decoder-failure-localization-v1
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: prooftag-qr-e042-diagnose
+        prooftag.io/experiment: e042-decoder-failure-localization-v1
+    spec:
+      restartPolicy: Never
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: diagnose
+          image: __IMAGE__
+          imagePullPolicy: IfNotPresent
+          command: [python, -m, prooftag_qr.e042_decoder_failure_localization]
+          args:
+            - --phase
+            - diagnose
+            - --e041-results-dir
+            - __E041_RESULTS_DIR__
+            - --output-dir
+            - __RESULTS_DIR__
+            - --source-commit
+            - __SOURCE_COMMIT__
+          envFrom:
+            - configMapRef:
+                name: prooftag-qr-config
+          env:
+            - name: PROOFTAG_QR_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: prooftag-qr-database
+                  key: password
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: prooftag-huggingface
+                  key: token
+                  optional: true
+          resources:
+            requests:
+              cpu: "2"
+              memory: 8Gi
+            limits:
+              cpu: "12"
+              memory: 32Gi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: model-cache
+              mountPath: /cache
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: prooftag-qr-data
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: prooftag-qr-model-cache

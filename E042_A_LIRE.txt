@@ -1,0 +1,19 @@
+E042 — localisation de l'échec décodeur
+
+Cette expérience ne relance PAS Stage1/Stage2/SR-MPGD.
+Elle réutilise 9 latents E041 et cherche où le décodage casse réellement.
+
+Après extraction + commit + push + pull :
+
+1. bash scripts/deploy-e042-notebooks.sh
+2. bash scripts/run-e042-decoder-diagnostic.sh
+3. attendre "===== E042 TERMINÉ ====="
+4. Windows: .\scripts\e042-remote.ps1
+5. Pipeline visuelle: .\scripts\e042-remote.ps1 -Pipeline
+
+Le script orchestre automatiquement :
+- une courte phase GPU VAE-only ;
+- une phase CPU de diagnostics scanners / QR-Verify.
+
+Ne pas relancer E041.
+Ne pas supprimer /data/e041-gamma-functional-pattern-frontier-v1.

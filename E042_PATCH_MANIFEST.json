@@ -1,0 +1,92 @@
+{
+  "base_commit_observed": "952d6152544eeaac5134918bd501aecdc14786c1",
+  "cpu_work": "decoder diagnostics and QR-Verify",
+  "e041_recomputed": false,
+  "files": [
+    {
+      "path": ".github/workflows/e042-cpu-checks.yml",
+      "sha256": "279024a44f6fcae6a508241cbcfc78eede678650d0d0c12d45c7980cd2594109",
+      "size_bytes": 1415
+    },
+    {
+      "path": "E042_A_LIRE.txt",
+      "sha256": "4eaa05d2ac761776aaa97c672183d14896546e5d0b0e37658c066a15cb08bf9e",
+      "size_bytes": 663
+    },
+    {
+      "path": "deploy/k8s/e042-decode-selected-latents-job.yaml",
+      "sha256": "30666ba69604bfd9071ea4fc47bf1528b964c6660101d75374aacc3bae92aad1",
+      "size_bytes": 2465
+    },
+    {
+      "path": "deploy/k8s/e042-decoder-diagnostic-job.yaml",
+      "sha256": "71e25019e1b70c585265b1b1c12a8c66f187ac82ace84098146264e0a0b378a6",
+      "size_bytes": 2072
+    },
+    {
+      "path": "docs/e042-decoder-failure-localization.md",
+      "sha256": "05bc42fcb54f4f7cd287d77c7077544ee1ff1ee54d802b6f00f4f41b38f5c3c2",
+      "size_bytes": 2518
+    },
+    {
+      "path": "notebooks/39_e042_decoder_failure_localization.ipynb",
+      "sha256": "93e4ca8e7ff46d1307f8edae0820b19c228b5e21d1eb0e5a5143272fcc60e63c",
+      "size_bytes": 7706
+    },
+    {
+      "path": "notebooks/40_e042_diagnostic_pipeline_visualizer.ipynb",
+      "sha256": "be79b23dc89387838ecb03746c231ab0bbd414e69f99b2275bcfc0e96dacc399",
+      "size_bytes": 3028
+    },
+    {
+      "path": "prooftag_qr/e042_decoder_failure_localization.py",
+      "sha256": "e82f7eeeaf9456740297ee3729523375520967b665ddf628af2ccf48f03d9f3f",
+      "size_bytes": 55043
+    },
+    {
+      "path": "scripts/build_e042_decoder_diagnostic_notebook.py",
+      "sha256": "4e4c50196d7d96b476a580a3e56d5d7cb408ef6042e924b5fe7a318d802004e9",
+      "size_bytes": 6076
+    },
+    {
+      "path": "scripts/build_e042_diagnostic_pipeline_notebook.py",
+      "sha256": "5310d402c29218bb873aec2cd6773a4ebbcecb8eb1fef9c4e878764de697c93b",
+      "size_bytes": 2547
+    },
+    {
+      "path": "scripts/deploy-e042-notebooks.sh",
+      "sha256": "08bc7ab67a98c0b5afb514e309de9d57fbe18bab7d8690fa6b9ed7175cce42a1",
+      "size_bytes": 2746
+    },
+    {
+      "path": "scripts/download-e042-results.sh",
+      "sha256": "9191cfbaaae05d4e41797da787cd4cda14db4687537acdb757afdd3468f0db39",
+      "size_bytes": 999
+    },
+    {
+      "path": "scripts/e042-remote.ps1",
+      "sha256": "da8c6fc424d332de11af37de22f12cff56740d17ff378403ffcdb9bc55d39798",
+      "size_bytes": 3047
+    },
+    {
+      "path": "scripts/run-e042-decoder-diagnostic.sh",
+      "sha256": "468ed33735c3dd1a67cb8d181ee8309b72eb53362bc71257f01d94f32c60d942",
+      "size_bytes": 7803
+    },
+    {
+      "path": "tests/test_e042_decoder_diagnostic.py",
+      "sha256": "197f02037b63e9347a5bba47d274b48e84338d2e354ffc53795851c20b67fae4",
+      "size_bytes": 1488
+    },
+    {
+      "path": "tests/test_e042_deployment.py",
+      "sha256": "9068ccadef9b3a5517f142cfa498c432a02bcd2e23c3bf3df4b066546cf6fc76",
+      "size_bytes": 933
+    }
+  ],
+  "generalization_authorized": false,
+  "gpu_work": "short VAE re-decode of 9 existing latents only",
+  "patch": "e042-decoder-failure-localization-v1",
+  "production_ready": false,
+  "purpose": "Reuse nine E041 Phase-A latents to localize decode failure across detector, exact quiet-zone geometry, binarization, canonical module-grid reconstruction, QR functional subregions and QR-Verify."
+}
