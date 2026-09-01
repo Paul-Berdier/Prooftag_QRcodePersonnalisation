@@ -1,0 +1,16 @@
+E040 HOTFIX — joblib/advisor + finalisation sans recalcul
+
+Cause observée sur commit c69bc95f2077:
+  ModuleNotFoundError: No module named 'joblib'
+  dans advisor_preview(), après le calcul/scoring des 45 checkpoints.
+
+Le hotfix:
+1. ajoute un extra API advisor-runtime = joblib + scikit-learn;
+2. embarque l'asset Stage 1 archivé dans l'image API pour la vue pipeline;
+3. rend l'advisor optionnel et fail-closed: une erreur advisor est enregistrée, mais ne détruit
+   plus un résultat SR-MPGD déjà calculé;
+4. ajoute un finalizer CPU qui exige 45/45 checkpoints + gamma=1000 et termine le dossier E040
+   existant sans diffusion, sans VAE, sans SR-MPGD, sans QR-Verify et sans scoring qualité;
+5. recrée Stage1, advisor-preview, contact sheet, pipeline-manifest, verdict, report et manifest.
+
+IMPORTANT: ne pas supprimer /data/e040-srmpgd-checkpoint-frontier-v1 avant la finalisation.

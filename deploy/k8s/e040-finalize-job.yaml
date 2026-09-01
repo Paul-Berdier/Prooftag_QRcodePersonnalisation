@@ -1,0 +1,52 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: __JOB_NAME__
+  namespace: __NAMESPACE__
+  labels:
+    app: prooftag-qr-e040-finalize
+    app.kubernetes.io/name: prooftag-qr-e040-finalize
+    app.kubernetes.io/part-of: prooftag-qr
+    prooftag.io/experiment: e040-srmpgd-checkpoint-frontier-v1
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: prooftag-qr-e040-finalize
+        prooftag.io/experiment: e040-srmpgd-checkpoint-frontier-v1
+    spec:
+      restartPolicy: Never
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: finalize
+          image: __IMAGE__
+          imagePullPolicy: IfNotPresent
+          command: [python, -m, prooftag_qr.e040_finalize]
+          args:
+            - --parent-dir
+            - __PARENT_DIR__
+            - --e039-results-dir
+            - __E039_RESULTS_DIR__
+            - --output-dir
+            - __RESULTS_DIR__
+          envFrom:
+            - configMapRef:
+                name: prooftag-qr-config
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "4"
+              memory: 8Gi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: prooftag-qr-data

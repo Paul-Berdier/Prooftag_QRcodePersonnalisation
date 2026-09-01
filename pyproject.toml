@@ -59,6 +59,12 @@ optimizer = [
   "optuna>=4.4,<5",
   "scikit-learn>=1.5,<2",
 ]
+advisor-runtime = [
+  # Loading an E026/E031 advisor requires both joblib and scikit-learn at inference time.
+  # Keep this smaller than the full optimizer extra: E040 does not train CatBoost/Optuna.
+  "joblib>=1.4,<2",
+  "scikit-learn>=1.5,<2",
+]
 quality = [
   # PyPI 1.2.0 omits bpe_simple_vocab_16e6.txt.gz. The pinned official
   # source revision includes it through package_data.

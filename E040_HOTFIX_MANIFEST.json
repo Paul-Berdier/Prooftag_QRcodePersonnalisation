@@ -1,0 +1,53 @@
+{
+  "name": "E040 hotfix advisor runtime + partial finalization",
+  "base_commit": "c69bc95f2077aed74efb4831507e20fe4ac44920",
+  "files": [
+    {
+      "path": "Dockerfile",
+      "size": 3779,
+      "sha256": "a2bf8f92b70da58e75b038d30e9344af4389846bf1b86c771407efe2b4fef91f"
+    },
+    {
+      "path": "E040_HOTFIX_A_LIRE.txt",
+      "size": 897,
+      "sha256": "5c5b89615021ab61ed482bc1fc102ff5e6f5f3c153da50a02bbdeac838107356"
+    },
+    {
+      "path": "deploy/k8s/e040-finalize-job.yaml",
+      "size": 1435,
+      "sha256": "09fe2a2fd7dd77d84f725d3f061bcae58e0a0e850e3f8fabb48e41d2ffc232bd"
+    },
+    {
+      "path": "prooftag_qr/e040_finalize.py",
+      "size": 10884,
+      "sha256": "d36ee5f4eb25681ce3ac73e865ca0e497191f4386846a7dcfc7eb0738753f269"
+    },
+    {
+      "path": "prooftag_qr/e040_model_bridge.py",
+      "size": 7486,
+      "sha256": "522b17e788ce57569740696fea31e2c53be9b6f1af1aca036a74b0812de62a0a"
+    },
+    {
+      "path": "pyproject.toml",
+      "size": 2336,
+      "sha256": "b3b4bde689d6755b9255019fafce24009e625f60e79d6bc0e44fd3de574705a4"
+    },
+    {
+      "path": "scripts/deploy-e040-notebooks.sh",
+      "size": 3766,
+      "sha256": "cf548235ad052e95e8c7b207c30cc2be8d2221f6dc13191708e650380764be53"
+    },
+    {
+      "path": "scripts/finalize-e040-partial.sh",
+      "size": 4542,
+      "sha256": "152ae4942e592ab1c5d96a8e2a169a48c671eed4b2089eb00f34346f5b0164ed"
+    },
+    {
+      "path": "tests/test_e040_hotfix.py",
+      "size": 1781,
+      "sha256": "71060c559a3fb338acd5233e0e55da46ffd4c9e2ab4541fb77c7d6156e3d2d45"
+    }
+  ],
+  "gamma_fixed": 1000,
+  "preserves_partial_results": true
+}

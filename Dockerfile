@@ -42,9 +42,11 @@ WORKDIR /app
 COPY pyproject.toml README.md alembic.ini ./
 COPY prooftag_qr ./prooftag_qr
 COPY migrations ./migrations
+# E040's final-pipeline evidence must contain the archived Stage-1 raster.
+COPY docs/e035-assets/e034-observed-stage1.png ./docs/e035-assets/e034-observed-stage1.png
 RUN pip install --upgrade pip \
-    && pip install '.[gpu,quality]' \
-    && python -c "import hpsv2, lpips, torch, torchvision; from diffusers import ControlNetModel, DDIMScheduler; lpips.LPIPS(net='vgg', verbose=False); print('GPU, LPIPS and quality-scoring stack OK:', torch.__version__, torchvision.__version__)"
+    && pip install '.[gpu,quality,advisor-runtime]' \
+    && python -c "import hpsv2, joblib, lpips, sklearn, torch, torchvision; from diffusers import ControlNetModel, DDIMScheduler; lpips.LPIPS(net='vgg', verbose=False); print('GPU, LPIPS, advisor-runtime and quality stack OK:', torch.__version__, torchvision.__version__, joblib.__version__, sklearn.__version__)"
 
 RUN git clone https://github.com/jwliao1209/DiffQRCoder.git /opt/DiffQRCoder \
     && git -C /opt/DiffQRCoder checkout "$DIFFQRCODER_COMMIT" \
@@ -55,6 +57,7 @@ RUN git clone https://github.com/jwliao1209/DiffQRCoder.git /opt/DiffQRCoder \
 RUN qart help >/dev/null \
     && node -e "const p=require('/opt/prooftag-qr-verify/node_modules/qr-verify/package.json'); if(p.version!=='0.2.0') process.exit(1); console.log('qr-verify version OK:', p.version)" \
     && python -c "from prooftag_qr.qr import generate_diffqrcoder_qr; from prooftag_qr.validation import QRVerifyDecoder; p='https://ptag.io/t/build'; d=QRVerifyDecoder(); a=d.decode_presets(generate_diffqrcoder_qr(p).image); d.close(); assert len(a)==37 and all(x['text']==p for x in a); print('qr-verify WASM bridge OK: 37/37')" \
+    && test -f /app/docs/e035-assets/e034-observed-stage1.png \
     && echo "QArt revision OK: $QART_COMMIT"
 
 RUN useradd --create-home --uid 10001 app \

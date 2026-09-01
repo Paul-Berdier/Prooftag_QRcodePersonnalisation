@@ -4,9 +4,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping
 
 from PIL import Image
 
@@ -40,48 +39,63 @@ def advisor_preview(
     qr_context: Mapping[str, Any] | None = None,
     limit: int = 5,
 ) -> dict[str, Any]:
-    """Use the latest E026/E031 advisor as a *recommendation*, never as a delivery gate."""
+    """Use the latest E026/E031 advisor as a recommendation, never as a delivery gate.
+
+    The advisor is optional evidence. A missing/incompatible legacy model must never destroy an
+    already-completed SR-MPGD experiment; the failure is recorded explicitly instead.
+    """
     path = discover_latest_advisor()
     if path is None:
         return {"available": False, "reason": "no advisor joblib found"}
 
-    from .lab import _legacy_laboratory_profiles
-    from .parameter_advisor import E026ParameterAdvisor, RecipeCandidate
+    try:
+        from .lab import _legacy_laboratory_profiles
+        from .parameter_advisor import E026ParameterAdvisor, RecipeCandidate
 
-    advisor = E026ParameterAdvisor.load(path)
-    candidates: list[RecipeCandidate] = []
-    for profile in _legacy_laboratory_profiles():
-        if profile.get("backend") != "controlnet":
-            continue
-        if profile.get("output_variant") not in {"srpg", "srmpgd"}:
-            continue
-        configuration = {
-            key: value
-            for key, value in profile.items()
-            if key not in {"name", "description", "enabled"}
-        }
-        signature = _canonical_sha(configuration)
-        candidates.append(
-            RecipeCandidate(
-                id=f"e040-{signature[:10]}",
-                method_id=str(profile.get("id") or "unknown"),
-                configuration=configuration,
-                signature=signature,
-                observations=0,
+        advisor = E026ParameterAdvisor.load(path)
+        candidates: list[RecipeCandidate] = []
+        for profile in _legacy_laboratory_profiles():
+            if profile.get("backend") != "controlnet":
+                continue
+            if profile.get("output_variant") not in {"srpg", "srmpgd"}:
+                continue
+            configuration = {
+                key: value
+                for key, value in profile.items()
+                if key not in {"name", "description", "enabled"}
+            }
+            signature = _canonical_sha(configuration)
+            candidates.append(
+                RecipeCandidate(
+                    id=f"e040-{signature[:10]}",
+                    method_id=str(profile.get("id") or "unknown"),
+                    configuration=configuration,
+                    signature=signature,
+                    observations=0,
+                )
             )
-        )
-    if not candidates:
-        return {"available": False, "path": str(path), "reason": "no candidate profile"}
+        if not candidates:
+            return {"available": False, "path": str(path), "reason": "no candidate profile"}
 
-    recommendations = advisor.recommend(
-        prompt=prompt,
-        candidates=candidates,
-        payload_length=payload_length,
-        error_correction=error_correction,
-        qr_context=dict(qr_context or {}),
-        scan_probability_threshold=0.80,
-        limit=min(limit, len(candidates)),
-    )
+        recommendations = advisor.recommend(
+            prompt=prompt,
+            candidates=candidates,
+            payload_length=payload_length,
+            error_correction=error_correction,
+            qr_context=dict(qr_context or {}),
+            scan_probability_threshold=0.80,
+            limit=min(limit, len(candidates)),
+        )
+    except Exception as exc:  # noqa: BLE001 - optional research evidence must fail closed
+        return {
+            "available": False,
+            "path": str(path),
+            "reason": "advisor load/inference failed",
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+            "note": "SR-MPGD/QR-Verify evidence remains valid; advisor is optional metadata",
+        }
+
     return {
         "available": True,
         "path": str(path),
@@ -158,7 +172,6 @@ def score_surrogate_images(images: Mapping[str, Image.Image]) -> tuple[dict[str,
         for name, image in images.items():
             array = np.asarray(image.convert("RGB"), dtype=np.float32) / 255.0
             tensor = torch.from_numpy(array).permute(2, 0, 1).unsqueeze(0)
-            # Match E016's 256x256 input contract while keeping this path deterministic.
             tensor = F.interpolate(tensor, size=(256, 256), mode="bilinear", align_corners=False)
             logits = model(tensor)
             probabilities = torch.sigmoid(logits).reshape(-1).cpu().numpy().astype(float).tolist()

@@ -9,6 +9,7 @@ notebook_deployment="${PROOFTAG_QR_NOTEBOOK_DEPLOYMENT:-${PROOFTAG_NOTEBOOK_DEPL
 kubectl_bin="${KUBECTL:-kubectl}"
 for nb in "$frontier" "$pipeline"; do [[ -f "notebooks/$nb" ]] || { echo "Notebook E040 absent: $nb" >&2; exit 1; }; done
 [[ -f prooftag_qr/e040_checkpoint_frontier.py ]] || { echo "Runner E040 absent." >&2; exit 1; }
+[[ -f prooftag_qr/e040_finalize.py ]] || { echo "Finalizer E040 absent." >&2; exit 1; }
 [[ -z "$(git status --porcelain)" ]] || { echo "Commit/push/pull avant E040." >&2; exit 1; }
 
 current="$($kubectl_bin get deployment "$notebook_deployment" -n "$namespace" -o jsonpath='{.spec.replicas}' 2>/dev/null || printf '0')"
@@ -29,9 +30,11 @@ if ! "$kubectl_bin" get secret prooftag-qr-notebook -n "$namespace" >/dev/null 2
 "$kubectl_bin" rollout status deployment/"$notebook_deployment" -n "$namespace" --timeout=1200s
 pod="$($kubectl_bin get pods -n "$namespace" -l app=prooftag-qr-notebook --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}')"
 for nb in "$frontier" "$pipeline"; do "$kubectl_bin" exec -n "$namespace" "$pod" -c notebook -- test -f "/workspace/notebooks/$nb"; done
-"$kubectl_bin" exec -n "$namespace" deployment/"$api_deployment" -c api -- python -c 'import prooftag_qr.e040_checkpoint_frontier as m; assert len(m.DEFAULT_RECIPES)==5; assert m.E039Config().gamma==1000; print("E040 runtime import OK")'
+"$kubectl_bin" exec -n "$namespace" deployment/"$api_deployment" -c api -- python -c 'import joblib, sklearn; import prooftag_qr.e040_checkpoint_frontier as m; import prooftag_qr.e040_finalize; assert len(m.DEFAULT_RECIPES)==5; assert m.E039Config().gamma==1000; print("E040 runtime + advisor deps + finalizer OK", joblib.__version__, sklearn.__version__)'
+"$kubectl_bin" exec -n "$namespace" deployment/"$api_deployment" -c api -- test -f /app/docs/e035-assets/e034-observed-stage1.png
 echo "===== E040 PRÊT ====="
 echo "Commit : $git_sha"
 echo "Frontier : $frontier"
 echo "Pipeline : $pipeline"
-echo "Calcul GPU : bash scripts/run-e040-checkpoint-frontier.sh"
+echo "Calcul GPU neuf : bash scripts/run-e040-checkpoint-frontier.sh"
+echo "Run partiel déjà calculé : bash scripts/finalize-e040-partial.sh"
