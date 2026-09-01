@@ -18,7 +18,7 @@ cd $RemoteRepository
 NS="`${PROOFTAG_QR_NAMESPACE:-qr-core}"
 DEP="`${PROOFTAG_QR_NOTEBOOK_DEPLOYMENT:-prooftag-qr-notebook}"
 RESULTS="`${PROOFTAG_E040_RESULTS_DIR:-/data/e040-srmpgd-checkpoint-frontier-v1}"
-test -f "`$RESULTS/verdict.json" || { echo "E040 pas termine. Lancer bash scripts/run-e040-checkpoint-frontier.sh" >&2; exit 1; }
+kubectl exec -n "`$NS" deployment/"`$DEP" -c notebook -- test -f "`$RESULTS/verdict.json" || { echo "E040 verdict absent dans le PVC : `$RESULTS/verdict.json" >&2; exit 1; }
 kubectl exec -n "`$NS" deployment/"`$DEP" -c notebook -- test -f "/workspace/notebooks/$Notebook"
 ENC="`$(kubectl get secret prooftag-qr-notebook -n "`$NS" -o jsonpath='{.data.token}')"
 TOKEN="`$(printf '%s' "`$ENC" | base64 --decode)"
