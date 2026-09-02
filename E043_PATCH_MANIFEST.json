@@ -1,0 +1,95 @@
+{
+  "base_commit_observed": "532d6a0158901c91181af8c4ab22710e61554cd9",
+  "patch": "e043-scanner-cell-frontier-v1",
+  "derived_from_e042_blocker": "GRID_DETECTION_OR_INTRA_MODULE_TEXTURE",
+  "gamma": 500.0,
+  "latent_radius_rms": 0.2,
+  "recipe_count": 4,
+  "checkpoint_count": 36,
+  "new_srmpgd_update_budget": 24,
+  "paired_prompt_parent_with_e041": true,
+  "generalization_authorized": false,
+  "production_ready": false,
+  "files": [
+    {
+      "path": ".github/workflows/e043-cpu-checks.yml",
+      "size_bytes": 1331,
+      "sha256": "34ff9e94fadc72ae61f90cfed23d011f5d0fabd9557c7b37e1b82dc534ff4e35"
+    },
+    {
+      "path": "E043_A_LIRE.txt",
+      "size_bytes": 753,
+      "sha256": "62380c66f0e9b4c751e515d60031666cf3e0b854c2db15428e578cbff78a0f11"
+    },
+    {
+      "path": "deploy/k8s/e043-scanner-cell-frontier-job.yaml",
+      "size_bytes": 2478,
+      "sha256": "702d5f7e2e93251a964ba8a1a7fd2629c5a16a5aac7f8f3c8c9d33d01832bf93"
+    },
+    {
+      "path": "docs/e043-scanner-cell-frontier.md",
+      "size_bytes": 1520,
+      "sha256": "7eb99ab1517942715a4342551e62ff9b6b24cb67b55f81ce6b5b224f859352b5"
+    },
+    {
+      "path": "notebooks/41_e043_scanner_cell_frontier.ipynb",
+      "size_bytes": 2077,
+      "sha256": "0890c2c1eaf044aa050c6d6827318d78fec4e2ebbe79711ad4da4fa3e5d902c4"
+    },
+    {
+      "path": "notebooks/42_e043_final_pipeline_visualizer.ipynb",
+      "size_bytes": 1533,
+      "sha256": "1bbcb5ac1a01f6952fbec5db4e1ad98a5765547160a53ced2db2f42b8889a1f8"
+    },
+    {
+      "path": "prooftag_qr/e043_scanner_cell_frontier.py",
+      "size_bytes": 47074,
+      "sha256": "3b362495dca3fb82558515e26f3ab220a10dff21b40d2f0211744e3814cb0836"
+    },
+    {
+      "path": "scripts/build_e043_final_pipeline_notebook.py",
+      "size_bytes": 248,
+      "sha256": "5638f6e800b5fb6e8349ea686760d384ce19e07c2a7629f462879ec3abcadf86"
+    },
+    {
+      "path": "scripts/build_e043_scanner_cell_notebook.py",
+      "size_bytes": 244,
+      "sha256": "5784f8bc70e93eca3dbd5e11b47947297563e132bb1cf43778d531406c2832d0"
+    },
+    {
+      "path": "scripts/deploy-e043-notebooks.sh",
+      "size_bytes": 2276,
+      "sha256": "a859e8ed800ffe00de418f5edd311cb75ecba4a3d64bc9fe67b8a7819af71ccb"
+    },
+    {
+      "path": "scripts/download-e043-results.sh",
+      "size_bytes": 823,
+      "sha256": "8cc34fe950e0778d8be5a5221ad97f22e7f6d403bba3267054aee8259ab773d7"
+    },
+    {
+      "path": "scripts/e043-remote.ps1",
+      "size_bytes": 3040,
+      "sha256": "580c9c14a0448c1c7247c765f840229e40a17511311d12a1b86b0d811e072ea9"
+    },
+    {
+      "path": "scripts/run-e043-scanner-cell-frontier.sh",
+      "size_bytes": 7486,
+      "sha256": "915d5fc00f18deab936d046fa534934d1518468a7f33ba03850c37dd1b6337c0"
+    },
+    {
+      "path": "tests/test_e043_contract.py",
+      "size_bytes": 1002,
+      "sha256": "29930494a587ca59255e06c96a40cd790b3b02726a34e68d61bc53e8aef01289"
+    },
+    {
+      "path": "tests/test_e043_deployment.py",
+      "size_bytes": 793,
+      "sha256": "18c41033ed4537c90ac3847b57b5e46b45b709331e2a886e9443fb472388c553"
+    },
+    {
+      "path": "tests/test_e043_notebooks.py",
+      "size_bytes": 495,
+      "sha256": "6dbc12dd3c4dfdf3f7115e85c728fbc036bf29ef5ee9add2631801301f4b7c89"
+    }
+  ]
+}

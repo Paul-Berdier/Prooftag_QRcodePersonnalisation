@@ -1,0 +1,19 @@
+E043 — scanner-cell frontier
+
+Base scientifique:
+- E042: GRID_DETECTION_OR_INTRA_MODULE_TEXTURE.
+- Même prompt/parent E041 pour comparaison appariée.
+- gamma=500 pour toutes les branches E043 (baseline appariée, pas constante globale).
+- 4 recettes x 9 checkpoints = 36.
+- A réutilise les 9 latents E041 gamma500, aucun nouvel update.
+- B/C/D = 24 nouveaux updates SR-MPGD maximum.
+- quiet zone exacte 736 / 78 / 580.
+- QR-Verify réel + garde esthétique.
+- production=false, generalization=false.
+
+Après extraction/push/pull:
+1. bash scripts/deploy-e043-notebooks.sh
+2. bash scripts/run-e043-scanner-cell-frontier.sh
+3. attendre "===== E043 TERMINÉ ====="
+4. Windows: .\scripts\e043-remote.ps1
+5. Pipeline: .\scripts\e043-remote.ps1 -Pipeline
