@@ -1,0 +1,20 @@
+E044 HOTFIX — Docker GitHub smart-HTTP / HPSv2
+
+Observed failure:
+  pip -> hpsv2 @ git+https://github.com/tgxs002/HPSv2.git@866735...
+  fatal: could not read Username for 'https://github.com'
+
+The HPSv2 repository is public and the pinned commit still exists. The failure is
+therefore in the Docker build's Git smart-HTTP path, before any E044 scientific job.
+
+Hotfix:
+- HPSv2 remains pinned to commit 866735ec... but is downloaded as a codeload tar.gz.
+- The source package is installed before .[quality], then the presence of
+  bpe_simple_vocab_16e6.txt.gz is asserted.
+- pyproject quality keeps hpsv2==1.2.0 so the already-installed source build satisfies it.
+- DiffQRCoder and QArt Docker source acquisition also use pinned codeload archives,
+  avoiding the same git-clone failure later in the same rebuild.
+- Dockerfile.notebook receives the same pinned archive strategy.
+
+No scientific E044 setting changes.
+No E041/E042/E043 results are touched.

@@ -66,9 +66,10 @@ advisor-runtime = [
   "scikit-learn>=1.5,<2",
 ]
 quality = [
-  # PyPI 1.2.0 omits bpe_simple_vocab_16e6.txt.gz. The pinned official
-  # source revision includes it through package_data.
-  "hpsv2 @ git+https://github.com/tgxs002/HPSv2.git@866735ecaae999fa714bd9edfa05aa2672669ee3",
+  # Docker installs the exact HPSv2 source commit before installing this extra.
+  # Keeping the PyPI version here means dependency resolution sees it as satisfied,
+  # while Dockerfile guarantees the source tree includes the missing BPE vocabulary.
+  "hpsv2==1.2.0",
 ]
 
 [tool.setuptools.packages.find]

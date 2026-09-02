@@ -1,0 +1,35 @@
+{
+  "base_commit_observed": "23a99ce63a33a78a499fc4a9ae1874049a92b694",
+  "cause": "Docker git smart-HTTP failed while pip cloned public HPSv2",
+  "scientific_parameters_changed": false,
+  "hpsv2_commit": "866735ecaae999fa714bd9edfa05aa2672669ee3",
+  "diffqrcoder_commit": "e24ea73ee2e13c7e6e87cb422e8b11784e70ae00",
+  "qart_commit": "6e0e00804a1994db7098432c19fadfc552071e30",
+  "files": [
+    {
+      "path": "Dockerfile",
+      "size_bytes": 4877,
+      "sha256": "b833346cd19cfe892a133b955282104e6769d1699b5c39c01a17fa4d26f61b7f"
+    },
+    {
+      "path": "Dockerfile.notebook",
+      "size_bytes": 4882,
+      "sha256": "62f87dac55e3ce36564c04490749787814d9bf5655cd74924e7db233db91f0ae"
+    },
+    {
+      "path": "E044_HOTFIX_A_LIRE.txt",
+      "size_bytes": 955,
+      "sha256": "4b14da9db2a11aea495bc9bf7bb6bb57d6f674853e97556ec364ee5709ff4e18"
+    },
+    {
+      "path": "pyproject.toml",
+      "size_bytes": 2383,
+      "sha256": "e0bea51e81c6815cf5271fd9576736bbc51d31383d69c03f3da8cc967077883f"
+    },
+    {
+      "path": "tests/test_docker_source_archives.py",
+      "size_bytes": 1123,
+      "sha256": "7f01d769f2bbbbc1a67ea83445bd201fa9e5003b7b5418335c0d6afa06fc2eb3"
+    }
+  ]
+}

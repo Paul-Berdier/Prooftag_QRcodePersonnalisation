@@ -2,10 +2,13 @@ FROM rust:1.85-slim-bookworm AS qart-builder
 
 ARG QART_COMMIT=6e0e00804a1994db7098432c19fadfc552071e30
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git pkg-config \
-    && git clone https://github.com/andrewyur/qart.git /src/qart \
-    && git -C /src/qart checkout "$QART_COMMIT" \
-    && test "$(git -C /src/qart rev-parse HEAD)" = "$QART_COMMIT" \
+    && apt-get install -y --no-install-recommends ca-certificates curl pkg-config \
+    && curl --fail --location --retry 5 --retry-all-errors \
+        "https://codeload.github.com/andrewyur/qart/tar.gz/${QART_COMMIT}" \
+        -o /tmp/qart.tar.gz \
+    && mkdir -p /src/qart \
+    && tar -xzf /tmp/qart.tar.gz --strip-components=1 -C /src/qart \
+    && rm -f /tmp/qart.tar.gz \
     && cargo build --manifest-path /src/qart/Cargo.toml --release --locked
 
 FROM node:22.15.0-bookworm-slim AS qr-verify-builder
@@ -34,7 +37,7 @@ COPY --from=qart-builder /src/qart/LICENSE /opt/licenses/qart-LICENSE
 COPY --from=qr-verify-builder /usr/local/bin/node /usr/local/bin/node
 COPY --from=qr-verify-builder /opt/prooftag-qr-verify /opt/prooftag-qr-verify
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl git libgl1 libglib2.0-0 libzbar0 \
+    && apt-get install -y --no-install-recommends ca-certificates curl libgl1 libglib2.0-0 libzbar0 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -55,11 +58,13 @@ RUN qart help >/dev/null \
     && node -e "const p=require('/opt/prooftag-qr-verify/node_modules/qr-verify/package.json'); if(p.version!=='0.2.0') process.exit(1); console.log('qr-verify version OK:', p.version)" \
     && python -c "import importlib.metadata, inspect, pathlib, sentencepiece, zxingcpp, kornia; from google.protobuf import __version__ as protobuf_version; from prooftag_qr.qr import generate_diffqrcoder_qr; from prooftag_qr.validation import ConservativeQRVerifyScorer, QRVerifyDecoder; p='https://ptag.io/t/notebook-build'; d=QRVerifyDecoder(); a=d.decode_presets(generate_diffqrcoder_qr(p).image); d.close(); scorer=pathlib.Path(inspect.getfile(ConservativeQRVerifyScorer)).resolve(); bridge=pathlib.Path('/opt/prooftag-qr-verify/bridge.mjs'); lock=bridge.with_name('package-lock.json'); protocol=pathlib.Path('/app/docs/e031-prospective-stage2-holdout.md'); assert len(a)==37 and all(x['text']==p for x in a); assert scorer.is_file() and bridge.is_file() and lock.is_file() and protocol.is_file(); print('Notebook dependency stack and qr-verify OK:', '$QART_COMMIT', importlib.metadata.version('zxing-cpp'), kornia.__version__, sentencepiece.__version__, protobuf_version)"
 
-RUN git clone https://github.com/jwliao1209/DiffQRCoder.git /opt/DiffQRCoder \
-    && git -C /opt/DiffQRCoder checkout "$DIFFQRCODER_COMMIT" \
-    && test "$(git -C /opt/DiffQRCoder rev-parse HEAD)" = "$DIFFQRCODER_COMMIT" \
-    && rm -rf /opt/DiffQRCoder/.git \
-    && python -c "import sys; sys.path.insert(0, '/opt/DiffQRCoder'); from diffqrcoder import DiffQRCoderPipeline; import torch, torchvision, diffusers; print('DiffQRCoder stack OK:', torch.__version__, torchvision.__version__, diffusers.__version__)"
+RUN curl --fail --location --retry 5 --retry-all-errors \
+        "https://codeload.github.com/jwliao1209/DiffQRCoder/tar.gz/${DIFFQRCODER_COMMIT}" \
+        -o /tmp/diffqrcoder.tar.gz \
+    && mkdir -p /opt/DiffQRCoder \
+    && tar -xzf /tmp/diffqrcoder.tar.gz --strip-components=1 -C /opt/DiffQRCoder \
+    && rm -f /tmp/diffqrcoder.tar.gz \
+    && python -c "import sys; sys.path.insert(0, '/opt/DiffQRCoder'); from diffqrcoder import DiffQRCoderPipeline; import torch, torchvision, diffusers; print('DiffQRCoder archive stack OK:', '$DIFFQRCODER_COMMIT', torch.__version__, torchvision.__version__, diffusers.__version__)"
 
 # SR-MPGD doit fonctionner même sans téléchargement au milieu d'une longue campagne.
 RUN python -c "import lpips; lpips.LPIPS(net='vgg', verbose=False); print('LPIPS VGG cache OK')"
