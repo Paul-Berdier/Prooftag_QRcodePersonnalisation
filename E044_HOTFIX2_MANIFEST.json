@@ -1,0 +1,35 @@
+{
+  "base_commit_observed": "43100c0293a0795db2af86776bdca86526c4f1b3",
+  "runtime_failure": "QualityProvenanceError: PEP 610 VCS commit is absent or invalid",
+  "hpsv2_source_revision": "866735ecaae999fa714bd9edfa05aa2672669ee3",
+  "scientific_parameters_changed": false,
+  "supports_pre_scoring_checkpoint_recovery": true,
+  "fixes_stale_attempt_paths_in_aggregate": true,
+  "files": [
+    {
+      "path": "Dockerfile",
+      "size_bytes": 5711,
+      "sha256": "f6a2e4dd136c03a82d3a0ea3fbee9f046bf4f81770d6cab271d7b5203aa7a09a"
+    },
+    {
+      "path": "E044_HOTFIX2_A_LIRE.txt",
+      "size_bytes": 1341,
+      "sha256": "88bc31d7cc6cf256ba80ad4c1adda2e2cd7e85161c29261ac7980e6be6bb7b52"
+    },
+    {
+      "path": "prooftag_qr/e044_aggregate.py",
+      "size_bytes": 12168,
+      "sha256": "6c3fbb628b5fdd40b760bf12a8bebb70045c63ef102a97ded31cd739af4637b7"
+    },
+    {
+      "path": "scripts/recover-e044-quality-scoring.sh",
+      "size_bytes": 11265,
+      "sha256": "8b94190e6415407774e2ca6c93abc4ca696f9435d58d0edb94084f7644ffe546"
+    },
+    {
+      "path": "tests/test_e044_hps_provenance_recovery.py",
+      "size_bytes": 1262,
+      "sha256": "e52019445fab156a6f4dbb654123003569e34ce36dbb2cbf47c3acebdcbdb6df"
+    }
+  ]
+}

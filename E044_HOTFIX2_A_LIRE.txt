@@ -1,0 +1,30 @@
+E044 HOTFIX 2 — HPS provenance + scoring recovery
+
+Observed runtime failure:
+  QualityProvenanceError: PEP 610 VCS commit is absent or invalid
+
+Cause:
+- HPSv2 was correctly downloaded from the immutable codeload URL for commit
+  866735ecaae999fa714bd9edfa05aa2672669ee3.
+- Because pip installed a local /tmp tarball, its direct_url.json recorded an
+  archive/file installation instead of vcs_info.commit_id.
+- quality_scoring.py intentionally fails closed when that immutable VCS revision
+  cannot be proven.
+
+Fix:
+1. Dockerfile records the exact HPS source commit into the installed
+   hpsv2-1.2.0.dist-info/direct_url.json and immediately validates it through
+   the same _installed_distribution_source() function used at runtime.
+2. A recovery script reuses the already-complete p01 Stage1/Stage2 and all
+   18 SR-MPGD checkpoints, rerunning ONLY QR/quality scoring and finalization.
+3. e044_aggregate.py repairs stale /attempts/... image/latent paths after the
+   atomic move to /prompts/<prompt-id>. This prevents a later final aggregation
+   failure.
+
+No scientific parameter changes.
+No Stage1/Stage2/SR-MPGD recomputation is required for the failed p01 attempt.
+
+After push/pull:
+  bash scripts/deploy-e044-notebooks.sh
+  bash scripts/recover-e044-quality-scoring.sh p01_greenhouse
+  bash scripts/run-e044-multiprompt-benchmark.sh

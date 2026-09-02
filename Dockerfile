@@ -57,9 +57,10 @@ RUN pip install --upgrade pip \
         "https://codeload.github.com/tgxs002/HPSv2/tar.gz/${HPSV2_COMMIT}" \
         -o /tmp/hpsv2.tar.gz \
     && pip install /tmp/hpsv2.tar.gz \
+    && python -c "import json; from importlib.metadata import distribution; from pathlib import Path; commit='${HPSV2_COMMIT}'; dist=distribution('hpsv2'); p=Path(dist._path)/'direct_url.json'; p.write_text(json.dumps({'url':'https://github.com/tgxs002/HPSv2.git','vcs_info':{'vcs':'git','requested_revision':commit,'commit_id':commit},'prooftag_install_transport':{'kind':'github-codeload-tarball','url':f'https://codeload.github.com/tgxs002/HPSv2/tar.gz/{commit}'}}),encoding='utf-8'); print('HPSv2 immutable provenance recorded:', p, commit)" \
     && rm -f /tmp/hpsv2.tar.gz \
     && pip install '.[gpu,quality,advisor-runtime]' \
-    && python -c "import hpsv2, inspect, pathlib, joblib, lpips, sklearn, torch, torchvision; import hpsv2.src.open_clip as oc; from diffusers import ControlNetModel, DDIMScheduler; bpe=pathlib.Path(inspect.getfile(oc)).resolve().parent/'bpe_simple_vocab_16e6.txt.gz'; assert bpe.is_file(), bpe; lpips.LPIPS(net='vgg', verbose=False); print('GPU, HPSv2 source+BPE, LPIPS, advisor-runtime and quality stack OK:', torch.__version__, torchvision.__version__, joblib.__version__, sklearn.__version__, bpe)"
+    && python -c "import hpsv2, inspect, pathlib, joblib, lpips, sklearn, torch, torchvision; import hpsv2.src.open_clip as oc; from diffusers import ControlNetModel, DDIMScheduler; from prooftag_qr.quality_scoring import _installed_distribution_source; commit='${HPSV2_COMMIT}'; bpe=pathlib.Path(inspect.getfile(oc)).resolve().parent/'bpe_simple_vocab_16e6.txt.gz'; assert bpe.is_file(), bpe; version,revision,error=_installed_distribution_source('hpsv2'); assert error is None, error; assert version=='1.2.0', version; assert revision==commit, (revision,commit); lpips.LPIPS(net='vgg', verbose=False); print('GPU, HPSv2 source+BPE+PEP610, LPIPS, advisor-runtime and quality stack OK:', torch.__version__, torchvision.__version__, joblib.__version__, sklearn.__version__, revision, bpe)"
 
 # Same principle for DiffQRCoder: pin the exact commit but download its source archive
 # instead of invoking Git's smart-HTTP protocol.
