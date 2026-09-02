@@ -1,0 +1,151 @@
+{
+  "paper": {
+    "title": "DiffQRCoder: Diffusion-based Aesthetic QR Code Generation with Scanning Robustness Guided Iterative Refinement",
+    "arxiv": "2409.06355v3",
+    "venue": "WACV 2025",
+    "paper_url": "https://arxiv.org/pdf/2409.06355",
+    "official_repo": "https://github.com/jwliao1209/DiffQRCoder"
+  },
+  "paper_reported_setup": {
+    "prompt_count": 100,
+    "prompt_source": "GPT-4",
+    "negative_prompt": "easynegative",
+    "base_model": "Cetus-Mix Whalefall",
+    "controlnet": "QR code Monster v2",
+    "controlnet_conditioning_scale": 1.35,
+    "qr_version": 3,
+    "error_correction": "M",
+    "mask_pattern": 4,
+    "paper_padding_px": 80,
+    "module_size_px": 20,
+    "inference_steps_per_stage": 40,
+    "stage2_target": "QArt(Stage1, target QR)",
+    "best_reported_srpg_lambda1": 500,
+    "best_reported_srpg_lambda2": 3,
+    "srmpgd_gamma": 1000,
+    "srmpgd_lpips_lambda": 0.01,
+    "scanner_for_main_ssr": "antfu/qr-verify",
+    "other_scanners": [
+      "iPhone 13",
+      "Pixel 7"
+    ],
+    "reported_main_ssr": 0.99
+  },
+  "official_public_code_observations": {
+    "runner_default_padding_px": 78,
+    "runner_default_module_size_px": 20,
+    "runner_default_steps": 40,
+    "runner_scanning_guidance": 500,
+    "runner_perceptual_guidance": 2,
+    "pipeline_signature_perceptual_guidance_default": 10,
+    "srmpgd_default_lr": 0.1,
+    "srmpgd_public_update": "torch.optim.SGD directly on clean latent",
+    "public_scanning_loss_dark_threshold": 0.45,
+    "public_scanning_loss_light_threshold": 0.65,
+    "public_gaussian_sigma": 1.5,
+    "paper_gaussian_sigma_for_s20": 3,
+    "public_perceptual_loss_autograd_issue": "torch.tensor(list_of_losses) detaches the listed scalar losses in ordinary PyTorch autograd; Prooftag uses torch.stack to preserve the intended gradient"
+  },
+  "e044_setup": {
+    "stage1_steps": 40,
+    "guidance_scale": 7.5,
+    "controlnet_scale": 1.35,
+    "stage2_steps": 40,
+    "stage2_initialization": "public_random",
+    "stage2_target": "binary_exact",
+    "stage2_controlnet_scale": 1.05,
+    "stage2_scanning_weight": 50,
+    "stage2_perceptual_weight": 20,
+    "gamma_grid": [
+      500,
+      1000
+    ],
+    "latent_radius_rms": 0.2,
+    "srmpgd_iterations": 8,
+    "lpips_weight": 0.01,
+    "loss_profile": "official upstream ScanningRobustLoss + scanaware_v2 perturbation ensemble + full-module margin",
+    "quiet_zone_geometry": "exact 736 canvas / 78 padding / 580 core / 29x29 / 20px module",
+    "authoritative_scanner": "qr-verify@0.2.0, 37 presets, conservative repeated exact-payload scoring",
+    "quality_metrics": [
+      "LPIPS",
+      "CLIPScore",
+      "CLIP-Aesthetic",
+      "HPSv2",
+      "MAE",
+      "clipping",
+      "saturation"
+    ]
+  },
+  "ambiguities_or_reproducibility_gaps": [
+    {
+      "id": "A01",
+      "topic": "100 prompts not enumerated",
+      "detail": "The paper says 100 GPT-4 prompts were used, but the exact corpus, seeds and per-prompt selection policy are not provided in the paper."
+    },
+    {
+      "id": "A02",
+      "topic": "QArt target construction",
+      "detail": "The paper specifies QArt(Stage1,target) but does not provide enough information to reconstruct the authors' exact target generation choices from the PDF alone."
+    },
+    {
+      "id": "A03",
+      "topic": "Stage-2 noise realization",
+      "detail": "Algorithm 1 specifies VAE encode plus Gaussian noise at T, but exact random seeds/noise realizations for the reported 100 samples are not published."
+    },
+    {
+      "id": "A04",
+      "topic": "Padding discrepancy",
+      "detail": "The paper reports 80-pixel padding while the official public runner defaults to 78 pixels."
+    },
+    {
+      "id": "A05",
+      "topic": "Perceptual guidance defaults",
+      "detail": "The public runner uses 2, the public pipeline signature exposes 10, while Table 7 reports 3 for the 99% configuration."
+    },
+    {
+      "id": "A06",
+      "topic": "SR-MPGD iteration count",
+      "detail": "The paper reports gamma=1000 and lambda=0.01 but does not clearly bind the number of SR-MPGD updates used for every reported table result."
+    },
+    {
+      "id": "A07",
+      "topic": "Meaning of manifold projection",
+      "detail": "The paper describes VAE decoding as the manifold projection. The released SR-MPGD path is direct SGD on the latent and has no explicit projection/trust-region operator."
+    },
+    {
+      "id": "A08",
+      "topic": "SRL paper/code thresholds",
+      "detail": "Paper Eq.1 is centered at 0.5, whereas the released ScanningRobustLoss uses asymmetric 0.45/0.65 pixel thresholds."
+    },
+    {
+      "id": "A09",
+      "topic": "Gaussian weighting paper/code",
+      "detail": "The paper gives sigma=floor((s-1)/5), which is 3 for s=20; released code instantiates cv2.getGaussianKernel with sigma=1.5 and then clips low weights."
+    },
+    {
+      "id": "A10",
+      "topic": "Global error-capacity gate",
+      "detail": "Algorithm 1 conditionally applies SRPG while QR module error exceeds the error-correction capacity tau. This conditional gate is not evident in the released Stage-2 loop, which computes the SRPG score every step."
+    },
+    {
+      "id": "A11",
+      "topic": "qr-verify version and aggregation",
+      "detail": "The paper names qr-verify but does not pin the package version or fully specify preset ordering/aggregation. E044 pins the project adapter protocol and exact payload matching."
+    },
+    {
+      "id": "A12",
+      "topic": "Device SSR protocol differs from software SSR",
+      "detail": "Appendix D.2 scans 30 QR images ten times on each scanner/device. This is not numerically identical to E044's 37-preset software robustness score."
+    },
+    {
+      "id": "A13",
+      "topic": "Public perceptual-loss gradient",
+      "detail": "The released PerceptualLoss wraps scalar MSE tensors using torch.tensor([...]), which ordinarily detaches them; the paper intended LPIPS gradient therefore cannot be assumed reproduced without a fix."
+    },
+    {
+      "id": "A14",
+      "topic": "Model/library revisions",
+      "detail": "The paper names checkpoints but does not pin all model file hashes, diffusers/PyTorch versions and exact repository revisions needed for byte-level reproduction."
+    }
+  ]
+}

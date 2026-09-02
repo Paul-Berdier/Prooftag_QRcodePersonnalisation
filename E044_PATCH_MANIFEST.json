@@ -1,0 +1,95 @@
+{
+  "base_commit_observed": "152322da21066d58e7e3bb0c16df8cc176c1d125",
+  "experiment": "e044-multi-prompt-best-pipeline-v1",
+  "prompt_count": 7,
+  "gamma_grid": [
+    500,
+    1000
+  ],
+  "checkpoints_per_prompt": 18,
+  "expected_srmpgd_checkpoint_count": 126,
+  "authoritative_scanner": "qr-verify@0.2.0 conservative 37-preset exact payload",
+  "paper": "arXiv:2409.06355v3",
+  "files": [
+    {
+      "path": ".github/workflows/e044-cpu-checks.yml",
+      "size_bytes": 901,
+      "sha256": "28563eecfec163e9ec54f81f3ddc3565a21ecc509b8671b478f93298bc9dc64a"
+    },
+    {
+      "path": "E044_A_LIRE.txt",
+      "size_bytes": 1107,
+      "sha256": "7f3ebe462f1120f3e0be753000506dd75c98a3806df23a0fd40f561d19fb708f"
+    },
+    {
+      "path": "deploy/k8s/e044-prompt-job.yaml",
+      "size_bytes": 2297,
+      "sha256": "dcc5a83509aad145680b1e94538c84db375773bba7274f042f9debfee148f01d"
+    },
+    {
+      "path": "docs/e044-paper-audit.json",
+      "size_bytes": 6271,
+      "sha256": "3de7db81e4cd953d4f62d31efafcdc7c335b08685cf73dcf799ea90c1c41707e"
+    },
+    {
+      "path": "docs/e044-prompt-catalog.json",
+      "size_bytes": 2700,
+      "sha256": "2de24f202b8ec64f86f287a5d0b72822a5b3a8bb25ab3bfea89acd48b32d1bfe"
+    },
+    {
+      "path": "notebooks/45_e044_multiprompt_complete_audit.ipynb",
+      "size_bytes": 13863,
+      "sha256": "b19bd14972526e98e0c14f49aa196511a05c23f0baac8ba52aa0ae3c4ccffc8a"
+    },
+    {
+      "path": "notebooks/46_e044_visual_atlas.ipynb",
+      "size_bytes": 3932,
+      "sha256": "637d50e651df49baf64358a3fedbf1b5a7cb5415bccf8af0943ad6b67b86d072"
+    },
+    {
+      "path": "prooftag_qr/e044_aggregate.py",
+      "size_bytes": 7436,
+      "sha256": "2fffdf0a76eed16d396840d7c53c416be36e2048f845e8f267e6ea203e7000c0"
+    },
+    {
+      "path": "prooftag_qr/e044_multiprompt_best_pipeline.py",
+      "size_bytes": 24765,
+      "sha256": "5810fccbd5041e2fe1c69e5483ca5c22dbd09283fbea61139e34aca9aa2acf95"
+    },
+    {
+      "path": "scripts/deploy-e044-notebooks.sh",
+      "size_bytes": 1798,
+      "sha256": "a6d300cd9690eaea9226dc418a06d0f8aa76026a1fe8d692c7c3e1d7db873fdb"
+    },
+    {
+      "path": "scripts/download-e044-results.sh",
+      "size_bytes": 712,
+      "sha256": "ec5a206c2f7f8ee30d671d18358de902ca7baab9399a213c967313dfa1461e1a"
+    },
+    {
+      "path": "scripts/e044-remote.ps1",
+      "size_bytes": 2659,
+      "sha256": "16446f8167ce26c4789a4d8c072c2d20d9d6a1c042a0282257c83bb1935549da"
+    },
+    {
+      "path": "scripts/run-e044-multiprompt-benchmark.sh",
+      "size_bytes": 3442,
+      "sha256": "440c3a4a0cc21c020cc8405c612ab32662553310e144a7246d5de88308f98c37"
+    },
+    {
+      "path": "tests/test_e044_contract.py",
+      "size_bytes": 428,
+      "sha256": "4ba742e6127a7bd54d13a3e3effcd86dec3b60756ab69798761516b52dad2cea"
+    },
+    {
+      "path": "tests/test_e044_deployment.py",
+      "size_bytes": 519,
+      "sha256": "4f06adcbc8c4b7cce3bbc91882417d85fd006cf281241c94726b380baaef4e6c"
+    },
+    {
+      "path": "tests/test_e044_notebooks.py",
+      "size_bytes": 419,
+      "sha256": "c53ab7262f80a240f16787780282692dab715ab779a688413ca8eba9bc71a27d"
+    }
+  ]
+}

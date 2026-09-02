@@ -1,0 +1,36 @@
+E044 — Multi-prompt Best Pipeline + Paper Audit
+
+Objectif : tester la même meilleure pipeline apprise sur 7 familles de prompts,
+avec gamma 500 et 1000, tous les checkpoints i0..i8, QR-Verify conservateur,
+qualité complète, et notebooks riches en images/graphiques.
+
+Base commit observé lors de la création du patch :
+152322da21066d58e7e3bb0c16df8cc176c1d125
+
+Après extraction dans la racine du dépôt :
+
+Windows :
+  git add .
+  git commit -m "feat(e044): add multi-prompt best-pipeline benchmark and paper audit"
+  git fetch origin
+  git rebase origin/main
+  git push origin main
+
+Serveur :
+  cd ~/apps/Prooftag_QRcodePersonnalisation
+  git fetch origin
+  git switch main
+  git pull --ff-only origin main
+  bash scripts/deploy-e044-notebooks.sh
+  bash scripts/run-e044-multiprompt-benchmark.sh
+
+Après "===== E044 TERMINÉ =====" :
+  .\scripts\e044-remote.ps1
+  .\scripts\e044-remote.ps1 -Atlas
+
+Résultats : /data/e044-multi-prompt-best-pipeline-v1
+
+E044 reste un screen multi-prompts avec un seed partagé :
+production_ready=false
+generalization_authorized=false
+multi_seed_generalization=false

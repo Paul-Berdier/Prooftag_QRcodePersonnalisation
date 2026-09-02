@@ -1,0 +1,50 @@
+{
+  "experiment": "e044-multi-prompt-best-pipeline-v1",
+  "shared_seed": 72044,
+  "payload": "https://ptag.io/t/e044",
+  "negative_prompt": "easynegative, low quality, worst quality, blurry, deformed, watermark, text, letters, logo, signature, oversaturated, clipped highlights, posterized colors",
+  "prompts": [
+    {
+      "id": "p01_greenhouse",
+      "family": "organic_grid",
+      "text": "a sunlit greenhouse filled with tomato plants, narrow wooden paths and rows of terracotta pots, balanced botanical photograph, natural geometry, soft daylight",
+      "reason": "Historical family close to the strongest E038-E040 behavior; organic content with repeated spatial structure."
+    },
+    {
+      "id": "p02_blue_vase",
+      "family": "minimal_object",
+      "text": "a single cobalt blue ceramic vase holding one yellow tulip, centered on a warm cream background, soft window light, clean still-life photograph",
+      "reason": "Low-frequency, low-clutter control with a simple centered subject."
+    },
+    {
+      "id": "p03_lighthouse",
+      "family": "high_contrast_vertical",
+      "text": "a solitary white stone lighthouse beside a calm blue sea at sunrise, centered composition, clean vintage travel poster without lettering",
+      "reason": "Strong vertical silhouette and broad flat regions."
+    },
+    {
+      "id": "p04_brutalist_grid",
+      "family": "architectural_grid",
+      "text": "a monumental brutalist concrete library facade with repeated square windows, frontal symmetrical architectural photograph, overcast sky, precise geometric rhythm",
+      "reason": "Explicit natural grid and hard module-like boundaries."
+    },
+    {
+      "id": "p05_sleeping_cat",
+      "family": "soft_illustration",
+      "text": "one orange cat curled asleep on a round moss-green cushion, plain light background, gentle children's-book illustration, simple composition, soft shapes",
+      "reason": "Organic curves and smooth regions without architectural structure."
+    },
+    {
+      "id": "p06_mycelium",
+      "family": "high_frequency_difficult",
+      "text": "a transparent glass cube containing a living bioluminescent mycelium circuit, cyan branching veins and tiny amber spores, dark laboratory, surreal macro photography",
+      "reason": "Deliberately difficult high-frequency branching texture."
+    },
+    {
+      "id": "p07_winter_cabin",
+      "family": "official_demo_like",
+      "text": "winter wonderland with fresh snowfall, evergreen trees, a cozy log cabin with smoke rising from the chimney, aurora borealis in the night sky, cinematic landscape",
+      "reason": "Close to the prompt distributed in the official DiffQRCoder public runner."
+    }
+  ]
+}

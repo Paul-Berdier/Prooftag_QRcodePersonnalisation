@@ -1,0 +1,17 @@
+name: E044 CPU checks
+on:
+  push:
+    paths: ['prooftag_qr/e044_*','scripts/*e044*','deploy/k8s/e044-*','notebooks/45_e044_*','notebooks/46_e044_*','tests/test_e044_*','docs/e044-*']
+  pull_request:
+    paths: ['prooftag_qr/e044_*','scripts/*e044*','deploy/k8s/e044-*','notebooks/45_e044_*','notebooks/46_e044_*','tests/test_e044_*','docs/e044-*']
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: pip install pytest pyyaml
+      - run: python -m py_compile prooftag_qr/e044_multiprompt_best_pipeline.py prooftag_qr/e044_aggregate.py
+      - run: bash -n scripts/deploy-e044-notebooks.sh scripts/run-e044-multiprompt-benchmark.sh scripts/download-e044-results.sh
+      - run: pytest -q tests/test_e044_contract.py tests/test_e044_deployment.py tests/test_e044_notebooks.py
