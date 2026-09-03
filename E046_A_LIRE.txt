@@ -1,0 +1,55 @@
+E046 — CONTROLLED BEST-GENERATOR DATASET
+
+Pré-requis validé :
+E045 plan 288024247c39d585 complet et manifeste valide.
+
+Ce patch ajoute une campagne de génération neuve :
+- WeChat/qr-verify exact payload comme score QR logiciel unique ;
+- 8 prompts et 8 masques dans le pilot ;
+- Stage 1/Stage 2 séparés du scoring ;
+- SR-MPGD seulement sur parents sélectionnés ;
+- tous les checkpoints et latents conservés ;
+- raw + quiet zone scene-preserving ;
+- aucune bordure uniforme éligible ;
+- reprise par COMPLETE markers et Jobs backoffLimit=0 ;
+- 2 notebooks avec images et graphiques.
+
+ORDRE OBLIGATOIRE
+
+1. Commit/push/pull.
+2. bash scripts/deploy-e046-notebooks.sh all
+3. Smoke :
+   PROOFTAG_E046_PROFILE=smoke \
+   bash scripts/run-e046-controlled-campaign.sh
+4. Revoir le notebook smoke.
+5. Pilot :
+   PROOFTAG_E046_PROFILE=pilot \
+   bash scripts/run-e046-controlled-campaign.sh
+
+NE PAS lancer `full` avant validation du smoke et du pilot.
+
+Status :
+bash scripts/run-e046-controlled-campaign.sh status
+
+Logs :
+bash scripts/run-e046-controlled-campaign.sh logs
+
+Reprise :
+PROOFTAG_E046_PROFILE=<profil-identique> \
+bash scripts/run-e046-controlled-campaign.sh resume
+
+Jupyter :
+.\scripts\e046-remote.ps1
+.\scripts\e046-remote.ps1 -Atlas
+
+Le téléphone reste la vérité finale. E046 n'est pas production-ready.
+
+
+Après une perte SSH pendant un Job, une fois le Job terminé :
+bash scripts/run-e046-controlled-campaign.sh restore-runtime
+
+
+Un Job Failed n'est jamais relancé automatiquement.
+Relance explicite uniquement après diagnostic d'un incident transitoire :
+PROOFTAG_E046_RETRY_FAILED=1 PROOFTAG_E046_PROFILE=<profil> \
+bash scripts/run-e046-controlled-campaign.sh resume

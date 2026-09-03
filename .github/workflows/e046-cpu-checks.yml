@@ -1,0 +1,65 @@
+name: E046 CPU checks
+
+on:
+  push:
+    paths:
+      - "prooftag_qr/e046_*.py"
+      - "scripts/*e046*"
+      - "deploy/k8s/e046-*"
+      - "notebooks/48_e046_*"
+      - "notebooks/49_e046_*"
+      - "docs/e046-*"
+      - "tests/test_e046_*"
+      - "E046_*"
+  pull_request:
+    paths:
+      - "prooftag_qr/e046_*.py"
+      - "scripts/*e046*"
+      - "deploy/k8s/e046-*"
+      - "notebooks/48_e046_*"
+      - "notebooks/49_e046_*"
+      - "docs/e046-*"
+      - "tests/test_e046_*"
+      - "E046_*"
+
+jobs:
+  static-and-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest pyyaml pillow numpy
+      - run: python scripts/build_e046_notebooks.py
+      - run: |
+          python -m py_compile \
+            prooftag_qr/e046_catalog.py \
+            prooftag_qr/e046_quiet_zone.py \
+            prooftag_qr/e046_campaign.py \
+            scripts/build_e046_notebooks.py
+      - run: |
+          bash -n \
+            scripts/deploy-e046-notebooks.sh \
+            scripts/run-e046-controlled-campaign.sh \
+            scripts/download-e046-results.sh
+      - run: |
+          python - <<'PY'
+          import yaml
+          for path in (
+              "deploy/k8s/e046-parent-job.yaml",
+              "deploy/k8s/e046-refinement-job.yaml",
+          ):
+              yaml.safe_load(open(path, encoding="utf-8"))
+          PY
+      - run: |
+          pytest -q \
+            tests/test_e046_catalog.py \
+            tests/test_e046_quiet_zone.py \
+            tests/test_e046_plan.py \
+            tests/test_e046_selection.py \
+            tests/test_e046_aggregate.py \
+            tests/test_e046_deployment.py \
+            tests/test_e046_notebooks.py \
+            tests/test_e046_contract.py

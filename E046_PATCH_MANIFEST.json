@@ -1,0 +1,147 @@
+{
+  "experiment": "e046-controlled-best-generator-v1",
+  "base_commit_observed": "fcc4931c6d90fc4f2e2425ad16270cecd216ba01",
+  "required_e045_plan": "288024247c39d585",
+  "primary_software_qr_engine": "qr-scanner-wechat via qr-verify@0.2.0",
+  "exact_payload_only": true,
+  "phone_truth_available": false,
+  "production_ready": false,
+  "validation": {
+    "python_compile": "passed",
+    "bash_syntax": "passed",
+    "yaml_parse": "passed",
+    "pytest": "\u001b[32m\u001b[32m\u001b[1m23 passed\u001b[0m\u001b[32m in 0.68s\u001b[0m\u001b[0m"
+  },
+  "files": [
+    {
+      "path": ".github/workflows/e046-cpu-checks.yml",
+      "size_bytes": 1862,
+      "sha256": "178138e7453eeb5a0b782c2325e6c31bc5df02fa3fc41099837f90ebc3b69ffa"
+    },
+    {
+      "path": "E046_A_LIRE.txt",
+      "size_bytes": 1695,
+      "sha256": "77bc84e78c111efd7d417afa59b2b22c8381ee505cf681595f050ac079fa59bb"
+    },
+    {
+      "path": "deploy/k8s/e046-parent-job.yaml",
+      "size_bytes": 2921,
+      "sha256": "42d4fadeed1fb00c1443ac28361f0341600dfa9ca2cd53b8363b4e836edacb70"
+    },
+    {
+      "path": "deploy/k8s/e046-refinement-job.yaml",
+      "size_bytes": 3006,
+      "sha256": "37278e2dcecf6453202445a99532149f854e10455179a42eafb196c50be22503"
+    },
+    {
+      "path": "docs/e046-controlled-best-generator.md",
+      "size_bytes": 5197,
+      "sha256": "616dacaaac94b712e558aa3f0aca5b29cff67b33a3fa6f81d69de24209e068e6"
+    },
+    {
+      "path": "docs/e046-parameter-coverage.json",
+      "size_bytes": 1083,
+      "sha256": "5e36e209ea8b976bce1ccb418483ef5995192ffa8f804e1eb6694e207157d012"
+    },
+    {
+      "path": "docs/e046-recovery-runbook.md",
+      "size_bytes": 3128,
+      "sha256": "f38ff46eafe22605bf6a42f23c9c3a22769d391936aad416204875c8e8f6f513"
+    },
+    {
+      "path": "docs/e046-wechat-scoring-policy.md",
+      "size_bytes": 829,
+      "sha256": "96e7749b9377d32035b90e49608aea678c5e53748ad402231a631c59153571d0"
+    },
+    {
+      "path": "notebooks/48_e046_controlled_best_generator.ipynb",
+      "size_bytes": 30302,
+      "sha256": "195e6c4852cf170ee32f4d49ee9cb29ed94b2c82cb42a8681a5df6b5a441318c"
+    },
+    {
+      "path": "notebooks/49_e046_visual_atlas.ipynb",
+      "size_bytes": 15309,
+      "sha256": "d1e3ece43b55dda144f3e110fdbe0c82168007401eaa2cced534d59c515ad683"
+    },
+    {
+      "path": "prooftag_qr/e046_campaign.py",
+      "size_bytes": 83183,
+      "sha256": "4a14e4fa9fa99bb525aa84245055f5b7eddba84f79a9c829d90eb9c9cff2cd6a"
+    },
+    {
+      "path": "prooftag_qr/e046_catalog.py",
+      "size_bytes": 16462,
+      "sha256": "9c73ec03c4bc07d06ee418ee1d42232ba8a428096defc6c4cbdc6fb5ded7a994"
+    },
+    {
+      "path": "prooftag_qr/e046_quiet_zone.py",
+      "size_bytes": 7474,
+      "sha256": "f6099f55715e3d682889bbc84e9ebba69b6082e1a6a6afbb5232655454447089"
+    },
+    {
+      "path": "scripts/build_e046_notebooks.py",
+      "size_bytes": 31582,
+      "sha256": "4511cd9c55f4af8e4e42cb550e16487314a39520efd2f843355ae10a1ce93e22"
+    },
+    {
+      "path": "scripts/deploy-e046-notebooks.sh",
+      "size_bytes": 4882,
+      "sha256": "fde635d2fb7490cc96b3fdfddacce27dcb4a7682e49d53b1768de9f2707ded77"
+    },
+    {
+      "path": "scripts/download-e046-results.sh",
+      "size_bytes": 1733,
+      "sha256": "afd00aded13aebfb05972d45ff14297dd69b9684b787a5aebb894e7663e8bc88"
+    },
+    {
+      "path": "scripts/e046-remote.ps1",
+      "size_bytes": 4873,
+      "sha256": "80a6e42c6f7bb1ebdc3da2249eb4b5679ce83aada1c60c3ea0fa63fd9f416387"
+    },
+    {
+      "path": "scripts/run-e046-controlled-campaign.sh",
+      "size_bytes": 14072,
+      "sha256": "8d109b5ba50684e00a1ef32005e213c3f32ff42ff1562abdd39762eceb890294"
+    },
+    {
+      "path": "tests/test_e046_aggregate.py",
+      "size_bytes": 5609,
+      "sha256": "ae26857edb135011f3b599960b04315e261c72d8cc214fdd7a8d556847af9cac"
+    },
+    {
+      "path": "tests/test_e046_catalog.py",
+      "size_bytes": 1373,
+      "sha256": "7b27638ae7cb04683e8a8a7198ae4bbc97a5c0734aeb988a6a93d14a341de866"
+    },
+    {
+      "path": "tests/test_e046_contract.py",
+      "size_bytes": 1414,
+      "sha256": "23fee0724784b272c4646de65582e178c508f9a372e648915c9bddccfaec0870"
+    },
+    {
+      "path": "tests/test_e046_deployment.py",
+      "size_bytes": 2742,
+      "sha256": "b1c1e1abbde8d4de8ed368a6bc90e06e7b1fdf4fcc1eece08eeeea5ce9cb3cad"
+    },
+    {
+      "path": "tests/test_e046_notebooks.py",
+      "size_bytes": 1248,
+      "sha256": "f95ec06803202fdf81276d67b6791954ca0dc5fcbe7cc4114b1c4def50195bd4"
+    },
+    {
+      "path": "tests/test_e046_plan.py",
+      "size_bytes": 1889,
+      "sha256": "e1acb96b64a0de4b3f9b04c21de5c64c2d959e19ad548dd788acc80e6543d7f7"
+    },
+    {
+      "path": "tests/test_e046_quiet_zone.py",
+      "size_bytes": 1552,
+      "sha256": "639e7cce033b8640e4b986bb176ca2d85d3511886e6ca157d5349c353f618a0a"
+    },
+    {
+      "path": "tests/test_e046_selection.py",
+      "size_bytes": 1554,
+      "sha256": "1faad192ff2e8043534a141e11c7a01e722e3ef7b6cad7a1cd643a60165b72f3"
+    }
+  ]
+}

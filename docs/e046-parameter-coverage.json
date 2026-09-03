@@ -1,0 +1,35 @@
+{
+  "schema": "e046-parameter-coverage-v1",
+  "primary_software_qr_label": {
+    "engine": "qr-scanner-wechat via qr-verify@0.2.0",
+    "exact_payload_only": true,
+    "preset_count": 37,
+    "repetitions": 3
+  },
+  "covered_in_pilot": [
+    "8 prompt families",
+    "8 QR mask patterns",
+    "ECC M/Q",
+    "8 deterministic seeds",
+    "Stage1 steps/CFG/ControlNet/start/end",
+    "Stage2 public_random and paper_stage1_noise",
+    "Stage2 strength/steps/ControlNet/SRG/perceptual weights",
+    "SR-MPGD gamma 250/500/1000",
+    "trust-region radius 0.10/0.15/0.20",
+    "4 or 8 SR-MPGD updates",
+    "raw and scene-preserving quiet-zone variants"
+  ],
+  "locked_in_e046": {
+    "qr_version": 3,
+    "module_size_px": 20,
+    "padding_px": 78,
+    "canvas_px": 736,
+    "reason": "Preserve exact DiffQRCoder 29×29 core geometry for the first clean dataset."
+  },
+  "not_allowed_as_final": [
+    "uniform white quiet-zone replacement",
+    "uniform adaptive-light border replacement",
+    "functional-pattern tone repainting",
+    "pixel-level hard projection to a binary QR"
+  ]
+}
