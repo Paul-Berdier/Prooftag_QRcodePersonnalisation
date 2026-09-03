@@ -1,0 +1,28 @@
+E045 HOTFIX 4 — différer tous les rasters de /data/artifacts
+
+Préflight réel bf03f6c :
+- discovered_allowed_files = 338324
+- selected_files = 331362
+- generic_artifact_images_deferred = 6962
+- generic_artifact_priority_images = 299410
+
+Conclusion :
+L'heuristique de priorité sur le nom de fichier n'est pas exploitable.
+Les noms stage1/stage2/SRPG/SR-MPGD/final/winner sont trop fréquents dans les
+exports historiques.
+
+Politique HOTFIX4 :
+1. Tous les PNG/JPG/JPEG/WEBP sous /data/artifacts sont différés au premier passage.
+2. Les CSV/JSON/JSONL/manifests/modèles et autres fichiers structurés restent inventoriés.
+3. Les images hors /data/artifacts (e0xx-*, notebook-runs, parameter-search, etc.)
+   gardent le comportement historique.
+4. Si une observation structurée référence une image de /data/artifacts,
+   `_ensure_referenced_artifact` l'indexe et calcule son SHA/pixel SHA à la demande.
+
+Sur le snapshot observé, la sélection théorique devient approximativement :
+331362 - 299410 = 31952 fichiers,
+donc très largement sous max_files=200000.
+
+Aucune donnée /data supprimée.
+Aucun paramètre scientifique de génération ou d'entraînement modifié.
+Conserver tous les anciens plans E045 comme traces d'audit.

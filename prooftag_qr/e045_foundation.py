@@ -417,23 +417,20 @@ def _is_generic_artifact_image(path: Path, data_root: Path) -> bool:
 
 
 def _generic_artifact_image_is_priority(path: Path) -> bool:
-    """Priorité uniquement explicite dans le nom du fichier.
+    """Compatibilité API : aucun raster de /data/artifacts n'est prioritaire.
 
-    Ne jamais inspecter le chemin complet ici : des répertoires tels que
-    ``artifacts/.../stage2/...`` ou ``.../srmpgd/...`` peuvent contenir des
-    dizaines de milliers de frames intermédiaires. Regarder ``as_posix()``
-    transformait alors chaque PNG descendant en image prioritaire et annulait
-    pratiquement tout le filtrage E045.
+    Les campagnes historiques ont produit des centaines de milliers de PNG
+    dont les noms contiennent fréquemment stage1/stage2/SRPG/SR-MPGD. Toute
+    heuristique de priorité fondée sur le nom réintroduit donc presque tout le
+    corpus raster.
 
-    Une image générique non prioritaire reste récupérable : si un CSV/JSON
-    d'observation la référence, `_ensure_referenced_artifact` l'indexe à la
-    demande pendant l'extraction des observations.
+    E045 adopte désormais une règle vérifiable :
+    - tous les rasters sous /data/artifacts sont différés pendant l'inventaire ;
+    - les fichiers structurés de ce même arbre restent inventoriés ;
+    - si une observation CSV/JSON/JSONL référence un raster différé,
+      `_ensure_referenced_artifact` le hash/pixel-hash à la demande.
     """
-    filename = path.name.lower()
-    return any(
-        token in filename
-        for token in GENERIC_ARTIFACT_PRIORITY_IMAGE_TOKENS
-    )
+    return False
 
 
 def _walk_relevant_files(
@@ -445,9 +442,9 @@ def _walk_relevant_files(
 
     La règle importante est limitée au répertoire racine ``/data/artifacts`` :
     - documents structurés, modèles, manifests et tableaux : toujours conservés ;
-    - images nommées final/winner/stage1/stage2/SRPG/SR-MPGD : conservées ;
-    - autres images génériques : différées et hashées seulement si une ligne
-      structurée les référence.
+    - tous les rasters génériques : différés pendant l'inventaire ;
+    - un raster n'est hashé/pixel-hashé que si une observation structurée le
+      référence ensuite.
 
     Les vrais répertoires d'expérience (notebook-runs, e0xx-*, parameter-search,
     etc.) conservent le comportement historique intégral.
@@ -478,12 +475,13 @@ def _walk_relevant_files(
             stats["discovered_allowed_files"] += 1
 
             if _is_generic_artifact_image(path, data_root):
-                if not _generic_artifact_image_is_priority(path):
-                    stats["generic_artifact_images_deferred"] += 1
-                    deferred = stats["deferred_by_extension"]
-                    deferred[extension] = int(deferred.get(extension, 0)) + 1
-                    continue
-                stats["generic_artifact_priority_images"] += 1
+                # Ne jamais parcourir en masse les rasters génériques. Les
+                # observations structurées réindexent ensuite uniquement les
+                # images réellement référencées.
+                stats["generic_artifact_images_deferred"] += 1
+                deferred = stats["deferred_by_extension"]
+                deferred[extension] = int(deferred.get(extension, 0)) + 1
+                continue
 
             stats["selected_files"] += 1
             yield path
@@ -651,10 +649,10 @@ def inventory_artifacts(config: FoundationConfig, plan_dir: Path) -> dict[str, A
 
     selection_summary = {
         **selection_stats,
-        "policy": "defer_generic_artifact_rasters_unless_priority_or_referenced",
+        "policy": "defer_all_generic_artifact_rasters_until_structured_reference",
         "generic_artifact_root": str(config.data_root.resolve() / GENERIC_ARTIFACT_ROOT),
         "note": (
-            "Les rasters génériques différés ne sont pas perdus : "
+            "Tous les rasters génériques sont différés pendant l'inventaire ; "
             "une observation structurée qui référence une image la réindexe à la demande."
         ),
     }

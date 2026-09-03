@@ -1,0 +1,41 @@
+{
+  "hotfix": "e045-defer-all-generic-artifact-rasters-v1",
+  "base_commit_observed": "bf03f6cfcd40449fc9c4604d263d52f740f2e0bf",
+  "observed_selector_preflight": {
+    "discovered_allowed_files": 338324,
+    "selected_files": 331362,
+    "generic_artifact_images_deferred": 6962,
+    "generic_artifact_priority_images": 299410
+  },
+  "expected_selected_if_snapshot_unchanged": 31952,
+  "policy": "all images under /data/artifacts deferred until referenced by structured observation",
+  "scientific_parameters_changed": false,
+  "generation_training_changed": false,
+  "persistent_data_deleted": false,
+  "validation": {
+    "bash_syntax": "passed",
+    "pytest": "\u001b[32m\u001b[32m\u001b[1m27 passed\u001b[0m\u001b[32m in 0.23s\u001b[0m\u001b[0m"
+  },
+  "files": [
+    {
+      "path": "E045_HOTFIX4_DEFER_ALL_GENERIC_RASTERS_A_LIRE.txt",
+      "size_bytes": 1239,
+      "sha256": "8808012d248d668e9ad56051b100e2e8cec28364f337e708cb64025ff2c03e66"
+    },
+    {
+      "path": "prooftag_qr/e045_foundation.py",
+      "size_bytes": 75800,
+      "sha256": "a1d2adb2e8e5d2a9b473d72c71889bcdd46241ec441e91103a59fd4cc1b03a1f"
+    },
+    {
+      "path": "tests/test_e045_hotfix4.py",
+      "size_bytes": 1064,
+      "sha256": "7341c51a79e55243fe5614a11f727202b4f79512583bcc74448531a67550f52e"
+    },
+    {
+      "path": "tests/test_e045_smart_inventory.py",
+      "size_bytes": 4816,
+      "sha256": "a1088f82439cff552522add8f5024c677e3d68da447a5339ff7af7db31e12f63"
+    }
+  ]
+}
