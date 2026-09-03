@@ -183,6 +183,9 @@ def classify_failure(error: BaseException | str) -> FailureDecision:
         "missing required",
         "payload mismatch",
         "checksum mismatch",
+        "limite max_files dépassée",
+        "configuration max_files insuffisante",
+        "max files exceeded",
     )
     transient_tokens = (
         "timeout",

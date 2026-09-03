@@ -1,0 +1,26 @@
+E045 HOTFIX 2 — inventaire sélectif des 311k rasters génériques
+
+Census réel observé :
+- 338324 fichiers pertinents ;
+- 311417 sous /data/artifacts (92.05 %) ;
+- 316289 PNG au total.
+
+Décision :
+- NE PAS simplement augmenter max_files et hasher 300k+ PNG ;
+- /data/artifacts reste parcouru pour CSV/JSON/manifests/modèles ;
+- les images final/winner/stage1/stage2/SRPG/SR-MPGD restent indexées ;
+- les autres rasters génériques sont différés ;
+- si un CSV/JSON référence un raster différé, il est hashé/pixel-hashé à la demande ;
+- notebook-runs, e0xx-* et parameter-search restent inventoriés normalement ;
+- inventory-selection-summary.json documente exactement ce qui a été différé.
+
+Résilience :
+- max_files dépassé devient une erreur deterministic/configuration non retryable.
+
+Ancien plan :
+/data/e045-foundation-v1/43f4c6ebe77e6e0a reste en lecture seule.
+
+Après patch :
+1. rebuild API + notebook ;
+2. lancer un NOUVEAU plan E045 au nouveau commit avec la limite 200000 par défaut ;
+3. ne supprimer aucun ancien dossier.

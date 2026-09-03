@@ -1,0 +1,39 @@
+{
+  "hotfix": "e045-smart-inventory-v1",
+  "base_commit_observed": "cd7ac3cda7aeab4536b701516cc3285b4f8c4aa9",
+  "census": {
+    "total_relevant_files": 338324,
+    "data_artifacts_files": 311417,
+    "png_files": 316289,
+    "data_artifacts_share": 0.9205
+  },
+  "scientific_parameters_changed": false,
+  "generation_or_training_changed": false,
+  "persistent_data_deleted": false,
+  "files": [
+    {
+      "path": "E045_HOTFIX2_SMART_INVENTORY_A_LIRE.txt",
+      "size_bytes": 1059,
+      "sha256": "6dce118e5ea90cd330d0d27913c4b371bbbc6dfb7a1bbb36e9215c3ff327a065"
+    },
+    {
+      "path": "prooftag_qr/e045_foundation.py",
+      "size_bytes": 75026,
+      "sha256": "3e214ea9226c666916c5e63d90e54cc19e4f03ff0ccb6d181be7952fc66f1bb1"
+    },
+    {
+      "path": "prooftag_qr/resilient_experiment.py",
+      "size_bytes": 33753,
+      "sha256": "d3fea2e54ffb411258586dd25565c10278528b66dddf6599c2f143391c9bcb49"
+    },
+    {
+      "path": "tests/test_e045_smart_inventory.py",
+      "size_bytes": 3492,
+      "sha256": "b2ad302d2f264cc4c80cafc12dc8a69a518e621b5a881e833a615ca14f6ae7b5"
+    }
+  ],
+  "validation": {
+    "pytest_return_code": 0,
+    "pytest_output": "\u001b[32m\u001b[32m\u001b[1m21 passed\u001b[0m\u001b[32m in 0.20s\u001b[0m\u001b[0m"
+  }
+}

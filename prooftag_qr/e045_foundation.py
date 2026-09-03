@@ -128,6 +128,41 @@ TRACE_NAME_TOKENS = (
     "audit",
 )
 
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+GENERIC_ARTIFACT_ROOT = "artifacts"
+GENERIC_ARTIFACT_ALWAYS_KEEP_EXTENSIONS = {
+    ".json",
+    ".jsonl",
+    ".csv",
+    ".md",
+    ".txt",
+    ".safetensors",
+    ".pt",
+    ".pth",
+    ".joblib",
+    ".pkl",
+    ".npy",
+    ".npz",
+    ".tar",
+    ".gz",
+    ".tar.gz",
+}
+GENERIC_ARTIFACT_PRIORITY_IMAGE_TOKENS = (
+    "final",
+    "winner",
+    "selected",
+    "stage1",
+    "stage-1",
+    "stage2",
+    "stage-2",
+    "srpg",
+    "srmpgd",
+    "sr-mpgd",
+    "contact-sheet",
+    "contact_sheet",
+    "pipeline",
+)
+
 EXPERIMENT_PATTERN = re.compile(r"(?i)(?:^|[^a-z0-9])(e\d{3})(?:[a-z0-9_-]*)")
 
 
@@ -361,8 +396,54 @@ def _should_prune(path: Path, output_root: Path) -> bool:
     return False
 
 
-def _walk_relevant_files(config: FoundationConfig) -> Iterator[Path]:
+def _is_generic_artifact_image(path: Path, data_root: Path) -> bool:
+    """True pour les rasters du dépôt générique /data/artifacts.
+
+    Ce dossier contient historiquement des centaines de milliers d'images
+    intermédiaires. Elles ne sont pas toutes utiles à un conseiller de
+    paramètres et sont souvent redondantes avec les sorties canoniques sous
+    notebook-runs/e0xx-*. Une image réellement référencée par une observation
+    structurée est réindexée à la demande plus tard.
+    """
+    try:
+        relative = path.resolve().relative_to(data_root.resolve())
+    except ValueError:
+        return False
+    return (
+        bool(relative.parts)
+        and relative.parts[0] == GENERIC_ARTIFACT_ROOT
+        and _path_extension(path) in IMAGE_EXTENSIONS
+    )
+
+
+def _generic_artifact_image_is_priority(path: Path) -> bool:
+    lower = path.as_posix().lower()
+    return any(token in lower for token in GENERIC_ARTIFACT_PRIORITY_IMAGE_TOKENS)
+
+
+def _walk_relevant_files(
+    config: FoundationConfig,
+    *,
+    selection_stats: dict[str, Any] | None = None,
+) -> Iterator[Path]:
+    """Parcourt les fichiers scientifiques utiles sans hasher tout le raster cache.
+
+    La règle importante est limitée au répertoire racine ``/data/artifacts`` :
+    - documents structurés, modèles, manifests et tableaux : toujours conservés ;
+    - images nommées final/winner/stage1/stage2/SRPG/SR-MPGD : conservées ;
+    - autres images génériques : différées et hashées seulement si une ligne
+      structurée les référence.
+
+    Les vrais répertoires d'expérience (notebook-runs, e0xx-*, parameter-search,
+    etc.) conservent le comportement historique intégral.
+    """
     data_root = config.data_root.resolve()
+    stats = selection_stats if selection_stats is not None else {}
+    stats.setdefault("discovered_allowed_files", 0)
+    stats.setdefault("selected_files", 0)
+    stats.setdefault("generic_artifact_images_deferred", 0)
+    stats.setdefault("deferred_by_extension", {})
+
     for current, directories, files in os.walk(data_root):
         current_path = Path(current)
         depth = len(current_path.relative_to(data_root).parts)
@@ -374,8 +455,21 @@ def _walk_relevant_files(config: FoundationConfig) -> Iterator[Path]:
         ]
         for name in files:
             path = current_path / name
-            if _path_extension(path) in ALLOWED_EXTENSIONS:
-                yield path
+            extension = _path_extension(path)
+            if extension not in ALLOWED_EXTENSIONS:
+                continue
+
+            stats["discovered_allowed_files"] += 1
+
+            if _is_generic_artifact_image(path, data_root):
+                if not _generic_artifact_image_is_priority(path):
+                    stats["generic_artifact_images_deferred"] += 1
+                    deferred = stats["deferred_by_extension"]
+                    deferred[extension] = int(deferred.get(extension, 0)) + 1
+                    continue
+
+            stats["selected_files"] += 1
+            yield path
 
 
 def inventory_artifacts(config: FoundationConfig, plan_dir: Path) -> dict[str, Any]:
@@ -386,11 +480,12 @@ def inventory_artifacts(config: FoundationConfig, plan_dir: Path) -> dict[str, A
     hashed = 0
     images = 0
     skipped_hash = 0
+    selection_stats: dict[str, Any] = {}
     started = time.time()
 
     connection = _inventory_connection(database)
     try:
-        for path in _walk_relevant_files(config):
+        for path in _walk_relevant_files(config, selection_stats=selection_stats):
             visited += 1
             if visited > config.max_files:
                 atomic_write_json(
@@ -402,7 +497,8 @@ def inventory_artifacts(config: FoundationConfig, plan_dir: Path) -> dict[str, A
                     },
                 )
                 raise RuntimeError(
-                    f"limite max_files dépassée ({config.max_files}); augmenter explicitement"
+                    f"configuration max_files insuffisante: limite max_files dépassée "
+                    f"({config.max_files}); augmenter explicitement ou corriger la sélection"
                 )
 
             try:
@@ -434,19 +530,14 @@ def inventory_artifacts(config: FoundationConfig, plan_dir: Path) -> dict[str, A
             status = "metadata_only"
             error = None
             try:
-                if stat.st_size <= config.max_hash_bytes or extension in {
-                    ".png",
-                    ".jpg",
-                    ".jpeg",
-                    ".webp",
-                }:
+                if stat.st_size <= config.max_hash_bytes or extension in IMAGE_EXTENSIONS:
                     file_hash = sha256_file(path)
                     hashed += 1
                     status = "hashed"
                 else:
                     skipped_hash += 1
 
-                if extension in {".png", ".jpg", ".jpeg", ".webp"}:
+                if extension in IMAGE_EXTENSIONS:
                     pixel_hash, width, height, mode = _pixel_hash(path)
                     images += 1
             except Exception as exc:
@@ -541,6 +632,17 @@ def inventory_artifacts(config: FoundationConfig, plan_dir: Path) -> dict[str, A
         writer.writeheader()
         writer.writerows(rows)
 
+    selection_summary = {
+        **selection_stats,
+        "policy": "defer_generic_artifact_rasters_unless_priority_or_referenced",
+        "generic_artifact_root": str(config.data_root.resolve() / GENERIC_ARTIFACT_ROOT),
+        "note": (
+            "Les rasters génériques différés ne sont pas perdus : "
+            "une observation structurée qui référence une image la réindexe à la demande."
+        ),
+    }
+    atomic_write_json(plan_dir / "inventory-selection-summary.json", selection_summary)
+
     summary = {
         "artifact_count": len(rows),
         "visited_relevant_files": visited,
@@ -548,6 +650,9 @@ def inventory_artifacts(config: FoundationConfig, plan_dir: Path) -> dict[str, A
         "image_count": images,
         "hash_skipped_large_file_count": skipped_hash,
         "error_count": errors,
+        "generic_artifact_images_deferred": int(
+            selection_stats.get("generic_artifact_images_deferred", 0)
+        ),
         "elapsed_s": time.time() - started,
         "database": str(database),
     }
@@ -781,16 +886,73 @@ def _resolve_image_path(raw: Any, source_path: Path) -> str | None:
     return str(candidate)
 
 
-def _artifact_hash_for_path(connection: sqlite3.Connection, path: str | None) -> str | None:
+def _ensure_referenced_artifact(
+    connection: sqlite3.Connection,
+    *,
+    path: str | None,
+    data_root: Path,
+) -> str | None:
+    """Retourne le hash d'un artefact et l'indexe à la demande si nécessaire.
+
+    Cette fonction est la garantie qui permet de différer les centaines de
+    milliers de PNG de ``/data/artifacts`` sans perdre une image réellement
+    utilisée par un CSV/JSON historique.
+    """
     if not path:
         return None
+    candidate = Path(path)
     row = connection.execute(
         "SELECT pixel_sha256, sha256 FROM artifacts WHERE path=?",
-        (path,),
+        (str(candidate),),
     ).fetchone()
-    if row is None:
+    if row is not None:
+        return row["pixel_sha256"] or row["sha256"]
+    if not candidate.is_file():
         return None
-    return row["pixel_sha256"] or row["sha256"]
+
+    try:
+        stat = candidate.stat()
+        extension = _path_extension(candidate)
+        file_hash = sha256_file(candidate)
+        pixel_hash = None
+        width = height = None
+        mode = None
+        if extension in IMAGE_EXTENSIONS:
+            pixel_hash, width, height, mode = _pixel_hash(candidate)
+
+        try:
+            relative_path = str(candidate.resolve().relative_to(data_root.resolve()))
+        except ValueError:
+            relative_path = str(candidate)
+
+        connection.execute(
+            """
+            INSERT OR REPLACE INTO artifacts(
+                path, relative_path, experiment_id, extension,
+                size_bytes, mtime_ns, sha256, pixel_sha256,
+                width, height, mode, hash_status, error, indexed_at_utc
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'hashed', NULL, ?)
+            """,
+            (
+                str(candidate),
+                relative_path,
+                infer_experiment(candidate),
+                extension,
+                stat.st_size,
+                stat.st_mtime_ns,
+                file_hash,
+                pixel_hash,
+                width,
+                height,
+                mode,
+                utc_now(),
+            ),
+        )
+        return pixel_hash or file_hash
+    except Exception:
+        # L'erreur technique de la ligne reste visible par image_path; elle ne
+        # doit pas arrêter l'extraction de toutes les autres observations.
+        return None
 
 
 def _canonical_observation(
@@ -863,7 +1025,11 @@ def _canonical_observation(
     )
     image_hash = str(image_hash).lower() if image_hash else None
     if image_hash is None:
-        image_hash = _artifact_hash_for_path(inventory, image_path)
+        image_hash = _ensure_referenced_artifact(
+            inventory,
+            path=image_path,
+            data_root=Path("/data") if str(source_path).startswith("/data/") else source_path.parent,
+        )
 
     exact_presets = _to_int(
         _first(
