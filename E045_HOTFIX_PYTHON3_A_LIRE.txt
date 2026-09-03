@@ -1,0 +1,19 @@
+E045 HOTFIX — Python hôte Debian
+
+Erreur observée :
+  scripts/deploy-e045-notebook.sh: ligne 50: python : commande introuvable
+
+Cause :
+- le préflight py_compile est lancé directement sur pcIA ;
+- Debian 12 expose normalement `python3`, mais l'alias `python` n'est pas garanti ;
+- les appels `python` dans les conteneurs API/notebook sont corrects et ne doivent pas être changés.
+
+Correction :
+- PROOFTAG_HOST_PYTHON si fourni ;
+- sinon python3 ;
+- sinon python ;
+- sinon échec explicite avant tout build.
+
+Aucun paramètre scientifique E045 n'est modifié.
+Aucun résultat /data n'est supprimé.
+Aucun entraînement/génération n'a besoin d'être relancé.

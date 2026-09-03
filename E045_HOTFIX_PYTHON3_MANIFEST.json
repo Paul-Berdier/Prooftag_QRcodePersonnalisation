@@ -1,0 +1,24 @@
+{
+  "hotfix": "e045-host-python3",
+  "base_commit_observed": "9d035452a23acc81d6a05dff5e0b3778f297f095",
+  "scientific_parameters_changed": false,
+  "persistent_data_changed": false,
+  "cause": "host Debian has python3 but no python alias",
+  "files": [
+    {
+      "path": "E045_HOTFIX_PYTHON3_A_LIRE.txt",
+      "size_bytes": 668,
+      "sha256": "0775e2f95ba86d107fa16d675efd3909c1ca45a7a8019c541f5fd876b3be944f"
+    },
+    {
+      "path": "scripts/deploy-e045-notebook.sh",
+      "size_bytes": 4540,
+      "sha256": "ccb066ff527fb5e110f1f2732bab6fed2dca21cd4b3f1a4476918f44a5680d61"
+    },
+    {
+      "path": "tests/test_e045_host_python.py",
+      "size_bytes": 632,
+      "sha256": "24c7ba26c4664078464103fe23a357fb41c409ebd7bfd83aa92bd7ac39b11cf6"
+    }
+  ]
+}

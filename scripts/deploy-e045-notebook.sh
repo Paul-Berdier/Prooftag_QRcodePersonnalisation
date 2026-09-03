@@ -13,6 +13,21 @@ api_deployment="${PROOFTAG_QR_DEPLOYMENT:-prooftag-qr}"
 notebook_deployment="${PROOFTAG_QR_NOTEBOOK_DEPLOYMENT:-prooftag-qr-notebook}"
 kubectl_bin="${KUBECTL:-kubectl}"
 
+host_python="${PROOFTAG_HOST_PYTHON:-}"
+if [[ -n "$host_python" ]]; then
+  command -v "$host_python" >/dev/null 2>&1 || {
+    echo "PROOFTAG_HOST_PYTHON pointe vers une commande absente : $host_python" >&2
+    exit 1
+  }
+elif command -v python3 >/dev/null 2>&1; then
+  host_python="python3"
+elif command -v python >/dev/null 2>&1; then
+  host_python="python"
+else
+  echo "Python introuvable sur l'hôte. Installer python3 ou définir PROOFTAG_HOST_PYTHON." >&2
+  exit 1
+fi
+
 failure_line=0
 failure_command=""
 record_failure() {
@@ -47,7 +62,9 @@ done
   exit 1
 }
 
-python -m py_compile \
+echo "Python hôte E045 : $host_python ($("$host_python" --version 2>&1))"
+
+"$host_python" -m py_compile \
   prooftag_qr/resilient_experiment.py \
   prooftag_qr/e045_registry.py \
   prooftag_qr/e045_parameter_space.py \
