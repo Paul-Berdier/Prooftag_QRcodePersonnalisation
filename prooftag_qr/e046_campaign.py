@@ -584,40 +584,66 @@ def _parent_visual_guard(
     stage1_quality: Mapping[str, Any],
     scene_qz_guard: bool | None,
 ) -> dict[str, Any]:
+    """Fail only on Stage2 degeneration; Stage1 quality deltas are diagnostic.
+
+    Stage2 is a full generative step, not a local refinement of Stage1. Relative
+    CLIP/HPS/AES drops therefore remain recorded but do not make a valid Stage2
+    ineligible. The tight relative visual guards remain on Stage2 -> SR-MPGD.
+    """
+
+    def finite(value: Any) -> bool:
+        if value is None:
+            return False
+        try:
+            return math.isfinite(float(value))
+        except (TypeError, ValueError):
+            return False
+
     checks = {
-        "mean_absolute_change": float(row["mean_absolute_change"]) <= 0.35,
+        "mean_absolute_change": (
+            finite(row.get("mean_absolute_change"))
+            and float(row["mean_absolute_change"]) <= 0.35
+        ),
         "clipped_pixel_ratio_increase": (
-            float(row["clipped_pixel_ratio_increase"]) <= 0.20
+            finite(row.get("clipped_pixel_ratio_increase"))
+            and float(row["clipped_pixel_ratio_increase"]) <= 0.20
         ),
         "rgb_clipped_channel_ratio_increase": (
-            float(row["rgb_clipped_channel_ratio_increase"]) <= 0.25
+            finite(row.get("rgb_clipped_channel_ratio_increase"))
+            and float(row["rgb_clipped_channel_ratio_increase"]) <= 0.25
         ),
         "abs_saturation_mean_change": (
-            abs(float(row["saturation_mean_increase"])) <= 0.20
+            finite(row.get("saturation_mean_increase"))
+            and abs(float(row["saturation_mean_increase"])) <= 0.20
         ),
         "high_saturation_ratio_increase": (
-            float(row["high_saturation_ratio_increase"]) <= 0.30
+            finite(row.get("high_saturation_ratio_increase"))
+            and float(row["high_saturation_ratio_increase"]) <= 0.30
         ),
-        "clip_score": (
-            float(row.get("clip_score") or -1e9)
-            >= float(stage1_quality.get("clip_score") or -1e9) - 0.08
-        ),
-        "clip_aesthetic": (
-            float(row.get("clip_aesthetic") or -1e9)
-            >= float(stage1_quality.get("clip_aesthetic") or -1e9) - 0.75
-        ),
+        "clip_score_finite": finite(row.get("clip_score")),
+        "clip_aesthetic_finite": finite(row.get("clip_aesthetic")),
     }
-    if (
-        row.get("hpsv2_1") is not None
-        and stage1_quality.get("hpsv2_1") is not None
-    ):
-        checks["hpsv2_1"] = (
-            float(row["hpsv2_1"])
-            >= float(stage1_quality["hpsv2_1"]) - 0.06
-        )
+    if row.get("hpsv2_1") is not None:
+        checks["hpsv2_1_finite"] = finite(row.get("hpsv2_1"))
     if scene_qz_guard is not None:
         checks["scene_preserving_quiet_zone"] = bool(scene_qz_guard)
-    return {"passed": all(checks.values()), "checks": checks}
+
+    deltas: dict[str, float | None] = {}
+    for metric in ("clip_score", "clip_aesthetic", "hpsv2_1"):
+        value = row.get(metric)
+        reference = stage1_quality.get(metric)
+        deltas[metric] = (
+            float(value) - float(reference)
+            if finite(value) and finite(reference)
+            else None
+        )
+
+    return {
+        "passed": all(checks.values()),
+        "checks": checks,
+        "policy": "e046-stage2-nondegenerate-parent-guard-v2",
+        "stage1_quality_deltas_diagnostic_only": deltas,
+    }
 
 
 def _score_image_set(
@@ -639,16 +665,21 @@ def _score_image_set(
 
 
 def _row_qr_fields(item: Mapping[str, Any]) -> dict[str, Any]:
-    from .e038_recipe_frontier import _qr_original_exact
-
     exact = int(item.get("conservative_exact_presets", 0))
+
+    original_exact = item.get("direct_exact_all_repetitions")
+    if original_exact is None:
+        from .e038_recipe_frontier import _qr_original_exact
+
+        original_exact = _qr_original_exact(dict(item))
+
     return {
         "wechat_engine": QR_SOFTWARE_ENGINE,
         "wechat_preset_count": QR_VERIFY_PRESET_COUNT,
         "wechat_repetitions": 3,
         "wechat_exact_presets": exact,
         "wechat_exact_rate": exact / QR_VERIFY_PRESET_COUNT,
-        "wechat_original_exact": bool(_qr_original_exact(dict(item))),
+        "wechat_original_exact": bool(original_exact),
         "qr_primary_label": "exact payload only",
     }
 
@@ -839,13 +870,28 @@ def score_parent(
                 )
             row["visual_guard_pass"] = bool(guard["passed"])
             row["visual_guard_checks"] = guard["checks"]
+            row["visual_guard_policy"] = guard.get(
+                "policy",
+                "e046-stage1-baseline-v1",
+            )
+            row["stage1_quality_deltas_diagnostic_only"] = guard.get(
+                "stage1_quality_deltas_diagnostic_only",
+                {},
+            )
+
+            # Stage1 is a dataset baseline only. Scene-preserving variants remain
+            # diagnostic until physical-phone validation. The exported Stage2
+            # latent pairs only with stage2_raw.
             row["eligible_for_refinement"] = bool(
                 row["stage"] == "stage2"
+                and row["quiet_zone_variant"] == "raw"
                 and row["visual_guard_pass"]
                 and not row["uniform_quiet_zone_replacement"]
             )
             row["eligible_final"] = bool(
-                row["visual_guard_pass"]
+                row["stage"] == "stage2"
+                and row["quiet_zone_variant"] == "raw"
+                and row["visual_guard_pass"]
                 and not row["uniform_quiet_zone_replacement"]
             )
             rows.append(row)
@@ -1517,7 +1563,8 @@ def score_refinement(
             row["visual_guard_pass"] = bool(guard["passed"])
             row["visual_guard_checks"] = guard["checks"]
             row["eligible_final"] = bool(
-                row["visual_guard_pass"]
+                row["quiet_zone_variant"] == "raw"
+                and row["visual_guard_pass"]
                 and not row["uniform_quiet_zone_replacement"]
             )
             rows.append(row)
@@ -2184,6 +2231,152 @@ def list_refinement_ids(
     return result
 
 
+
+def reclassify_existing(
+    *,
+    output_root: Path,
+    plan_id: str,
+) -> dict[str, Any]:
+    """Reclassify existing E046 scoring rows without regenerating any raster.
+
+    This is a deterministic metadata migration for smoke plans created before
+    parent-guard-v2/final-eligibility-v2. It consumes persisted QR-Verify
+    evidence and quality metrics, rewrites only scoring tables/flags, removes
+    derived aggregate outputs, then lets `aggregate` rebuild them.
+    """
+    plan_dir, plan = load_plan(output_root, plan_id)
+    changed_rows = 0
+    parent_rows = 0
+    refinement_rows = 0
+
+    for candidate in plan["candidates"]:
+        candidate_id = str(candidate["id"])
+        root = _parent_final_dir(plan_dir, candidate_id)
+        comparison_path = root / "scoring/comparison.json"
+        if not comparison_path.is_file():
+            continue
+
+        rows = _load_json(comparison_path)
+        qr_evidence = _load_json(root / "scoring/qr-verify-evidence.json")
+        quality = _load_json(root / "scoring/quality-scores.json")
+        stage1_quality = quality["stage1_raw"]
+
+        for row in rows:
+            variant = str(row["variant"])
+            qitem = qr_evidence.get(variant) or {}
+            qr_fields = _row_qr_fields(qitem)
+            row.update(qr_fields)
+
+            if row["stage"] == "stage1":
+                row["visual_guard_policy"] = "e046-stage1-baseline-v1"
+                row["eligible_for_refinement"] = False
+                row["eligible_final"] = False
+            else:
+                guard = _parent_visual_guard(
+                    row=row,
+                    stage1_quality=stage1_quality,
+                    scene_qz_guard=(
+                        row.get("quiet_zone_delivery_guard_pass")
+                        if row.get("quiet_zone_variant") == "scene_preserving"
+                        else None
+                    ),
+                )
+                row["visual_guard_pass"] = bool(guard["passed"])
+                row["visual_guard_checks"] = guard["checks"]
+                row["visual_guard_policy"] = guard["policy"]
+                row["stage1_quality_deltas_diagnostic_only"] = guard[
+                    "stage1_quality_deltas_diagnostic_only"
+                ]
+                row["eligible_for_refinement"] = bool(
+                    row["quiet_zone_variant"] == "raw"
+                    and row["visual_guard_pass"]
+                )
+                row["eligible_final"] = bool(
+                    row["quiet_zone_variant"] == "raw"
+                    and row["visual_guard_pass"]
+                )
+            changed_rows += 1
+            parent_rows += 1
+
+        atomic_write_json(comparison_path, rows)
+        _write_csv(
+            root / "scoring/comparison.csv",
+            _flatten_rows_for_csv(rows),
+        )
+        summary_path = root / "SCORING_COMPLETE.json"
+        if summary_path.is_file():
+            summary = _load_json(summary_path)
+            summary["stage2_safe_variant_count"] = sum(
+                bool(row.get("eligible_for_refinement"))
+                for row in rows
+                if row.get("stage") == "stage2"
+            )
+            summary["visual_guard_policy"] = (
+                "e046-stage2-nondegenerate-parent-guard-v2"
+            )
+            summary["reclassified_at_utc"] = utc_now()
+            atomic_write_json(summary_path, summary)
+
+    for candidate_id, recipe_id in refinement_tasks(plan_dir, plan):
+        root = _refinement_final_dir(plan_dir, candidate_id, recipe_id)
+        comparison_path = root / "scoring/comparison.json"
+        if not comparison_path.is_file():
+            continue
+
+        rows = _load_json(comparison_path)
+        qr_evidence = _load_json(root / "scoring/qr-verify-evidence.json")
+        for row in rows:
+            variant = str(row["variant"])
+            row.update(_row_qr_fields(qr_evidence.get(variant) or {}))
+            row["eligible_final"] = bool(
+                row.get("quiet_zone_variant") == "raw"
+                and row.get("visual_guard_pass") is True
+                and not row.get("uniform_quiet_zone_replacement", False)
+            )
+            changed_rows += 1
+            refinement_rows += 1
+
+        atomic_write_json(comparison_path, rows)
+        _write_csv(
+            root / "scoring/comparison.csv",
+            _flatten_rows_for_csv(rows),
+        )
+
+    # Selection must be rebuilt because parent eligibility changed.
+    for path in (
+        plan_dir / "selected-parents.json",
+        plan_dir / "selected-parents.csv",
+    ):
+        path.unlink(missing_ok=True)
+    select_parents(output_root=output_root, plan_id=plan_id)
+
+    # Derived products are rebuilt from the migrated scoring evidence.
+    for path in (
+        plan_dir / "verdict.json",
+        plan_dir / "report.md",
+        plan_dir / "artifact-manifest.json",
+        plan_dir / "COMPLETE.json",
+    ):
+        path.unlink(missing_ok=True)
+    shutil.rmtree(plan_dir / "dataset", ignore_errors=True)
+    shutil.rmtree(plan_dir / "pipeline", ignore_errors=True)
+    (plan_dir / "pipeline").mkdir(parents=True, exist_ok=True)
+
+    result = aggregate(output_root=output_root, plan_id=plan_id)
+    return {
+        "plan_id": plan_id,
+        "parent_rows_reclassified": parent_rows,
+        "refinement_rows_reclassified": refinement_rows,
+        "changed_rows": changed_rows,
+        "winner_candidate_id": result["winner_candidate_id"],
+        "winner_variant": result["winner_variant"],
+        "winner_wechat_exact_presets": result["winner_wechat_exact_presets"],
+        "winner_wechat_original_exact": result["winner_wechat_original_exact"],
+        "manifest_sha256": result["artifact_manifest_sha256"],
+        "valid": True,
+    }
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="action", required=True)
@@ -2203,6 +2396,7 @@ def _parser() -> argparse.ArgumentParser:
         "select",
         "score-refinements",
         "aggregate",
+        "reclassify-existing",
         "status",
         "verify",
         "list-parents",
@@ -2287,6 +2481,11 @@ def _cli() -> int:
             )
         elif action == "aggregate":
             result = aggregate(
+                output_root=args.output_root,
+                plan_id=plan_id,
+            )
+        elif action == "reclassify-existing":
+            result = reclassify_existing(
                 output_root=args.output_root,
                 plan_id=plan_id,
             )

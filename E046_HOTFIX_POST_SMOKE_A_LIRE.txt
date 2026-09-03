@@ -1,0 +1,21 @@
+E046 HOTFIX POST-SMOKE
+
+Base observed server commit:
+0370f6824964e6c8754b969b224597bfb8c8d1e2
+
+Fixes:
+1. canonical WeChat original preset extraction from direct_exact_all_repetitions;
+2. Stage1 is dataset baseline only, never final;
+3. scene-preserving variants stay diagnostic only;
+4. only stage2_raw can be SR-MPGD parent;
+5. only raw SR-MPGD checkpoints can become final;
+6. Stage2 parent guard no longer rejects legitimate generation solely for CLIP/HPS drop vs Stage1;
+7. notebook Pareto/best tables tolerate missing optional srmpgd_recipe_id;
+8. reclassify-existing command rebuilds the existing smoke verdict/dataset without GPU.
+
+After deploy:
+python -m prooftag_qr.e046_campaign reclassify-existing \
+  --output-root /data/e046-controlled-best-generator-v1 \
+  --plan-id b2621671e0334f6a
+
+Then verify. Do NOT regenerate the smoke parents/refinement.

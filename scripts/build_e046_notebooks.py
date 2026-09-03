@@ -557,12 +557,13 @@ for path in failure_paths[:50]:
 pareto_path = R / "dataset/pareto-front.json"
 if pareto_path.is_file():
     pareto_df = pd.DataFrame(json.loads(pareto_path.read_text(encoding="utf-8")))
-    display(pareto_df[[
+    pareto_columns = [
         "candidate_id", "source_kind", "srmpgd_recipe_id", "variant",
         "iteration", "gamma", "wechat_exact_presets",
         "wechat_original_exact", "clip_aesthetic", "hpsv2_1",
         "clip_score", "lpips", "image_path"
-    ]])
+    ]
+    display(pareto_df.reindex(columns=pareto_columns))
 else:
     display(Markdown("Pareto disponible après agrégation."))
 """
@@ -572,11 +573,12 @@ else:
 best_path = R / "dataset/best-by-prompt.json"
 if best_path.is_file():
     best_df = pd.DataFrame(json.loads(best_path.read_text(encoding="utf-8")))
-    display(best_df[[
+    best_columns = [
         "prompt_id", "candidate_id", "source_kind", "variant",
         "srmpgd_recipe_id", "iteration", "wechat_exact_presets",
         "clip_aesthetic", "hpsv2_1", "image_path"
-    ]])
+    ]
+    display(best_df.reindex(columns=best_columns))
 """
     ),
     md("## 13. Galerie des meilleurs candidats"),
