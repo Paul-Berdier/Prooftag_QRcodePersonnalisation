@@ -1,0 +1,81 @@
+{
+  "schema": "e045-future-task-spec-examples-v1",
+  "generation": {
+    "task_id_pattern": "e046:<context-hash>:<candidate-hash>",
+    "kind": "generation",
+    "max_attempts": 2,
+    "spec": {
+      "prompt_intent_hash": "<sha256>",
+      "prompt_rewrite_hash": "<sha256>",
+      "payload_hash": "<sha256>",
+      "qr_configuration": {
+        "error_correction": "M",
+        "version": 3,
+        "mask": 4,
+        "module_size_px": 20,
+        "quiet_zone_modules": 4,
+        "canvas_px": 896,
+        "quiet_zone_policy": "composed_during_generation_never_erased"
+      },
+      "stage1": {
+        "model_revision": "<sha>",
+        "controlnet_revision": "<sha>",
+        "steps": 40,
+        "guidance_scale": 7.5,
+        "controlnet_scale": 1.35,
+        "seed": 72044
+      },
+      "stage2": {
+        "enabled": true,
+        "initialization": "stage1_reencoded_noised",
+        "steps": 40,
+        "srg_weight": 100,
+        "perceptual_weight": 10
+      },
+      "srmpgd": {
+        "enabled": "policy_decision",
+        "gamma": 500,
+        "iterations_max": 8,
+        "latent_radius_rms": 0.2,
+        "checkpoint_policy": "best_safe"
+      },
+      "required_stage_manifests": [
+        "qr-blueprint",
+        "stage1",
+        "stage2-latent",
+        "srmpgd-checkpoints",
+        "software-scoring"
+      ]
+    }
+  },
+  "training": {
+    "task_id_pattern": "e047:<dataset-hash>:<split-hash>:<architecture-hash>",
+    "kind": "training",
+    "max_attempts": 2,
+    "spec": {
+      "dataset_hash": "<sha256>",
+      "split_hash": "<sha256>",
+      "architecture_hash": "<sha256>",
+      "source_commit": "<sha>",
+      "runtime_image_digest": "sha256:<digest>",
+      "batch_size": 16,
+      "gradient_accumulation_steps": 4,
+      "precision": "bf16",
+      "checkpoint_interval_steps": 250,
+      "resume_requires_exact_hash_match": true,
+      "checkpoint_fields": [
+        "model",
+        "optimizer",
+        "scheduler",
+        "gradient_scaler",
+        "epoch",
+        "global_step",
+        "best_metric",
+        "rng_python",
+        "rng_numpy",
+        "rng_torch_cpu",
+        "rng_torch_cuda"
+      ]
+    }
+  }
+}

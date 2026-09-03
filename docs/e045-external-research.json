@@ -1,0 +1,47 @@
+{
+  "schema": "e045-external-research-sources-v1",
+  "sources": [
+    {
+      "id": "diffqrcoder",
+      "title": "DiffQRCoder: Diffusion-Based Aesthetic QR Code Generation with Scanning Robustness Guided Iterative Refinement",
+      "url": "https://arxiv.org/abs/2409.06355",
+      "use_in_e045": "Moteur de référence, SRPG/SR-MPGD et audit de reproductibilité.",
+      "implementation_status": "pinned_public_code_with_local_audited_fixes"
+    },
+    {
+      "id": "text2qr",
+      "title": "Text2QR: Harmonizing Aesthetic Customization and Scanning Robustness for Text-Guided QR Code Generation",
+      "url": "https://openaccess.thecvf.com/content/CVPR2024/html/Wu_Text2QR_Harmonizing_Aesthetic_Customization_and_Scanning_Robustness_for_Text-Guided_QR_CVPR_2024_paper.html",
+      "use_in_e045": "Blueprint optimisé avant diffusion et raffinement latent.",
+      "implementation_status": "inspiration_only"
+    },
+    {
+      "id": "face2qr",
+      "title": "Face2QR: A Unified Framework for Aesthetic, Face-Preserving, and Scannable QR Code Generation",
+      "url": "https://arxiv.org/abs/2411.19246",
+      "use_in_e045": "Minimiser les conflits entre saliency du sujet et modules QR avec transformations légales.",
+      "implementation_status": "inspiration_only"
+    },
+    {
+      "id": "artcoder",
+      "title": "ArtCoder: An End-to-End Method for Generating Scanning-Robust Stylized QR Codes",
+      "url": "https://openaccess.thecvf.com/content/CVPR2021/html/Su_ArtCoder_An_End-to-End_Method_for_Generating_Scanning-Robust_Stylized_QR_Codes_CVPR_2021_paper.html",
+      "use_in_e045": "Simulation d'échantillonnage intra-module pour le futur surrogate téléphone.",
+      "implementation_status": "inspiration_only"
+    },
+    {
+      "id": "botorch_mobo",
+      "title": "BoTorch multi-objective Bayesian optimization",
+      "url": "https://botorch.org/docs/v0.17.2/tutorials/multi_objective_bo",
+      "use_in_e045": "qLogNEHVI pour la future recherche multiobjectif bruitée et coûteuse.",
+      "implementation_status": "planned_e046"
+    },
+    {
+      "id": "botorch_robust",
+      "title": "BoTorch robust multi-objective optimization under input noise",
+      "url": "https://botorch.org/docs/tutorials/robust_multi_objective_bo",
+      "use_in_e045": "Robustesse aux paramètres d'exécution et perturbations caméra.",
+      "implementation_status": "planned_e046"
+    }
+  ]
+}

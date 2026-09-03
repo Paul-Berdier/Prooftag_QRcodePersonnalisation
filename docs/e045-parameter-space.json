@@ -1,0 +1,1355 @@
+{
+  "schema": "e045-parameter-space-v1",
+  "parameter_count": 98,
+  "parameters": [
+    {
+      "stage": "qr",
+      "name": "payload_length",
+      "dtype": "int",
+      "domain": {
+        "min": 1,
+        "max": 2953
+      },
+      "role": "context",
+      "conditional_on": null,
+      "notes": "Longueur du payload; le texte clair n'est jamais requis dans le dataset."
+    },
+    {
+      "stage": "qr",
+      "name": "payload_variant_id",
+      "dtype": "categorical",
+      "domain": [
+        "canonical",
+        "short_alias",
+        "fragment_nonce",
+        "server_nonce"
+      ],
+      "role": "choice",
+      "conditional_on": null,
+      "notes": "Les variantes doivent rester sémantiquement contrôlées par Prooftag."
+    },
+    {
+      "stage": "qr",
+      "name": "error_correction",
+      "dtype": "categorical",
+      "domain": [
+        "L",
+        "M",
+        "Q",
+        "H"
+      ],
+      "role": "choice",
+      "conditional_on": null,
+      "notes": "À optimiser conjointement avec version et densité."
+    },
+    {
+      "stage": "qr",
+      "name": "qr_version",
+      "dtype": "int",
+      "domain": {
+        "min": 1,
+        "max": 12
+      },
+      "role": "choice",
+      "conditional_on": null,
+      "notes": "Espace initial borné aux versions réalistes pour URL courte."
+    },
+    {
+      "stage": "qr",
+      "name": "mask_pattern",
+      "dtype": "categorical",
+      "domain": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "role": "choice",
+      "conditional_on": null,
+      "notes": "Les huit masques légaux doivent être comparés avant diffusion."
+    },
+    {
+      "stage": "qr",
+      "name": "module_size_px",
+      "dtype": "int",
+      "domain": [
+        16,
+        20,
+        24,
+        28
+      ],
+      "role": "choice",
+      "conditional_on": null,
+      "notes": "Doit diviser exactement le cœur QR."
+    },
+    {
+      "stage": "qr",
+      "name": "quiet_zone_modules",
+      "dtype": "int",
+      "domain": [
+        4,
+        5,
+        6
+      ],
+      "role": "choice",
+      "conditional_on": null,
+      "notes": "Zone calme conçue dès la composition, pas effacement final."
+    },
+    {
+      "stage": "qr",
+      "name": "canvas_px",
+      "dtype": "int",
+      "domain": [
+        736,
+        896,
+        1024
+      ],
+      "role": "choice",
+      "conditional_on": null,
+      "notes": "Doit rester compatible VAE et géométrie entière."
+    },
+    {
+      "stage": "qr",
+      "name": "qr_position_x",
+      "dtype": "float",
+      "domain": {
+        "min": 0.25,
+        "max": 0.75
+      },
+      "role": "choice",
+      "conditional_on": null,
+      "notes": "Position normalisée du symbole dans le canvas."
+    },
+    {
+      "stage": "qr",
+      "name": "qr_position_y",
+      "dtype": "float",
+      "domain": {
+        "min": 0.25,
+        "max": 0.75
+      },
+      "role": "choice",
+      "conditional_on": null,
+      "notes": "Position normalisée du symbole dans le canvas."
+    },
+    {
+      "stage": "qr",
+      "name": "blueprint_kind",
+      "dtype": "categorical",
+      "domain": [
+        "binary_exact",
+        "mask_search_exact",
+        "adaptive_exact",
+        "qart_public_canonical",
+        "saliency_aware_exact"
+      ],
+      "role": "choice",
+      "conditional_on": null,
+      "notes": "QArt public canonique reste séparé d'un exact-payload."
+    },
+    {
+      "stage": "qr",
+      "name": "foreground_luminance_target",
+      "dtype": "float",
+      "domain": {
+        "min": 0.02,
+        "max": 0.4
+      },
+      "role": "choice",
+      "conditional_on": null,
+      "notes": "Contraste perceptuel, non couleur RGB brute."
+    },
+    {
+      "stage": "qr",
+      "name": "background_luminance_target",
+      "dtype": "float",
+      "domain": {
+        "min": 0.6,
+        "max": 0.98
+      },
+      "role": "choice",
+      "conditional_on": null,
+      "notes": "La zone calme peut être teintée mais doit rester claire."
+    },
+    {
+      "stage": "qr",
+      "name": "saliency_overlap_budget",
+      "dtype": "float",
+      "domain": {
+        "min": 0.0,
+        "max": 0.4
+      },
+      "role": "constraint",
+      "conditional_on": null,
+      "notes": "Fraction maximale de modules critiques sur la région du sujet."
+    },
+    {
+      "stage": "prompt",
+      "name": "prompt_text",
+      "dtype": "text",
+      "domain": null,
+      "role": "context",
+      "conditional_on": null,
+      "notes": "Texte exact, conservé pour split anti-fuite."
+    },
+    {
+      "stage": "prompt",
+      "name": "prompt_embedding_model",
+      "dtype": "categorical",
+      "domain": [
+        "clip",
+        "siglip",
+        "dinov2_text_bridge"
+      ],
+      "role": "feature",
+      "conditional_on": null,
+      "notes": "Révision épinglée obligatoire."
+    },
+    {
+      "stage": "prompt",
+      "name": "prompt_rewrite_id",
+      "dtype": "categorical",
+      "domain": null,
+      "role": "choice",
+      "conditional_on": null,
+      "notes": "Identifiant de reformulation; le sens demandé reste traçable."
+    },
+    {
+      "stage": "prompt",
+      "name": "prompt_family",
+      "dtype": "categorical",
+      "domain": [
+        "minimal",
+        "architectural_grid",
+        "organic_grid",
+        "branching",
+        "vertical",
+        "radial",
+        "portrait",
+        "product",
+        "landscape",
+        "typographic_forbidden",
+        "atypical"
+      ],
+      "role": "context",
+      "conditional_on": null,
+      "notes": "Utilisé pour groupes et OOD."
+    },
+    {
+      "stage": "prompt",
+      "name": "subject_count",
+      "dtype": "int",
+      "domain": {
+        "min": 1,
+        "max": 8
+      },
+      "role": "feature",
+      "conditional_on": null,
+      "notes": "Complexité sémantique."
+    },
+    {
+      "stage": "prompt",
+      "name": "subject_position",
+      "dtype": "categorical",
+      "domain": [
+        "center",
+        "left_third",
+        "right_third",
+        "top_third",
+        "bottom_third",
+        "peripheral"
+      ],
+      "role": "choice",
+      "conditional_on": null,
+      "notes": "Aide à placer le QR hors sujet."
+    },
+    {
+      "stage": "prompt",
+      "name": "visual_style",
+      "dtype": "categorical",
+      "domain": [
+        "photo",
+        "illustration",
+        "poster",
+        "macro",
+        "architecture",
+        "3d_render",
+        "painting"
+      ],
+      "role": "choice",
+      "conditional_on": null,
+      "notes": "Variable de composition."
+    },
+    {
+      "stage": "prompt",
+      "name": "spatial_frequency_class",
+      "dtype": "categorical",
+      "domain": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "role": "feature",
+      "conditional_on": null,
+      "notes": "Estimée avant et après génération."
+    },
+    {
+      "stage": "prompt",
+      "name": "negative_prompt",
+      "dtype": "text",
+      "domain": null,
+      "role": "choice",
+      "conditional_on": null,
+      "notes": "Version exacte conservée."
+    },
+    {
+      "stage": "prompt",
+      "name": "natural_quiet_zone_hint",
+      "dtype": "categorical",
+      "domain": [
+        "wall",
+        "sky",
+        "fog",
+        "water",
+        "paper",
+        "halo",
+        "glass",
+        "floor",
+        "none"
+      ],
+      "role": "choice",
+      "conditional_on": null,
+      "notes": "Zone calme intégrée au prompt."
+    },
+    {
+      "stage": "stage1",
+      "name": "base_model_id",
+      "dtype": "categorical",
+      "domain": null,
+      "role": "choice",
+      "conditional_on": null,
+      "notes": "ID et révision immuable."
+    },
+    {
+      "stage": "stage1",
+      "name": "base_model_revision",
+      "dtype": "sha",
+      "domain": null,
+      "role": "provenance",
+      "conditional_on": null,
+      "notes": "SHA obligatoire."
+    },
+    {
+      "stage": "stage1",
+      "name": "controlnet_model_id",
+      "dtype": "categorical",
+      "domain": null,
+      "role": "choice",
+      "conditional_on": null,
+      "notes": "Monster v2 baseline; autres branches séparées."
+    },
+    {
+      "stage": "stage1",
+      "name": "controlnet_revision",
+      "dtype": "sha",
+      "domain": null,
+      "role": "provenance",
+      "conditional_on": null,
+      "notes": "SHA obligatoire."
+    },
+    {
+      "stage": "stage1",
+      "name": "scheduler",
+      "dtype": "categorical",
+      "domain": [
+        "DDIM",
+        "DPMSolverMultistep",
+        "EulerAncestral"
+      ],
+      "role": "choice",
+      "conditional_on": null,
+      "notes": "Compatibilité vérifiée par backend."
+    },
+    {
+      "stage": "stage1",
+      "name": "steps",
+      "dtype": "int",
+      "domain": [
+        20,
+        30,
+        40,
+        60
+      ],
+      "role": "choice",
+      "conditional_on": null,
+      "notes": "Budget diffusion Stage 1."
+    },
+    {
+      "stage": "stage1",
+      "name": "guidance_scale",
+      "dtype": "float",
+      "domain": {
+        "min": 4.5,
+        "max": 9.0
+      },
+      "role": "choice",
+      "conditional_on": null,
+      "notes": "CFG."
+    },
+    {
+      "stage": "stage1",
+      "name": "controlnet_scale",
+      "dtype": "float",
+      "domain": {
+        "min": 0.4,
+        "max": 1.6
+      },
+      "role": "choice",
+      "conditional_on": null,
+      "notes": "Force de structure QR."
+    },
+    {
+      "stage": "stage1",
+      "name": "control_guidance_start",
+      "dtype": "float",
+      "domain": {
+        "min": 0.0,
+        "max": 0.25
+      },
+      "role": "choice",
+      "conditional_on": null,
+      "notes": "Début d'application du contrôle."
+    },
+    {
+      "stage": "stage1",
+      "name": "control_guidance_end",
+      "dtype": "float",
+      "domain": {
+        "min": 0.55,
+        "max": 1.0
+      },
+      "role": "choice",
+      "conditional_on": null,
+      "notes": "Fin d'application du contrôle."
+    },
+    {
+      "stage": "stage1",
+      "name": "guidance_rescale",
+      "dtype": "float",
+      "domain": {
+        "min": 0.0,
+        "max": 0.7
+      },
+      "role": "choice",
+      "conditional_on": null,
+      "notes": "Option de réduction de surexposition."
+    },
+    {
+      "stage": "stage1",
+      "name": "seed",
+      "dtype": "categorical_int",
+      "domain": null,
+      "role": "choice",
+      "conditional_on": null,
+      "notes": "Catégorie; deux entiers voisins ne sont pas supposés proches."
+    },
+    {
+      "stage": "stage1",
+      "name": "precision",
+      "dtype": "categorical",
+      "domain": [
+        "fp16",
+        "bf16",
+        "fp32"
+      ],
+      "role": "runtime",
+      "conditional_on": null,
+      "notes": "Conditionnelle au modèle et au GPU."
+    },
+    {
+      "stage": "stage1",
+      "name": "vae_id",
+      "dtype": "categorical",
+      "domain": null,
+      "role": "choice",
+      "conditional_on": null,
+      "notes": "VAE et révision."
+    },
+    {
+      "stage": "stage1",
+      "name": "preview_fidelity",
+      "dtype": "categorical",
+      "domain": [
+        "low",
+        "medium",
+        "full"
+      ],
+      "role": "fidelity",
+      "conditional_on": null,
+      "notes": "Pour optimisation multi-fidélité."
+    },
+    {
+      "stage": "stage2",
+      "name": "enabled",
+      "dtype": "bool",
+      "domain": [
+        false,
+        true
+      ],
+      "role": "policy",
+      "conditional_on": null,
+      "notes": "Stage 2 peut être évitée sur candidat inutile."
+    },
+    {
+      "stage": "stage2",
+      "name": "initialization",
+      "dtype": "categorical",
+      "domain": [
+        "stage1_reencoded_noised",
+        "public_random",
+        "stage1_latent_suffix"
+      ],
+      "role": "choice",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Toujours enregistrer la réalisation du bruit."
+    },
+    {
+      "stage": "stage2",
+      "name": "strength",
+      "dtype": "float",
+      "domain": {
+        "min": 0.05,
+        "max": 1.0
+      },
+      "role": "choice",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Timestep initial / fraction effective."
+    },
+    {
+      "stage": "stage2",
+      "name": "steps_planned",
+      "dtype": "int",
+      "domain": [
+        20,
+        40,
+        60,
+        100
+      ],
+      "role": "choice",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Pas planifiés."
+    },
+    {
+      "stage": "stage2",
+      "name": "steps_effective",
+      "dtype": "int",
+      "domain": {
+        "min": 1,
+        "max": 100
+      },
+      "role": "derived",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Pas réellement exécutés."
+    },
+    {
+      "stage": "stage2",
+      "name": "guidance_scale",
+      "dtype": "float",
+      "domain": {
+        "min": 4.5,
+        "max": 9.0
+      },
+      "role": "choice",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "CFG Stage 2."
+    },
+    {
+      "stage": "stage2",
+      "name": "controlnet_scale",
+      "dtype": "float",
+      "domain": {
+        "min": 0.5,
+        "max": 1.35
+      },
+      "role": "choice",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Force ControlNet Stage 2."
+    },
+    {
+      "stage": "stage2",
+      "name": "control_guidance_start",
+      "dtype": "float",
+      "domain": {
+        "min": 0.0,
+        "max": 0.35
+      },
+      "role": "choice",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Début contrôle Stage 2."
+    },
+    {
+      "stage": "stage2",
+      "name": "control_guidance_end",
+      "dtype": "float",
+      "domain": {
+        "min": 0.55,
+        "max": 1.0
+      },
+      "role": "choice",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Fin contrôle Stage 2."
+    },
+    {
+      "stage": "stage2",
+      "name": "target_kind",
+      "dtype": "categorical",
+      "domain": [
+        "binary_exact",
+        "mask_search_exact",
+        "adaptive_exact",
+        "qart_public_canonical",
+        "saliency_aware_exact"
+      ],
+      "role": "choice",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Exact-payload exigé pour production."
+    },
+    {
+      "stage": "stage2",
+      "name": "srg_weight",
+      "dtype": "float",
+      "domain": {
+        "min": 20.0,
+        "max": 500.0,
+        "scale": "log"
+      },
+      "role": "choice",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Poids scanning guidance."
+    },
+    {
+      "stage": "stage2",
+      "name": "perceptual_weight",
+      "dtype": "float",
+      "domain": {
+        "min": 1.0,
+        "max": 30.0,
+        "scale": "log"
+      },
+      "role": "choice",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Poids perceptuel."
+    },
+    {
+      "stage": "stage2",
+      "name": "srg_schedule",
+      "dtype": "categorical",
+      "domain": [
+        "constant",
+        "early",
+        "middle",
+        "late",
+        "cosine_decay",
+        "adaptive_active_modules"
+      ],
+      "role": "choice",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Calendrier séparé."
+    },
+    {
+      "stage": "stage2",
+      "name": "perceptual_schedule",
+      "dtype": "categorical",
+      "domain": [
+        "constant",
+        "early",
+        "late",
+        "cosine_rise"
+      ],
+      "role": "choice",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Calendrier indépendant."
+    },
+    {
+      "stage": "stage2",
+      "name": "dark_threshold",
+      "dtype": "float",
+      "domain": {
+        "min": 0.4,
+        "max": 0.52
+      },
+      "role": "choice",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Seuil sombre."
+    },
+    {
+      "stage": "stage2",
+      "name": "light_threshold",
+      "dtype": "float",
+      "domain": {
+        "min": 0.5,
+        "max": 0.72
+      },
+      "role": "choice",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Seuil clair."
+    },
+    {
+      "stage": "stage2",
+      "name": "gaussian_sigma",
+      "dtype": "float",
+      "domain": {
+        "min": 1.0,
+        "max": 3.5
+      },
+      "role": "choice",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Pondération intra-module."
+    },
+    {
+      "stage": "stage2",
+      "name": "center_fraction",
+      "dtype": "float",
+      "domain": {
+        "min": 0.25,
+        "max": 0.55
+      },
+      "role": "choice",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Zone centrale active."
+    },
+    {
+      "stage": "stage2",
+      "name": "gradient_clip_rms",
+      "dtype": "float",
+      "domain": {
+        "min": 0.001,
+        "max": 0.2,
+        "scale": "log"
+      },
+      "role": "choice",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Limiteur de gradient."
+    },
+    {
+      "stage": "stage2",
+      "name": "loss_scale",
+      "dtype": "float",
+      "domain": {
+        "min": 1.0,
+        "max": 65536.0,
+        "scale": "log2"
+      },
+      "role": "runtime",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Dénormalisé après VJP."
+    },
+    {
+      "stage": "stage2",
+      "name": "lpips_backbone",
+      "dtype": "categorical",
+      "domain": [
+        "alex",
+        "vgg"
+      ],
+      "role": "choice",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Référence flottante Stage 1 exacte."
+    },
+    {
+      "stage": "stage2",
+      "name": "early_stop_qrverify",
+      "dtype": "float",
+      "domain": {
+        "min": 0.0,
+        "max": 1.0
+      },
+      "role": "policy",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Arrêt si robustesse suffisante."
+    },
+    {
+      "stage": "srmpgd",
+      "name": "enabled",
+      "dtype": "bool",
+      "domain": [
+        false,
+        true
+      ],
+      "role": "policy",
+      "conditional_on": null,
+      "notes": "Jamais forcé par défaut."
+    },
+    {
+      "stage": "srmpgd",
+      "name": "trigger_policy",
+      "dtype": "categorical",
+      "domain": [
+        "never",
+        "near_threshold",
+        "recoverable_prediction",
+        "always_ablation"
+      ],
+      "role": "policy",
+      "conditional_on": null,
+      "notes": "Décision conditionnelle."
+    },
+    {
+      "stage": "srmpgd",
+      "name": "objective_profile",
+      "dtype": "categorical",
+      "domain": [
+        "official_srl",
+        "scanaware_v2",
+        "official_plus_phone_surrogate"
+      ],
+      "role": "choice",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Surrogate seulement après validation physique."
+    },
+    {
+      "stage": "srmpgd",
+      "name": "optimizer",
+      "dtype": "categorical",
+      "domain": [
+        "SGD",
+        "AdamW",
+        "Lion"
+      ],
+      "role": "choice",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "SGD reste témoin papier/code public."
+    },
+    {
+      "stage": "srmpgd",
+      "name": "gamma",
+      "dtype": "float",
+      "domain": {
+        "min": 10.0,
+        "max": 2000.0,
+        "scale": "log"
+      },
+      "role": "choice",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Pas brut avant projection."
+    },
+    {
+      "stage": "srmpgd",
+      "name": "iterations_max",
+      "dtype": "int",
+      "domain": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20
+      ],
+      "role": "choice",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Tous les checkpoints conservés."
+    },
+    {
+      "stage": "srmpgd",
+      "name": "latent_radius_rms",
+      "dtype": "float",
+      "domain": {
+        "min": 0.01,
+        "max": 0.3
+      },
+      "role": "choice",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Trust region autour du parent exact."
+    },
+    {
+      "stage": "srmpgd",
+      "name": "step_rms_max",
+      "dtype": "float",
+      "domain": {
+        "min": 0.001,
+        "max": 0.1,
+        "scale": "log"
+      },
+      "role": "choice",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Borne par pas."
+    },
+    {
+      "stage": "srmpgd",
+      "name": "lpips_weight",
+      "dtype": "float",
+      "domain": {
+        "min": 0.005,
+        "max": 0.2,
+        "scale": "log"
+      },
+      "role": "choice",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Préservation perceptuelle."
+    },
+    {
+      "stage": "srmpgd",
+      "name": "lpips_budget",
+      "dtype": "float",
+      "domain": {
+        "min": 0.01,
+        "max": 0.15
+      },
+      "role": "constraint",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Contrainte dure."
+    },
+    {
+      "stage": "srmpgd",
+      "name": "core_mae_budget",
+      "dtype": "float",
+      "domain": {
+        "min": 0.01,
+        "max": 0.12
+      },
+      "role": "constraint",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Contrainte dure."
+    },
+    {
+      "stage": "srmpgd",
+      "name": "clip_aesthetic_drop_budget",
+      "dtype": "float",
+      "domain": {
+        "min": 0.05,
+        "max": 0.6
+      },
+      "role": "constraint",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Contrainte dure ou pénalité prudente."
+    },
+    {
+      "stage": "srmpgd",
+      "name": "clip_score_drop_budget",
+      "dtype": "float",
+      "domain": {
+        "min": 0.01,
+        "max": 0.1
+      },
+      "role": "constraint",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Fidélité au prompt."
+    },
+    {
+      "stage": "srmpgd",
+      "name": "hps_drop_budget",
+      "dtype": "float",
+      "domain": {
+        "min": 0.005,
+        "max": 0.05
+      },
+      "role": "constraint",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Préférence secondaire."
+    },
+    {
+      "stage": "srmpgd",
+      "name": "saturation_increase_budget",
+      "dtype": "float",
+      "domain": {
+        "min": 0.01,
+        "max": 0.1
+      },
+      "role": "constraint",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Garde visuelle."
+    },
+    {
+      "stage": "srmpgd",
+      "name": "clipping_increase_budget",
+      "dtype": "float",
+      "domain": {
+        "min": 0.001,
+        "max": 0.02
+      },
+      "role": "constraint",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Garde visuelle."
+    },
+    {
+      "stage": "srmpgd",
+      "name": "backtracking_max",
+      "dtype": "int",
+      "domain": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "role": "choice",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Nombre de demi-pas."
+    },
+    {
+      "stage": "srmpgd",
+      "name": "minimum_alpha",
+      "dtype": "float",
+      "domain": {
+        "min": 0.0009765625,
+        "max": 0.25,
+        "scale": "log2"
+      },
+      "role": "choice",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Seuil d'abandon."
+    },
+    {
+      "stage": "srmpgd",
+      "name": "eot_profile",
+      "dtype": "categorical",
+      "domain": [
+        "none",
+        "software_scan",
+        "camera_light",
+        "camera_full"
+      ],
+      "role": "choice",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Transformations calibrées."
+    },
+    {
+      "stage": "srmpgd",
+      "name": "checkpoint_policy",
+      "dtype": "categorical",
+      "domain": [
+        "best_safe",
+        "first_phone_safe",
+        "pareto",
+        "last_ablation"
+      ],
+      "role": "policy",
+      "conditional_on": {
+        "enabled": true
+      },
+      "notes": "Le dernier état ne gagne jamais par défaut."
+    },
+    {
+      "stage": "evaluation",
+      "name": "qrverify_repetitions",
+      "dtype": "int",
+      "domain": [
+        3,
+        5
+      ],
+      "role": "protocol",
+      "conditional_on": null,
+      "notes": "Intersection conservatrice par hash raster."
+    },
+    {
+      "stage": "evaluation",
+      "name": "qrverify_version",
+      "dtype": "categorical",
+      "domain": [
+        "0.2.0"
+      ],
+      "role": "provenance",
+      "conditional_on": null,
+      "notes": "Version épinglée."
+    },
+    {
+      "stage": "evaluation",
+      "name": "original_exact_required",
+      "dtype": "bool",
+      "domain": [
+        false,
+        true
+      ],
+      "role": "policy",
+      "conditional_on": null,
+      "notes": "À séparer de la tolérance transformée."
+    },
+    {
+      "stage": "evaluation",
+      "name": "phone_device_group",
+      "dtype": "categorical",
+      "domain": null,
+      "role": "context",
+      "conditional_on": null,
+      "notes": "Appareil, OS, scanner et version."
+    },
+    {
+      "stage": "evaluation",
+      "name": "phone_attempts",
+      "dtype": "int",
+      "domain": {
+        "min": 1,
+        "max": 30
+      },
+      "role": "label",
+      "conditional_on": null,
+      "notes": "Tentatives physiques."
+    },
+    {
+      "stage": "evaluation",
+      "name": "phone_successes",
+      "dtype": "int",
+      "domain": {
+        "min": 0,
+        "max": 30
+      },
+      "role": "label",
+      "conditional_on": null,
+      "notes": "Payload exact uniquement."
+    },
+    {
+      "stage": "evaluation",
+      "name": "time_to_decode_ms",
+      "dtype": "float",
+      "domain": {
+        "min": 0.0,
+        "max": 30000.0
+      },
+      "role": "label",
+      "conditional_on": null,
+      "notes": "Médiane/quantiles."
+    },
+    {
+      "stage": "evaluation",
+      "name": "human_aesthetic_score",
+      "dtype": "float",
+      "domain": {
+        "min": 1.0,
+        "max": 5.0
+      },
+      "role": "label",
+      "conditional_on": null,
+      "notes": "Notation aveugle."
+    },
+    {
+      "stage": "evaluation",
+      "name": "human_prompt_fidelity_score",
+      "dtype": "float",
+      "domain": {
+        "min": 1.0,
+        "max": 5.0
+      },
+      "role": "label",
+      "conditional_on": null,
+      "notes": "Présence et fidélité du sujet."
+    },
+    {
+      "stage": "evaluation",
+      "name": "human_qr_discretion_score",
+      "dtype": "float",
+      "domain": {
+        "min": 1.0,
+        "max": 5.0
+      },
+      "role": "label",
+      "conditional_on": null,
+      "notes": "Discrétion de la grille."
+    },
+    {
+      "stage": "runtime",
+      "name": "gpu_model",
+      "dtype": "categorical",
+      "domain": null,
+      "role": "context",
+      "conditional_on": null,
+      "notes": "Référence matériel."
+    },
+    {
+      "stage": "runtime",
+      "name": "runtime_image_digest",
+      "dtype": "sha256",
+      "domain": null,
+      "role": "provenance",
+      "conditional_on": null,
+      "notes": "Digest OCI."
+    },
+    {
+      "stage": "runtime",
+      "name": "git_commit",
+      "dtype": "sha",
+      "domain": null,
+      "role": "provenance",
+      "conditional_on": null,
+      "notes": "Commit du calcul."
+    },
+    {
+      "stage": "runtime",
+      "name": "batch_size",
+      "dtype": "int",
+      "domain": {
+        "min": 1,
+        "max": 16
+      },
+      "role": "runtime",
+      "conditional_on": null,
+      "notes": "Entraînement/scoring."
+    },
+    {
+      "stage": "runtime",
+      "name": "gradient_accumulation_steps",
+      "dtype": "int",
+      "domain": {
+        "min": 1,
+        "max": 32
+      },
+      "role": "runtime",
+      "conditional_on": null,
+      "notes": "Réduction mémoire."
+    },
+    {
+      "stage": "runtime",
+      "name": "checkpoint_interval",
+      "dtype": "int",
+      "domain": {
+        "min": 1,
+        "max": 1000
+      },
+      "role": "runtime",
+      "conditional_on": null,
+      "notes": "Checkpoint atomique."
+    },
+    {
+      "stage": "runtime",
+      "name": "max_attempts",
+      "dtype": "int",
+      "domain": [
+        1,
+        2,
+        3
+      ],
+      "role": "runtime",
+      "conditional_on": null,
+      "notes": "Reprises bornées; OOM jamais relancé à l'identique."
+    }
+  ],
+  "search_policy": {
+    "method": "constrained multi-objective Bayesian optimization",
+    "recommended_engine": "Ax/BoTorch qLogNEHVI",
+    "never_cartesian_product": true,
+    "fidelity_levels": [
+      "metadata_only",
+      "stage1_preview",
+      "stage1_full",
+      "stage2_full",
+      "srmpgd",
+      "phone"
+    ],
+    "objectives": [
+      "phone_scan_lower_bound",
+      "qrverify_conservative",
+      "prompt_fidelity",
+      "human_aesthetic",
+      "qr_discretion",
+      "negative_gpu_cost"
+    ],
+    "hard_constraints": [
+      "exact_payload",
+      "no_posthoc_image_erasure",
+      "quiet_zone_composed_not_cropped",
+      "subject_present",
+      "visual_guards",
+      "technical_provenance_complete"
+    ]
+  }
+}

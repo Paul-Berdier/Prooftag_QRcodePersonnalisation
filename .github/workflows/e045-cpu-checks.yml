@@ -1,0 +1,60 @@
+name: E045 CPU checks
+
+on:
+  push:
+    paths:
+      - "prooftag_qr/resilient_experiment.py"
+      - "prooftag_qr/e045_*.py"
+      - "scripts/*e045*"
+      - "deploy/k8s/e045-*"
+      - "notebooks/47_e045_*"
+      - "docs/e045-*"
+      - "tests/test_e045_*"
+      - "tests/test_resilient_experiment.py"
+  pull_request:
+    paths:
+      - "prooftag_qr/resilient_experiment.py"
+      - "prooftag_qr/e045_*.py"
+      - "scripts/*e045*"
+      - "deploy/k8s/e045-*"
+      - "notebooks/47_e045_*"
+      - "docs/e045-*"
+      - "tests/test_e045_*"
+      - "tests/test_resilient_experiment.py"
+
+jobs:
+  static-and-foundation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest pyyaml pillow
+      - run: python scripts/build_e045_foundation_notebook.py
+      - run: |
+          python -m py_compile \
+            prooftag_qr/resilient_experiment.py \
+            prooftag_qr/e045_registry.py \
+            prooftag_qr/e045_parameter_space.py \
+            prooftag_qr/e045_phone_labels.py \
+            prooftag_qr/e045_foundation.py \
+            scripts/build_e045_foundation_notebook.py \
+            scripts/e045-import-phone-captures.py
+      - run: |
+          bash -n \
+            scripts/deploy-e045-notebook.sh \
+            scripts/run-e045-foundation.sh \
+            scripts/download-e045-results.sh
+      - run: |
+          python -c "import yaml; yaml.safe_load(open('deploy/k8s/e045-foundation-job.yaml', encoding='utf-8'))"
+      - run: |
+          pytest -q \
+            tests/test_resilient_experiment.py \
+            tests/test_e045_registry.py \
+            tests/test_e045_parameter_space.py \
+            tests/test_e045_phone_labels.py \
+            tests/test_e045_foundation.py \
+            tests/test_e045_deployment.py \
+            tests/test_e045_notebook.py

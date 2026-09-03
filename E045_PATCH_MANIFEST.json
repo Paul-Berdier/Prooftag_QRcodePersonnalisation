@@ -1,0 +1,187 @@
+{
+  "patch": "E045 foundation and resilient experiment infrastructure",
+  "experiment": "e045-foundation-resilience-v1",
+  "base_commit_observed": "520f10162bc546e12badfb6048880ed91a049dab",
+  "created_for": "Paul-Berdier/Prooftag_QRcodePersonnalisation",
+  "scientific_scope": {
+    "generation_executed_by_patch": false,
+    "training_executed_by_patch": false,
+    "historical_experiments_indexed": 45,
+    "canonical_parameter_count": 98,
+    "physical_phone_labels_required_before_phone_surrogate": true,
+    "quiet_zone_policy": "composed_during_generation_never_erase_final_image",
+    "advisor_training_authorized": false,
+    "generation_campaign_authorized": false,
+    "production_ready": false
+  },
+  "resilience": {
+    "sqlite_wal": true,
+    "leases_and_heartbeats": true,
+    "bounded_transient_retries": true,
+    "oom_same_spec_retry": false,
+    "deterministic_error_retry": false,
+    "atomic_artifact_promotion": true,
+    "stale_worker_recovery": true,
+    "immutable_postrun_phone_imports": true,
+    "automatic_persistent_data_deletion": false
+  },
+  "validation": {
+    "python_compile": "passed",
+    "bash_syntax": "passed",
+    "yaml_parse": "passed",
+    "pytest": "18 passed",
+    "notebook_cells": 45
+  },
+  "files": [
+    {
+      "path": ".github/workflows/e045-cpu-checks.yml",
+      "size_bytes": 1945,
+      "sha256": "0a9d7e9d2b7b43a88a6de9e41b59a885b6270401ff872bb2ec6c6d0e5a9c9143"
+    },
+    {
+      "path": "E045_A_LIRE.txt",
+      "size_bytes": 1379,
+      "sha256": "2d8883405dd12feafdc188c404b7019d2e082ff0d880008260350b58360332de"
+    },
+    {
+      "path": "deploy/k8s/e045-foundation-job.yaml",
+      "size_bytes": 1796,
+      "sha256": "80caace4131d0c0ab0247b038063f7009f7e8f2bb9e64d4d2b3024094f0902c5"
+    },
+    {
+      "path": "docs/e045-experiment-registry.json",
+      "size_bytes": 18700,
+      "sha256": "ad4e170509a9138834709d9f88d8244f22f3be8bb2f56ce114de4acffe01d7b6"
+    },
+    {
+      "path": "docs/e045-external-research.json",
+      "size_bytes": 2411,
+      "sha256": "abef4cb37400e7b9e224dfb55fdde80b209ce25ea25af14b603f585e68ba4d4d"
+    },
+    {
+      "path": "docs/e045-foundation.md",
+      "size_bytes": 4473,
+      "sha256": "ac1676bfb406f4c864915877d758f3e9027349016c0dc3f82a5ca7b1c9617c0d"
+    },
+    {
+      "path": "docs/e045-future-task-spec-examples.json",
+      "size_bytes": 2158,
+      "sha256": "ce868c0d9bfccef4c5b494089a58051c93967e5751181c007c1dccc6d318ebf2"
+    },
+    {
+      "path": "docs/e045-generation-training-resilience.md",
+      "size_bytes": 4058,
+      "sha256": "be44ecaa9fdd73f907499298c96fa524c1607d4f869d707435a26bc18f3a00d7"
+    },
+    {
+      "path": "docs/e045-parameter-space.json",
+      "size_bytes": 29334,
+      "sha256": "c5a8694e11d72e6c7b1b19cf04fdee8b61447f217dba738dda7243e94de7379f"
+    },
+    {
+      "path": "docs/e045-phone-captures-template.csv",
+      "size_bytes": 385,
+      "sha256": "aff7aec6ee165cd6b0fdd890bb9871c8a079fd2bcf0255d18c33d7e0696ece4e"
+    },
+    {
+      "path": "docs/e045-research-inspirations.md",
+      "size_bytes": 2422,
+      "sha256": "7d41b762d650093e75d4b09753a09f0530b2505eea5b701992d9b61070f91eb5"
+    },
+    {
+      "path": "notebooks/47_e045_foundation_and_resilience.ipynb",
+      "size_bytes": 31469,
+      "sha256": "cf77c68dec289ab9b7dea6156856dd2db9dae6b1da981f2f09b4ab66a60c781c"
+    },
+    {
+      "path": "prooftag_qr/e045_foundation.py",
+      "size_bytes": 69312,
+      "sha256": "de823d7e12799b06b187c9de9fa3ad066c5d640982e55ac8ee0e0846ffa0ff5e"
+    },
+    {
+      "path": "prooftag_qr/e045_parameter_space.py",
+      "size_bytes": 23278,
+      "sha256": "fc1986c60ed00f8e381b4172127c1db58c0c46ac89d2b08251420484f4ed5019"
+    },
+    {
+      "path": "prooftag_qr/e045_phone_labels.py",
+      "size_bytes": 12550,
+      "sha256": "0923ceeb461c1a0ca06efb363b99d672890053871c3f0113b7e4a1bc7dd8d666"
+    },
+    {
+      "path": "prooftag_qr/e045_registry.py",
+      "size_bytes": 18677,
+      "sha256": "b461cd24988f91ee4b77a6c4ee13e1fc98fbf06b8923eaf8a4c76513879c6fb5"
+    },
+    {
+      "path": "prooftag_qr/resilient_experiment.py",
+      "size_bytes": 33636,
+      "sha256": "593815ca7151892cd812c9ee97bdfc3f3f31a55b2387daf2a8a088aec70b35eb"
+    },
+    {
+      "path": "scripts/build_e045_foundation_notebook.py",
+      "size_bytes": 23856,
+      "sha256": "914a59237adba42884ffe1a0b59cb7f5a47cbd0e926ec8dcb5a3592ccc28aca9"
+    },
+    {
+      "path": "scripts/deploy-e045-notebook.sh",
+      "size_bytes": 3982,
+      "sha256": "889ffb3534efb09dd74b19113eafa4716d337559e95d72c8ad1a591c71f2f4bb"
+    },
+    {
+      "path": "scripts/download-e045-results.sh",
+      "size_bytes": 1289,
+      "sha256": "01e9fd693fbde20b55e12e6f60961c4a2f6a3882dd0745ea58e2d7a768febd19"
+    },
+    {
+      "path": "scripts/e045-import-phone-captures.py",
+      "size_bytes": 760,
+      "sha256": "0569b8afc67322c004da3304f6081a72090470f4342ddb5c42e35cd1af1ef96b"
+    },
+    {
+      "path": "scripts/e045-remote.ps1",
+      "size_bytes": 4200,
+      "sha256": "204ed0588df23955891edfd994a2a5409b9e1503fc545534e6fb3c092d137840"
+    },
+    {
+      "path": "scripts/run-e045-foundation.sh",
+      "size_bytes": 6623,
+      "sha256": "8d6f82a2a154eef09f37e9f97af0bb25fcd64bcfaeb85aeec927c4cde551fd95"
+    },
+    {
+      "path": "tests/test_e045_deployment.py",
+      "size_bytes": 1290,
+      "sha256": "4c4374aec6a420c58ba27d2397c13449143217beb624e3920674d4e081d7aaf5"
+    },
+    {
+      "path": "tests/test_e045_foundation.py",
+      "size_bytes": 3035,
+      "sha256": "7b87928ee2ed870031d5f1a887871ef035478fb497a7be161dd1dde560e3c001"
+    },
+    {
+      "path": "tests/test_e045_notebook.py",
+      "size_bytes": 803,
+      "sha256": "22d953a2b144f6b70249d754be25e7a27f5ab6d35b739799d597197036c6a0b2"
+    },
+    {
+      "path": "tests/test_e045_parameter_space.py",
+      "size_bytes": 1153,
+      "sha256": "bf0d32cff9ab35d433558e25fa146e1a390cc3103db63d4880e94baa708b9a37"
+    },
+    {
+      "path": "tests/test_e045_phone_labels.py",
+      "size_bytes": 2688,
+      "sha256": "b8faba143f37d36cbc65c4ca736a341087e38577ded9c4de46cee612b244bb13"
+    },
+    {
+      "path": "tests/test_e045_registry.py",
+      "size_bytes": 793,
+      "sha256": "a6b8325c335b5a7af42684ab708e62dfca1059b382d8a2cae20b19ad22765069"
+    },
+    {
+      "path": "tests/test_resilient_experiment.py",
+      "size_bytes": 4450,
+      "sha256": "085eb04fa4bc934efa66e1026178c4360f1d4c76e7b0e55ba45419cfcd36b9c0"
+    }
+  ]
+}

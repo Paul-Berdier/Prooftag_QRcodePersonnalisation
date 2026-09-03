@@ -1,0 +1,68 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: __JOB_NAME__
+  namespace: __NAMESPACE__
+  labels:
+    app: prooftag-qr-e045
+    app.kubernetes.io/name: prooftag-qr-e045
+    app.kubernetes.io/part-of: prooftag-qr
+    prooftag.io/experiment: e045-foundation-resilience-v1
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 21600
+  template:
+    metadata:
+      labels:
+        app: prooftag-qr-e045
+        prooftag.io/experiment: e045-foundation-resilience-v1
+    spec:
+      restartPolicy: Never
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: e045
+          image: __IMAGE__
+          imagePullPolicy: IfNotPresent
+          command:
+            - python
+            - -m
+            - prooftag_qr.e045_foundation
+          args:
+            - run
+            - --data-root
+            - /data
+            - --output-root
+            - __OUTPUT_ROOT__
+            - --source-commit
+            - __SOURCE_COMMIT__
+            - --worker-id
+            - __JOB_NAME__
+            - --max-files
+            - "__MAX_FILES__"
+            - --max-hash-mb
+            - "__MAX_HASH_MB__"
+            - --max-parse-mb
+            - "__MAX_PARSE_MB__"
+            - --force-recover-stale
+          env:
+            - name: PYTHONHASHSEED
+              value: "0"
+            - name: PROOFTAG_E045_NO_AUTODELETE
+              value: "1"
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "8"
+              memory: 16Gi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: prooftag-qr-data

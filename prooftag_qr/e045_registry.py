@@ -1,0 +1,102 @@
+"""Registre E000–E044 utilisé par E045.
+
+Le registre n'efface aucune expérience. Il sépare :
+- ce qui est conservé comme mécanisme ou invariant ;
+- ce qui est rejeté comme recette ;
+- ce qui peut former le conseiller logiciel ;
+- ce qui reste réservé à l'évaluation ;
+- ce qui doit être mis en quarantaine.
+
+Les chemins `evidence_files` pointent vers les documents du dépôt. Le builder E045
+ne prétend pas recréer un résultat absent du PVC : il indexe seulement les preuves
+réellement disponibles.
+"""
+from __future__ import annotations
+
+from typing import Any
+
+REGISTRY_SCHEMA = "e045-history-registry-v1"
+
+EXPERIMENTS: tuple[dict[str, Any], ...] = tuple([{'id': 'E000', 'title': 'Baseline de réparations déterministes', 'observed': "Les réparations obtenaient une lecture logicielle élevée mais modifiaient fortement les pixels et l'écrêtage; une MER nulle ne garantissait pas toutes les validations.", 'decision': 'historical_baseline', 'training_policy': 'hard_negative_only', 'evidence_files': ['docs/experiment-log.md']}, {'id': 'E001', 'title': 'Première SRL latente instrumentée', 'observed': 'Introduction des cartes module-pixel, centres, poids fonctionnels, préservation et télémétrie; paramètres initiaux non validés.', 'decision': 'methodology_only', 'training_policy': 'methodology_only', 'evidence_files': ['docs/experiment-log.md']}, {'id': 'E002', 'title': 'Raffinement latent SRL v1', 'observed': "La MER baisse mais l'image est massivement détruite par un gradient trop agressif.", 'decision': 'rejected', 'training_policy': 'hard_negative_only', 'evidence_files': ['docs/experiment-log.md']}, {'id': 'E003', 'title': 'Raffinement latent SRL v2 borné', 'observed': 'Les gardes visuelles suppriment la destruction, sans provoquer de décodage.', 'decision': 'partial_keep', 'training_policy': 'hard_negative_only', 'evidence_files': ['docs/experiment-log.md']}, {'id': 'E004', 'title': 'Seconde diffusion guidée localisée', 'observed': 'La rediffusion augmente le coût et les pixels modifiés sans gain QR causal.', 'decision': 'rejected', 'training_policy': 'hard_negative_only', 'evidence_files': ['docs/e004-guided-rediffusion.md', 'docs/experiment-log.md']}, {'id': 'E005', 'title': 'SRPG dans chaque timestep', 'observed': 'Première boucle SRPG explicite; configuration initiale destructive et campagne baseline incomplète.', 'decision': 'rejected_config_keep_instrumentation', 'training_policy': 'hard_negative_only', 'evidence_files': ['docs/e005-srpg.md', 'docs/experiment-log.md']}, {'id': 'E006', 'title': 'Recherche de paramètres SRPG', 'observed': 'La réponse varie fortement avec pas, seuils, poids et contexte; aucun profil universel.', 'decision': 'retain_parameter_axes', 'training_policy': 'training_candidate', 'evidence_files': ['docs/e006-parameter-search.md']}, {'id': 'E007', 'title': 'Optimiseur contextuel initial', 'observed': "Optuna/TPE et conseiller contextuel établissent le besoin d'une politique conditionnelle, mais le jeu est trop petit et incomplet.", 'decision': 'superseded', 'training_policy': 'training_candidate_with_audit', 'evidence_files': ['docs/e007-contextual-optimizer.md', 'docs/e007-e008-results-2026-07-22.md']}, {'id': 'E008', 'title': 'Bake-off ControlNet', 'observed': 'Succès isolés entre Dion, Monster et Nacholmo, sans pire cas acceptable ni généralisation.', 'decision': 'portfolio_only', 'training_policy': 'training_candidate_with_audit', 'evidence_files': ['docs/e008-controlnet-bakeoff.md']}, {'id': 'E009', 'title': 'Intégration Nacholmo corrigée', 'observed': 'Text2img corrigé mais la condition QR domine encore la composition et produit un quadrillage.', 'decision': 'rejected_active_path', 'training_policy': 'hard_negative_only', 'evidence_files': ['docs/experiment-log.md']}, {'id': 'E010', 'title': 'Référence DiffQRCoder publique', 'observed': "Dépôt épinglé, correctif autograd et distinction code public/papier; Stage 2 publique peut dégrader l'esthétique.", 'decision': 'retain_reference', 'training_policy': 'training_candidate_with_audit', 'evidence_files': ['docs/e010-diffqrcoder-official-reference.md']}, {'id': 'E011', 'title': 'DiffQRCoder vs QRBTF public', 'observed': "Comparatif historique; ancien SR-MPGD réencodait le PNG et n'est pas fidèle aux équations.", 'decision': 'historical_comparison', 'training_policy': 'hard_negative_only', 'evidence_files': ['docs/e011-diffqrcoder-vs-qrbtf.md', 'docs/e011-results-2026-07-22.md']}, {'id': 'E012', 'title': 'SR-MPGD fidèle au latent Stage 2', 'observed': 'Conserve le latent propre exact, utilise QR binaire, SRL amont et LPIPS; QArt exact indisponible.', 'decision': 'retain_foundation', 'training_policy': 'training_candidate_with_audit', 'evidence_files': ['docs/e012-faithful-srmpgd.md']}, {'id': 'E013', 'title': 'Géométrie exacte et SD2.1', 'observed': "Évite l'interpolation des modules; SD2.1 est plus esthétique mais moins QR-compatible; MER seule insuffisante.", 'decision': 'retain_geometry_suspend_sd21', 'training_policy': 'training_candidate_with_audit', 'evidence_files': ['docs/e013-exact-geometry-sd21-policy.md', 'docs/e013-results-and-project-audit-2026-07-23.md']}, {'id': 'E014', 'title': 'Blueprint, QArt public et fusion latente', 'observed': 'Les sous-expériences A-F isolent blueprint, masques, fusion, déterminisme, fenêtres temporelles et cascade; résultats causaux limités par le non-déterminisme.', 'decision': 'research_only', 'training_policy': 'training_candidate_with_audit', 'evidence_files': ['docs/e014-e016-experiment-protocol.md', 'docs/e014-e016-results-audit-2026-07-27.md']}, {'id': 'E015', 'title': 'Backbones esthétiques', 'observed': 'SD1.5, SDXL et FLUX sont comparés comme références esthétiques, sans preuve de compatibilité QR complète.', 'decision': 'reference_only', 'training_policy': 'training_candidate_with_audit', 'evidence_files': ['docs/e014-e016-experiment-protocol.md']}, {'id': 'E016', 'title': 'Surrogate différentiable multi-décodeurs', 'observed': "Le premier dataset comporte collisions et labels contradictoires; le modèle archivé est invalidé, mais le protocole de split groupé et d'audit adversarial est conservé.", 'decision': 'invalidated_model_rebuild', 'training_policy': 'quarantine', 'evidence_files': ['docs/e014-e016-experiment-protocol.md', 'docs/e014-e016-results-audit-2026-07-27.md']}, {'id': 'E017', 'title': 'Calibration téléphone', 'observed': 'Le téléphone et les validateurs logiciels divergent; protocole de captures répétées et diagnostics structurels introduits.', 'decision': 'retain_physical_truth', 'training_policy': 'training_candidate_physical', 'evidence_files': ['docs/e017-phone-proxy-calibration.md']}, {'id': 'E018', 'title': 'Appariement strict Stage 2 → SR-MPGD', 'observed': 'Hash du latent et du parent exact obligatoires; interdiction de recalcul silencieux.', 'decision': 'retain_invariant', 'training_policy': 'methodology_only', 'evidence_files': ['docs/e018-strict-stage2-pairing.md']}, {'id': 'E019', 'title': 'SR-MPGD borné', 'observed': 'Rayons, budgets LPIPS/MAE/saturation/clipping et état zéro candidat.', 'decision': 'retain_guards', 'training_policy': 'training_candidate_with_audit', 'evidence_files': ['docs/e019-safe-srmpgd.md']}, {'id': 'E020', 'title': 'Trajectoire et loss robuste', 'observed': 'Tous les checkpoints, transformations robustes et no-op honnête; plusieurs gamma choisissent parfois i0.', 'decision': 'retain_trace', 'training_policy': 'training_candidate_with_audit', 'evidence_files': ['docs/e020-srmpgd-trace-robust-loss.md']}, {'id': 'E021', 'title': 'Prompts atypiques', 'observed': 'Introduit une évaluation hors distribution par familles visuelles.', 'decision': 'retain_ood_design', 'training_policy': 'evaluation_only', 'evidence_files': ['docs/e021-atypical-prompt-generalization.md']}, {'id': 'E022', 'title': 'Papier vs Prooftag sécurisé', 'observed': "Comparaison Stage 2 appariée, téléphone et fidélité avant proxys; QArt public n'est qu'une approximation.", 'decision': 'retain_comparison', 'training_policy': 'evaluation_only', 'evidence_files': ['docs/e022-paper-vs-prooftag.md']}, {'id': 'E023', 'title': 'Métriques logicielles honnêtes', 'observed': 'Les scores logiciels ne sont plus appelés probabilité téléphone; WeChat et HPS sont séparés du verdict physique.', 'decision': 'retain_metric_semantics', 'training_policy': 'methodology_only', 'evidence_files': ['docs/e023-honest-software-metrics.md']}, {'id': 'E024', 'title': 'QR-Verify autorité logicielle', 'observed': 'qr-verify@0.2.0 et payload exact sur 37 presets; reste un test logiciel.', 'decision': 'retain_software_benchmark', 'training_policy': 'methodology_only', 'evidence_files': ['docs/e024-qr-verify.md']}, {'id': 'E025', 'title': 'Scores qualité séparés', 'observed': 'CLIP-Aesthetic, CLIPScore et HPS sont des axes secondaires, jamais une vérité esthétique unique.', 'decision': 'retain_quality_axes', 'training_policy': 'methodology_only', 'evidence_files': ['docs/e025-quality-scoring.md']}, {'id': 'E026', 'title': 'Conseiller prompt → paramètres', 'observed': 'ExtraTrees, calibration, incertitude, validation groupée et apprentissage actif; incidents I/J révèlent erreurs techniques, doublons effectifs et SR-MPGD no-op.', 'decision': 'rebuild_advisor', 'training_policy': 'training_candidate_with_audit', 'evidence_files': ['docs/e026-prompt-parameter-advisor.md', 'docs/e026-power-recovery-2026-08-17.md']}, {'id': 'E027', 'title': 'Politique cascade vs SR-MPGD forcé', 'observed': 'La sélection complète dépasse légèrement SR-MPGD forcé; il ne faut jamais imposer le raffinement.', 'decision': 'retain_policy_result', 'training_policy': 'evaluation_only', 'evidence_files': ['docs/e027-srmpgd-policy-holdout.md']}, {'id': 'E028', 'title': 'Conseiller hiérarchique', 'observed': 'Architecture Stage1→Stage2→SR-MPGD utile, mais diversité effective faible et no-op mal attribués.', 'decision': 'retain_architecture_reject_model', 'training_policy': 'evaluation_only', 'evidence_files': ['docs/e028-hierarchical-prompt-advisor.md']}, {'id': 'E029', 'title': 'Récupération raster exact', 'observed': "Appariement exact restauré; Stage 2 porte la robustesse, SR-MPGD n'ajoute aucune porte sur le jeu.", 'decision': 'retain_exact_pairing', 'training_policy': 'evaluation_only', 'evidence_files': ['docs/e029-srmpgd-exact-raster-recovery.md', 'docs/e029-results-2026-08-20.md']}, {'id': 'E030', 'title': 'Rescoring QR-Verify répété', 'observed': 'Cinq répétitions, cache par hash raster et cascade; une nouvelle seed égale le conseiller sur ce jeu.', 'decision': 'retain_repeated_scoring', 'training_policy': 'evaluation_only', 'evidence_files': ['docs/e030-reliable-qrverify-cascade.md', 'docs/e030-results-2026-08-21.md']}, {'id': 'E031', 'title': 'Holdout prospectif Stage 2', 'observed': 'NO-GO: 25/40 stricts, conseiller faiblement calibré et seconde seed plus utile; jeu gelé.', 'decision': 'frozen_no_go', 'training_policy': 'evaluation_only', 'evidence_files': ['docs/e031-prospective-stage2-holdout.md', 'docs/e031-results-2026-08-25.md']}, {'id': 'E032', 'title': 'Reconstruction papier et gradient nul', 'observed': 'Les traces montrent un gradient SR-MPGD nul et un redécodage VAE confondu avec une update.', 'decision': 'technical_negative', 'training_policy': 'hard_negative_only', 'evidence_files': ['docs/e032-srmpgd-paper-reconstruction.md', 'docs/e032-results-2026-08-26.md']}, {'id': 'E033', 'title': 'Microdiagnostic VJP', 'observed': 'Factorisation VJP et offload valident une vraie update latente avec forte baisse SRL sans succès QR.', 'decision': 'retain_numerical_mechanism', 'training_policy': 'training_candidate_with_audit', 'evidence_files': ['docs/e033-srmpgd-microdiagnostic.md', 'docs/e033-results-2026-08-27.md', 'docs/e033-technical-incident-2026-08-26.md']}, {'id': 'E034', 'title': 'Gate quatre itérations', 'observed': 'Télémétrie séparée SRL/LPIPS, jalons i0/i1/i2/i4 et appariement strict.', 'decision': 'retain_telemetry', 'training_policy': 'training_candidate_with_audit', 'evidence_files': ['docs/e034-srmpgd-four-iteration-gate.md']}, {'id': 'E035', 'title': 'Fidélité de la loss amont', 'observed': 'La SRL officielle est comparée à la loss papier simplifiée avec parité numérique et parent immuable.', 'decision': 'retain_official_loss', 'training_policy': 'training_candidate_with_audit', 'evidence_files': ['docs/e035-srmpgd-loss-fidelity-gate.md']}, {'id': 'E036', 'title': 'Trust region gamma 1000', 'observed': 'Projection et backtracking empêchent le pas brut destructif sans prétendre que gamma 1000 est optimal.', 'decision': 'retain_trust_region', 'training_policy': 'training_candidate_with_audit', 'evidence_files': ['docs/e036-gamma1000-trust-region.md']}, {'id': 'E037', 'title': 'Mini-holdout du gagnant E036', 'observed': 'Discipline prospective sans retuning sur dix scènes; ne suffit pas à une politique générale.', 'decision': 'prospective_small', 'training_policy': 'evaluation_only', 'evidence_files': ['docs/e037-prospective-global-trust-holdout.md']}, {'id': 'E038', 'title': 'Frontière SSR/esthétique', 'observed': 'Rayons et objectifs robust/full/hybrid; classement lexicographique sous gardes visuelles.', 'decision': 'retain_frontier_method', 'training_policy': 'training_candidate_with_audit', 'evidence_files': ['docs/e038-srmpgd-ssr-aesthetic-frontier.md']}, {'id': 'E039', 'title': 'Limiteur scan-aware', 'observed': 'Loss robuste et limitation de déplacement créent une trajectoire exploitable sans destruction immédiate.', 'decision': 'retain_candidate_recipe', 'training_policy': 'training_candidate_with_audit', 'evidence_files': ['docs/e039-srmpgd-limiter-scanaware.md']}, {'id': 'E040', 'title': 'Frontière checkpoints/rayons', 'observed': "Tous les checkpoints sont conservés; le meilleur état n'est pas nécessairement le dernier.", 'decision': 'retain_checkpoint_selection', 'training_policy': 'training_candidate_with_audit', 'evidence_files': ['docs/e040-srmpgd-checkpoint-and-final-pipeline.md']}, {'id': 'E041', 'title': 'Gamma et motifs fonctionnels', 'observed': 'Gamma élevé est souvent dominé par la projection; renforcer les motifs réduit les erreurs mais ne garantit pas le décodage.', 'decision': 'negative_mechanism_result', 'training_policy': 'training_candidate_with_audit', 'evidence_files': ['docs/e041-gamma-functional-pattern-frontier.md']}, {'id': 'E042', 'title': "Localisation d'échec décodeur", 'observed': "La reconstruction de grille sauve 7/9 états; quiet zone ou binarisation seules n'en sauvent aucun.", 'decision': 'retain_diagnostic', 'training_policy': 'training_candidate_with_audit', 'evidence_files': ['docs/e042-decoder-failure-localization.md']}, {'id': 'E043', 'title': 'Loss scanner-cell', 'observed': 'Whole-cell, variance, grille et format réduisent des erreurs internes sans gain sûr QR-Verify.', 'decision': 'negative_mechanism_result', 'training_policy': 'training_candidate_with_audit', 'evidence_files': ['docs/e043-scanner-cell-frontier.md']}, {'id': 'E044', 'title': 'Benchmark multi-prompts', 'observed': "Forte sensibilité au prompt, meilleur logiciel 22/37 sous garde; l'utilisateur signale qu'aucune sortie testée ne fonctionne sur son téléphone et refuse l'effacement de la périphérie.", 'decision': 'development_dataset_physical_pending', 'training_policy': 'training_candidate_software_only', 'evidence_files': ['docs/e044-paper-audit.json', 'docs/e044-prompt-catalog.json']}])
+
+# Sous-expériences qui doivent rester visibles sans dupliquer la ligne principale E014/E026.
+SUBEXPERIMENTS: tuple[dict[str, Any], ...] = (
+    {"id": "E014A", "parent": "E014", "role": "QArt public, recherche de masque et blueprint adaptatif"},
+    {"id": "E014B", "parent": "E014", "role": "fusion latente FreeQR-inspired"},
+    {"id": "E014C", "parent": "E014", "role": "diagnostic de déterminisme Stage 2"},
+    {"id": "E014D", "parent": "E014", "role": "rediffusion tardive fonctionnelle"},
+    {"id": "E014E", "parent": "E014", "role": "ablation mécanisme/fenêtre"},
+    {"id": "E014F", "parent": "E014", "role": "cascade et généralisation multi-contextes"},
+    {"id": "E026I", "parent": "E026", "role": "inférence conseiller et incident de parents SRPG manquants"},
+    {"id": "E026J", "parent": "E026", "role": "déduplication effective et SR-MPGD adaptatif"},
+)
+
+
+def validate_registry() -> None:
+    ids = [item["id"] for item in EXPERIMENTS]
+    expected = [f"E{index:03d}" for index in range(45)]
+    if ids != expected:
+        raise ValueError(f"registre incomplet ou désordonné: {ids}")
+    if len(ids) != len(set(ids)):
+        raise ValueError("identifiants dupliqués")
+    allowed = {
+        "historical_baseline",
+        "methodology_only",
+        "rejected",
+        "partial_keep",
+        "rejected_config_keep_instrumentation",
+        "retain_parameter_axes",
+        "superseded",
+        "portfolio_only",
+        "rejected_active_path",
+        "retain_reference",
+        "historical_comparison",
+        "retain_foundation",
+        "retain_geometry_suspend_sd21",
+        "research_only",
+        "reference_only",
+        "invalidated_model_rebuild",
+        "retain_physical_truth",
+        "retain_invariant",
+        "retain_guards",
+        "retain_trace",
+        "retain_ood_design",
+        "retain_comparison",
+        "retain_metric_semantics",
+        "retain_software_benchmark",
+        "retain_quality_axes",
+        "rebuild_advisor",
+        "retain_policy_result",
+        "retain_architecture_reject_model",
+        "retain_exact_pairing",
+        "retain_repeated_scoring",
+        "frozen_no_go",
+        "technical_negative",
+        "retain_numerical_mechanism",
+        "retain_telemetry",
+        "retain_official_loss",
+        "retain_trust_region",
+        "prospective_small",
+        "retain_frontier_method",
+        "retain_candidate_recipe",
+        "retain_checkpoint_selection",
+        "negative_mechanism_result",
+        "retain_diagnostic",
+        "development_dataset_physical_pending",
+    }
+    unknown = sorted({item["decision"] for item in EXPERIMENTS} - allowed)
+    if unknown:
+        raise ValueError(f"décisions inconnues: {unknown}")
+
+
+def by_id(experiment_id: str) -> dict[str, Any] | None:
+    normalized = experiment_id.upper()
+    return next((dict(item) for item in EXPERIMENTS if item["id"] == normalized), None)
+
+
+def training_policy(experiment_id: str) -> str:
+    item = by_id(experiment_id)
+    return str(item["training_policy"]) if item else "unclassified"
+
+
+validate_registry()

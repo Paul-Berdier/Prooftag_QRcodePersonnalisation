@@ -1,0 +1,40 @@
+E045 — FONDATION DU NOUVEAU GÉNÉRATEUR
+
+Ce patch ne relance pas les générations E044 et n'entraîne aucun modèle.
+
+Il ajoute :
+- registre E000–E044 ;
+- espace canonique de 98 paramètres ;
+- inventaire reprenable des artefacts sous /data ;
+- extraction CSV/JSON/JSONL vers un dataset canonique ;
+- déduplication, conflits de labels et no-op SR-MPGD ;
+- template/import de scans téléphone ;
+- ResilientTaskStore pour E046/E047 ;
+- selftest timeout/OOM/worker disparu/promotion atomique ;
+- notebook complet E045 ;
+- Job Kubernetes CPU, scripts de déploiement/reprise/statut/téléchargement.
+
+Séquence :
+1. commit/push puis pull serveur ;
+2. bash scripts/deploy-e045-notebook.sh all
+3. bash scripts/run-e045-foundation.sh
+4. attendre ===== E045 TERMINÉ =====
+5. Windows : .\scripts\e045-remote.ps1
+
+En cas de crash :
+- ne rien supprimer ;
+- relancer bash scripts/run-e045-foundation.sh ;
+- status : bash scripts/run-e045-foundation.sh status ;
+- logs : bash scripts/run-e045-foundation.sh logs.
+
+Un OOM, disque plein ou contrat invalide reste BLOCKED. Le script refuse de le
+relancer aveuglément.
+
+
+Ajout de captures après E045 :
+python scripts/e045-import-phone-captures.py \
+  /data/e045-phone-captures.csv \
+  --output-root /data/e045-foundation-v1
+
+Le plan terminé n'est pas modifié. L'import est immuable et PHONE_LATEST.json est
+mis à jour atomiquement.

@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
+  echo "Ne pas sourcer ce script. Utiliser : bash scripts/deploy-e045-notebook.sh [all|api|notebook|check]" >&2
+  return 2
+fi
+set -Eeuo pipefail
+
+action="${1:-all}"
+notebook="47_e045_foundation_and_resilience.ipynb"
+namespace="${PROOFTAG_QR_NAMESPACE:-qr-core}"
+api_deployment="${PROOFTAG_QR_DEPLOYMENT:-prooftag-qr}"
+notebook_deployment="${PROOFTAG_QR_NOTEBOOK_DEPLOYMENT:-prooftag-qr-notebook}"
+kubectl_bin="${KUBECTL:-kubectl}"
+
+failure_line=0
+failure_command=""
+record_failure() {
+  failure_line="$1"
+  failure_command="$2"
+}
+report_exit() {
+  code="$?"
+  if [[ "$code" -eq 0 ]]; then
+    return
+  fi
+  echo "ÉCHEC DÉPLOIEMENT E045 à la ligne ${failure_line}: ${failure_command}" >&2
+  echo "Aucun résultat /data n'a été supprimé." >&2
+  echo "Après correction, relancer seulement l'étape nécessaire :" >&2
+  echo "  bash scripts/deploy-e045-notebook.sh api" >&2
+  echo "  bash scripts/deploy-e045-notebook.sh notebook" >&2
+}
+trap 'record_failure "$LINENO" "$BASH_COMMAND"' ERR
+trap report_exit EXIT
+
+[[ -f "notebooks/$notebook" ]] || { echo "Notebook E045 absent." >&2; exit 1; }
+for file in \
+  prooftag_qr/resilient_experiment.py \
+  prooftag_qr/e045_registry.py \
+  prooftag_qr/e045_parameter_space.py \
+  prooftag_qr/e045_phone_labels.py \
+  prooftag_qr/e045_foundation.py; do
+  [[ -f "$file" ]] || { echo "Fichier E045 absent: $file" >&2; exit 1; }
+done
+[[ -z "$(git status --porcelain)" ]] || {
+  echo "Commit/push/pull avant de construire les images E045." >&2
+  exit 1
+}
+
+python -m py_compile \
+  prooftag_qr/resilient_experiment.py \
+  prooftag_qr/e045_registry.py \
+  prooftag_qr/e045_parameter_space.py \
+  prooftag_qr/e045_phone_labels.py \
+  prooftag_qr/e045_foundation.py \
+  scripts/build_e045_foundation_notebook.py \
+  scripts/e045-import-phone-captures.py
+
+case "$action" in
+  api)
+    bash scripts/deploy-app-image.sh
+    ;;
+  notebook)
+    bash scripts/deploy-notebook-image.sh "notebooks/$notebook"
+    ;;
+  all)
+    bash scripts/deploy-app-image.sh
+    bash scripts/deploy-notebook-image.sh "notebooks/$notebook"
+    ;;
+  check)
+    ;;
+  *)
+    echo "Action inconnue: $action" >&2
+    exit 2
+    ;;
+esac
+
+git_sha="$(git rev-parse HEAD)"
+git_tag="$(git rev-parse --short=12 HEAD)"
+api_image="${PROOFTAG_QR_IMAGE:-prooftag-qr}:${git_tag}"
+notebook_image="${PROOFTAG_NOTEBOOK_IMAGE:-prooftag-qr-notebook}:${git_tag}"
+
+if [[ "$action" == "api" || "$action" == "all" || "$action" == "check" ]]; then
+  "$kubectl_bin" scale deployment "$api_deployment" -n "$namespace" --replicas=1 >/dev/null
+  "$kubectl_bin" rollout status deployment/"$api_deployment" -n "$namespace" --timeout=1200s
+  "$kubectl_bin" exec -i -n "$namespace" deployment/"$api_deployment" -c api -- \
+    python - <<'PY'
+from prooftag_qr.e045_foundation import EXPERIMENT
+from prooftag_qr.e045_registry import EXPERIMENTS
+from prooftag_qr.e045_parameter_space import PARAMETERS
+from prooftag_qr.resilient_experiment import classify_failure
+
+assert len(EXPERIMENTS) == 45
+assert len(PARAMETERS) >= 90
+assert classify_failure(RuntimeError("CUDA out of memory")).kind == "resource"
+assert classify_failure(TimeoutError("timeout")).retryable is True
+print("Runtime API E045 OK:", EXPERIMENT, len(EXPERIMENTS), len(PARAMETERS))
+PY
+fi
+
+if [[ "$action" == "notebook" || "$action" == "all" ]]; then
+  docker run --rm -i --entrypoint python "$notebook_image" - <<'PY'
+from pathlib import Path
+from prooftag_qr.e045_registry import EXPERIMENTS
+from prooftag_qr.e045_parameter_space import PARAMETERS
+assert Path("/workspace/notebooks/47_e045_foundation_and_resilience.ipynb").is_file()
+assert len(EXPERIMENTS) == 45
+assert len(PARAMETERS) >= 90
+print("Image notebook E045 OK:", len(EXPERIMENTS), len(PARAMETERS))
+PY
+fi
+
+trap - ERR
+trap - EXIT
+echo "===== E045 PRÊT ====="
+echo "Commit   : $git_sha"
+echo "API      : $api_image"
+echo "Notebook : $notebook_image"
+echo "Calcul CPU reprenable : bash scripts/run-e045-foundation.sh"
