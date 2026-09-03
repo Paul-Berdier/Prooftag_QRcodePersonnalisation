@@ -8,16 +8,15 @@
   },
   "covered_in_pilot": [
     "8 prompt families",
-    "8 QR mask patterns",
-    "ECC M/Q",
-    "8 deterministic seeds",
-    "Stage1 steps/CFG/ControlNet/start/end",
-    "Stage2 public_random and paper_stage1_noise",
-    "Stage2 strength/steps/ControlNet/SRG/perceptual weights",
-    "SR-MPGD gamma 250/500/1000",
-    "trust-region radius 0.10/0.15/0.20",
-    "4 or 8 SR-MPGD updates",
-    "raw and scene-preserving quiet-zone variants"
+    "6 independent Stage1/Stage2 recipes per prompt",
+    "48 deterministic parent generations",
+    "2 selected parents per prompt",
+    "48 SR-MPGD trajectories",
+    "WeChat exact payload validity gate",
+    "CLIPScore prompt alignment",
+    "HPSv2 human preference",
+    "CLIP-Aesthetic visual score",
+    "Stage1/Stage2 and SR-MPGD parameter provenance"
   ],
   "locked_in_e046": {
     "qr_version": 3,
@@ -31,5 +30,38 @@
     "uniform adaptive-light border replacement",
     "functional-pattern tone repainting",
     "pixel-level hard projection to a binary QR"
-  ]
+  ],
+  "selection_policy": {
+    "hard_validity_gate": {
+      "original_exact_required": true,
+      "minimum_exact_presets": 34
+    },
+    "within_prompt_weights": {
+      "wechat_robustness": 0.4,
+      "clip_prompt_alignment": 0.25,
+      "hps_human_preference": 0.2,
+      "clip_aesthetic": 0.15
+    },
+    "manual_selection_required": false
+  },
+  "profile_counts": {
+    "smoke": {
+      "parents": 6,
+      "prompts": 2,
+      "selected_parents": 2,
+      "srmpgd_trajectories": 2
+    },
+    "pilot": {
+      "parents": 48,
+      "prompts": 8,
+      "selected_parents": 16,
+      "srmpgd_trajectories": 48
+    },
+    "full": {
+      "parents": 128,
+      "prompts": 8,
+      "selected_parents": 16,
+      "srmpgd_trajectories": 64
+    }
+  }
 }

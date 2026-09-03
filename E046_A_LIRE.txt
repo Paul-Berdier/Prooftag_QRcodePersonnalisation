@@ -4,8 +4,11 @@ Pré-requis validé :
 E045 plan 288024247c39d585 complet et manifeste valide.
 
 Ce patch ajoute une campagne de génération neuve :
-- WeChat/qr-verify exact payload comme score QR logiciel unique ;
-- 8 prompts et 8 masques dans le pilot ;
+- WeChat/qr-verify comme gate de validité automatique, jamais compensé par la beauté ;
+- 8 prompts × 6 générations différentes = 48 parents dans le pilot ;
+- classement par prompt : 40% WeChat, 25% CLIPScore, 20% HPSv2, 15% CLIP-Aesthetic ;
+- 2 parents par prompt puis 3 SR-MPGD = 48 trajectoires ;
+- un QR logiciel valide et beau exporté automatiquement par prompt ;
 - Stage 1/Stage 2 séparés du scoring ;
 - SR-MPGD seulement sur parents sélectionnés ;
 - tous les checkpoints et latents conservés ;
@@ -14,19 +17,22 @@ Ce patch ajoute une campagne de génération neuve :
 - reprise par COMPLETE markers et Jobs backoffLimit=0 ;
 - 2 notebooks avec images et graphiques.
 
-ORDRE OBLIGATOIRE
+ORDRE DE LANCEMENT APRES CE PATCH
+
+Le smoke historique b2621671e0334f6a a déjà validé CUDA, DiffQRCoder,
+QR-Verify, HPS, les PVC et la reprise. Il n'est pas regénéré.
 
 1. Commit/push/pull.
 2. bash scripts/deploy-e046-notebooks.sh all
-3. Smoke :
-   PROOFTAG_E046_PROFILE=smoke \
-   bash scripts/run-e046-controlled-campaign.sh
-4. Revoir le notebook smoke.
-5. Pilot :
+3. Lancer directement le vrai tournoi pilot :
    PROOFTAG_E046_PROFILE=pilot \
    bash scripts/run-e046-controlled-campaign.sh
 
-NE PAS lancer `full` avant validation du smoke et du pilot.
+Le pilot génère 48 parents (6 par prompt), sélectionne automatiquement 2
+parents par prompt avec tous les scores, lance 48 trajectoires SR-MPGD, puis
+exporte un FINAL-QR.png logiciel valide par prompt.
+
+NE PAS lancer `full` avant la fin du pilot. Aucun choix manuel n'est demandé.
 
 Status :
 bash scripts/run-e046-controlled-campaign.sh status
@@ -53,3 +59,8 @@ Un Job Failed n'est jamais relancé automatiquement.
 Relance explicite uniquement après diagnostic d'un incident transitoire :
 PROOFTAG_E046_RETRY_FAILED=1 PROOFTAG_E046_PROFILE=<profil> \
 bash scripts/run-e046-controlled-campaign.sh resume
+
+
+IMPORTANT : le smoke historique b2621671e0334f6a reste conservé. Le nouveau
+commit produit un nouveau plan. Ne pas lancer l'ancien profil pilot à un candidat
+par prompt : ce patch le remplace par un vrai tournoi multiobjectif.

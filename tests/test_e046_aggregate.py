@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 
@@ -37,46 +38,56 @@ def _e045(root: Path) -> None:
 
 def _row(
     *,
-    candidate_id: str,
-    prompt_id: str,
+    candidate: dict,
     image_path: Path,
-    source_kind: str,
-    variant: str,
     exact: int,
-    eligible: bool = True,
-    recipe_id: str | None = None,
+    original: bool,
+    clip: float,
+    hps: float,
+    aesthetic: float,
 ) -> dict:
+    image_hash = hashlib.sha256(image_path.read_bytes()).hexdigest()
     return {
-        "candidate_id": candidate_id,
-        "prompt_id": prompt_id,
-        "prompt_family": "test",
-        "source_kind": source_kind,
-        "variant": variant,
-        "srmpgd_recipe_id": recipe_id,
-        "iteration": 1 if source_kind == "srmpgd" else 0,
-        "gamma": 250 if source_kind == "srmpgd" else 0,
+        "candidate_id": candidate["id"],
+        "prompt_id": candidate["prompt_id"],
+        "prompt_variant_index": candidate["prompt_variant_index"],
+        "prompt_family": candidate["prompt_family"],
+        "prompt": candidate["prompt"],
+        "payload": candidate["payload"],
+        "payload_sha256": hashlib.sha256(
+            candidate["payload"].encode("utf-8")
+        ).hexdigest(),
+        "parent_recipe_id": candidate["parent_recipe_id"],
+        "seed": candidate["seed"],
+        "source_kind": "parent",
+        "stage": "stage2",
+        "variant": "stage2_raw",
+        "quiet_zone_variant": "raw",
+        "srmpgd_recipe_id": None,
+        "iteration": 0,
+        "gamma": 0.0,
         "image_path": str(image_path),
         "latent_path": None,
-        "image_sha256": f"{exact + 1:064x}",
-        "eligible_final": eligible,
-        "visual_guard_pass": eligible,
+        "image_sha256": image_hash,
+        "eligible_final": True,
+        "visual_guard_pass": True,
         "uniform_quiet_zone_replacement": False,
-        "quiet_zone_delivery_guard_pass": variant.endswith("scene_qz"),
+        "quiet_zone_delivery_guard_pass": None,
         "wechat_exact_presets": exact,
         "wechat_exact_rate": exact / 37,
-        "wechat_original_exact": exact == 37,
-        "clip_aesthetic": 5.0 + exact / 100,
-        "hpsv2_1": 0.2,
-        "clip_score": 0.6,
-        "lpips": 0.01,
-        "module_error_rate": 0.1,
-        "visual_guard_checks": {"ok": eligible},
+        "wechat_original_exact": original,
+        "clip_aesthetic": aesthetic,
+        "hpsv2_1": hps,
+        "clip_score": clip,
+        "lpips": 0.0,
+        "module_error_rate": 0.02,
+        "visual_guard_checks": {"ok": True},
         "module_error_breakdown": {},
         "quiet_zone_metrics": {},
     }
 
 
-def test_aggregate_builds_dataset_pareto_phone_queue_and_manifest(tmp_path: Path):
+def _prepare_plan(tmp_path: Path):
     e045 = tmp_path / "e045"
     e045.mkdir()
     _e045(e045)
@@ -88,83 +99,128 @@ def test_aggregate_builds_dataset_pareto_phone_queue_and_manifest(tmp_path: Path
         e045_root=e045,
     )
     plan_dir = output / plan["plan_id"]
+    return output, plan, plan_dir
 
-    parent_rows = []
+
+def test_aggregate_exports_one_automatic_valid_beautiful_qr_per_prompt(tmp_path: Path):
+    output, plan, plan_dir = _prepare_plan(tmp_path)
+
+    # Three candidates per prompt. Beautiful but invalid rows must never win.
+    prompt_seen = {}
     for index, candidate in enumerate(plan["candidates"]):
         root = plan_dir / "parents" / candidate["id"]
-        images = root / "images"
-        _write_image(images / "stage1-raw.png", 80 + index)
-        _write_image(images / "stage1-scene-qz.png", 100 + index)
-        _write_image(images / "stage2-raw.png", 120 + index)
-        _write_image(images / "stage2-scene-qz.png", 140 + index)
+        image_path = root / "images/stage2-raw.png"
+        _write_image(image_path, 30 + index * 15)
+        prompt_position = prompt_seen.get(candidate["prompt_id"], 0)
+        prompt_seen[candidate["prompt_id"]] = prompt_position + 1
+
+        if prompt_position == 0:
+            exact, original = 36, True
+            clip, hps, aesthetic = 0.72, 0.22, 5.2
+        elif prompt_position == 1:
+            exact, original = 34, True
+            clip, hps, aesthetic = 0.90, 0.36, 6.4
+        else:
+            exact, original = 5, False
+            clip, hps, aesthetic = 0.99, 0.50, 8.0
+
         scoring = root / "scoring"
         scoring.mkdir(parents=True)
-        rows = [
-            _row(
-                candidate_id=candidate["id"],
-                prompt_id=candidate["prompt_id"],
-                image_path=images / "stage1-raw.png",
-                source_kind="parent",
-                variant="stage1_raw",
-                exact=index,
-            ),
-            _row(
-                candidate_id=candidate["id"],
-                prompt_id=candidate["prompt_id"],
-                image_path=images / "stage2-raw.png",
-                source_kind="parent",
-                variant="stage2_raw",
-                exact=5 + index,
-            ),
-        ]
-        (scoring / "comparison.json").write_text(
-            json.dumps(rows), encoding="utf-8"
+        row = _row(
+            candidate=candidate,
+            image_path=image_path,
+            exact=exact,
+            original=original,
+            clip=clip,
+            hps=hps,
+            aesthetic=aesthetic,
         )
-        parent_rows.extend(rows)
+        (scoring / "comparison.json").write_text(
+            json.dumps([row]), encoding="utf-8"
+        )
 
     (plan_dir / "PARENT_SCORING_COMPLETE.json").write_text(
         json.dumps({"scored_count": len(plan["candidates"])}),
         encoding="utf-8",
     )
-    selected_candidate = plan["candidates"][0]
-    selected_row = parent_rows[1]
     (plan_dir / "selected-parents.json").write_text(
-        json.dumps({"selected": [selected_row]}),
-        encoding="utf-8",
-    )
-
-    recipe_id = plan["srmpgd_recipes"][0]["id"]
-    ref_root = (
-        plan_dir / "refinements" / selected_candidate["id"] / recipe_id
-    )
-    image_path = ref_root / "scene-qz" / "iteration-001.png"
-    _write_image(image_path, 180)
-    scoring = ref_root / "scoring"
-    scoring.mkdir(parents=True)
-    refinement_row = _row(
-        candidate_id=selected_candidate["id"],
-        prompt_id=selected_candidate["prompt_id"],
-        image_path=image_path,
-        source_kind="srmpgd",
-        variant="i001_scene_qz",
-        exact=20,
-        recipe_id=recipe_id,
-    )
-    (scoring / "comparison.json").write_text(
-        json.dumps([refinement_row]),
-        encoding="utf-8",
+        json.dumps({"selected": []}), encoding="utf-8"
     )
     (plan_dir / "REFINEMENT_SCORING_COMPLETE.json").write_text(
-        json.dumps({"scored_count": 1}),
-        encoding="utf-8",
+        json.dumps({"scored_count": 0}), encoding="utf-8"
     )
 
     verdict = aggregate(output_root=output, plan_id=plan["plan_id"])
+
     assert verdict["complete"] is True
-    assert verdict["winner_wechat_exact_presets"] == 20
-    assert verdict["winner_uniform_quiet_zone_replacement"] is False
-    assert verdict["phone_sample_pending_count"] >= 1
+    assert verdict["prompt_count"] == 2
+    assert verdict["software_valid_prompt_count"] == 2
+    assert verdict["unresolved_prompt_count"] == 0
+    assert verdict["all_prompts_have_software_valid_final"] is True
+    assert verdict["winner_wechat_exact_presets"] in {34, 36}
+    assert verdict["winner_wechat_original_exact"] is True
+
+    best = json.loads(
+        (plan_dir / "dataset/best-by-prompt.json").read_text(encoding="utf-8")
+    )
+    assert len(best) == 2
+    assert all(row["software_valid_final"] for row in best)
+    assert all(row["wechat_exact_presets"] >= 34 for row in best)
+    assert all(row["candidate_id"].split("_")[-1] != "s2" for row in best)
+
+    for prompt_id in {candidate["prompt_id"] for candidate in plan["candidates"]}:
+        assert (plan_dir / f"pipeline/by-prompt/{prompt_id}/FINAL-QR.png").is_file()
+        metadata = json.loads(
+            (plan_dir / f"pipeline/by-prompt/{prompt_id}/FINAL-metadata.json")
+            .read_text(encoding="utf-8")
+        )
+        assert metadata["manual_verification_required_for_selection"] is False
+
     assert (plan_dir / "dataset/e047-training-contract.json").is_file()
-    assert (plan_dir / "dataset/phone-sample-pending.csv").is_file()
     assert (plan_dir / "pipeline/99-FINAL-QR.png").is_file()
     assert verify(output_root=output, plan_id=plan["plan_id"])["valid"] is True
+
+
+def test_aggregate_refuses_to_label_invalid_prompt_as_final(tmp_path: Path):
+    output, plan, plan_dir = _prepare_plan(tmp_path)
+
+    for index, candidate in enumerate(plan["candidates"]):
+        root = plan_dir / "parents" / candidate["id"]
+        image_path = root / "images/stage2-raw.png"
+        _write_image(image_path, 25 + index * 12)
+        first_prompt = candidate["prompt_id"] == plan["candidates"][0]["prompt_id"]
+        row = _row(
+            candidate=candidate,
+            image_path=image_path,
+            exact=36 if first_prompt else 10,
+            original=first_prompt,
+            clip=0.8,
+            hps=0.25,
+            aesthetic=5.5,
+        )
+        scoring = root / "scoring"
+        scoring.mkdir(parents=True)
+        (scoring / "comparison.json").write_text(
+            json.dumps([row]), encoding="utf-8"
+        )
+
+    (plan_dir / "PARENT_SCORING_COMPLETE.json").write_text(
+        json.dumps({"scored_count": len(plan["candidates"])}), encoding="utf-8"
+    )
+    (plan_dir / "selected-parents.json").write_text(
+        json.dumps({"selected": []}), encoding="utf-8"
+    )
+    (plan_dir / "REFINEMENT_SCORING_COMPLETE.json").write_text(
+        json.dumps({"scored_count": 0}), encoding="utf-8"
+    )
+
+    verdict = aggregate(output_root=output, plan_id=plan["plan_id"])
+    assert verdict["unresolved_prompt_count"] == 1
+    unresolved_key = verdict["unresolved_prompt_keys"][0]
+    unresolved_prompt_id = unresolved_key.split("::", 1)[0]
+    assert not (
+        plan_dir / f"pipeline/by-prompt/{unresolved_prompt_id}/FINAL-QR.png"
+    ).exists()
+    assert (
+        plan_dir / f"pipeline/by-prompt/{unresolved_prompt_id}/NO-VALID-FINAL.json"
+    ).is_file()

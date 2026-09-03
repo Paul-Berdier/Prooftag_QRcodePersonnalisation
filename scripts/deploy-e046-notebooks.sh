@@ -109,7 +109,7 @@ assert EXPERIMENT == "e046-controlled-best-generator-v1"
 assert len(PROMPTS) == 8
 assert len(PARENT_RECIPES) == 8
 assert len(SRMPGD_RECIPES) == 4
-assert len(build_candidates("pilot")) == 8
+assert len(build_candidates("pilot")) == 48
 image = Image.new("RGB", (736, 736), (80, 120, 160))
 output, evidence = compose_scene_preserving_quiet_zone(image)
 assert output.size == image.size

@@ -961,26 +961,184 @@ def score_all_parents(
     return summary
 
 
+def _finite_number(value: Any, default: float = 0.0) -> float:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return default
+    return numeric if math.isfinite(numeric) else default
+
+
+def _minmax_normalized(
+    value: Any,
+    values: Sequence[Any],
+    *,
+    higher_is_better: bool = True,
+) -> float:
+    finite_values = [
+        _finite_number(item, float("nan"))
+        for item in values
+    ]
+    finite_values = [item for item in finite_values if math.isfinite(item)]
+    numeric = _finite_number(value, float("nan"))
+    if not finite_values or not math.isfinite(numeric):
+        return 0.0
+    lower = min(finite_values)
+    upper = max(finite_values)
+    if abs(upper - lower) <= 1e-12:
+        return 0.5
+    normalized = (numeric - lower) / (upper - lower)
+    return float(normalized if higher_is_better else 1.0 - normalized)
+
+
+def _software_validity_tier(
+    row: Mapping[str, Any],
+    policy: Mapping[str, Any],
+) -> int:
+    if not bool(row.get("eligible_final")):
+        return 0
+    if not bool(row.get("visual_guard_pass")):
+        return 0
+    if str(row.get("quiet_zone_variant") or "raw") != "raw":
+        return 0
+    if bool(row.get("uniform_quiet_zone_replacement")):
+        return 0
+
+    exact = int(row.get("wechat_exact_presets") or 0)
+    original = bool(row.get("wechat_original_exact"))
+    ideal = int(policy.get("ideal_minimum_exact_presets", 36))
+    minimum = int(policy.get("final_minimum_exact_presets", 34))
+    refinement = int(policy.get("refinement_minimum_exact_presets", 16))
+
+    if original and exact >= ideal:
+        return 3
+    if original and exact >= minimum:
+        return 2
+    if exact >= refinement:
+        return 1
+    return 0
+
+
+def _annotate_prompt_objectives(
+    rows: Sequence[Mapping[str, Any]],
+    plan: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    """Attach automatic QR-validity and beauty/prompt scores per prompt.
+
+    Validity is never averaged away: a row must first pass its WeChat tier.
+    Inside a tier, prompt alignment and aesthetics select the best-looking QR.
+    """
+    output = [dict(row) for row in rows]
+    validity = dict(plan.get("validity_policy") or {})
+    weights = dict((plan.get("multiobjective_policy") or {}).get("weights") or {})
+    w_wechat = float(weights.get("wechat_robustness", 0.40))
+    w_clip = float(weights.get("clip_prompt_alignment", 0.25))
+    w_hps = float(weights.get("hps_human_preference", 0.20))
+    w_aes = float(weights.get("clip_aesthetic", 0.15))
+    weight_sum = w_wechat + w_clip + w_hps + w_aes
+    if weight_sum <= 0:
+        raise ValueError("E046 multi-objective weights must sum to a positive value")
+
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for row in output:
+        prompt_key = (
+            f"{row.get('prompt_id')}::v{int(row.get('prompt_variant_index') or 0)}"
+        )
+        row["prompt_key"] = prompt_key
+        groups.setdefault(prompt_key, []).append(row)
+
+    for prompt_key, group in groups.items():
+        reference_group = [
+            row
+            for row in group
+            if bool(row.get("eligible_final"))
+            and str(row.get("quiet_zone_variant") or "raw") == "raw"
+        ] or group
+        clip_values = [row.get("clip_score") for row in reference_group]
+        hps_values = [row.get("hpsv2_1") for row in reference_group]
+        aes_values = [row.get("clip_aesthetic") for row in reference_group]
+        mer_values = [row.get("module_error_rate") for row in reference_group]
+
+        for row in group:
+            clip_norm = _minmax_normalized(row.get("clip_score"), clip_values)
+            hps_norm = _minmax_normalized(row.get("hpsv2_1"), hps_values)
+            aes_norm = _minmax_normalized(row.get("clip_aesthetic"), aes_values)
+            mer_norm = _minmax_normalized(
+                row.get("module_error_rate"),
+                mer_values,
+                higher_is_better=False,
+            )
+            robustness = max(
+                0.0,
+                min(1.0, int(row.get("wechat_exact_presets") or 0) / 37.0),
+            )
+            visual_score = (
+                0.4166666667 * clip_norm
+                + 0.3333333333 * hps_norm
+                + 0.25 * aes_norm
+            )
+            multiobjective = (
+                w_wechat * robustness
+                + w_clip * clip_norm
+                + w_hps * hps_norm
+                + w_aes * aes_norm
+            ) / weight_sum
+            tier = _software_validity_tier(row, validity)
+            final_minimum = int(validity.get("final_minimum_exact_presets", 34))
+            final_original = bool(
+                validity.get("final_original_exact_required", True)
+            )
+            software_valid = bool(
+                row.get("eligible_final")
+                and int(row.get("wechat_exact_presets") or 0) >= final_minimum
+                and (
+                    bool(row.get("wechat_original_exact"))
+                    or not final_original
+                )
+            )
+
+            row.update(
+                {
+                    "software_validity_tier": tier,
+                    "software_valid_final": software_valid,
+                    "wechat_robustness_score": robustness,
+                    "clip_prompt_alignment_normalized": clip_norm,
+                    "hps_human_preference_normalized": hps_norm,
+                    "clip_aesthetic_normalized": aes_norm,
+                    "module_integrity_normalized": mer_norm,
+                    "prompt_visual_score": visual_score,
+                    "multiobjective_prompt_score": multiobjective,
+                    "multiobjective_policy": "e046-prompt-tournament-v2",
+                }
+            )
+    return output
+
+
+def _prompt_tournament_rank(row: Mapping[str, Any]) -> tuple[Any, ...]:
+    return (
+        -int(row.get("software_validity_tier") or 0),
+        -_finite_number(row.get("multiobjective_prompt_score"), -1e9),
+        -int(row.get("wechat_exact_presets") or 0),
+        -_finite_number(row.get("prompt_visual_score"), -1e9),
+        -_finite_number(row.get("clip_score"), -1e9),
+        -_finite_number(row.get("hpsv2_1"), -1e9),
+        -_finite_number(row.get("clip_aesthetic"), -1e9),
+        _finite_number(row.get("module_error_rate"), 1e9),
+    )
+
+
 def _row_rank(row: Mapping[str, Any]) -> tuple[Any, ...]:
+    if "multiobjective_prompt_score" in row:
+        return _prompt_tournament_rank(row)
     return (
         -int(bool(row.get("visual_guard_pass"))),
         -int(row.get("wechat_exact_presets", 0)),
         -int(bool(row.get("wechat_original_exact"))),
-        # Never alter the peripheral artwork without a measurable WeChat gain.
         -int(str(row.get("quiet_zone_variant") or "raw") == "raw"),
-        -int(bool(row.get("quiet_zone_delivery_guard_pass"))),
-        -float(row.get("clip_aesthetic") or -1e9),
-        -float(row.get("hpsv2_1") or -1e9),
-        -float(
-            row["clip_score"]
-            if row.get("clip_score") is not None
-            else -1e9
-        ),
-        float(
-            row["module_error_rate"]
-            if row.get("module_error_rate") is not None
-            else 1e9
-        ),
+        -_finite_number(row.get("clip_score"), -1e9),
+        -_finite_number(row.get("hpsv2_1"), -1e9),
+        -_finite_number(row.get("clip_aesthetic"), -1e9),
+        _finite_number(row.get("module_error_rate"), 1e9),
     )
 
 
@@ -989,11 +1147,12 @@ def select_parents(
     output_root: Path,
     plan_id: str,
 ) -> dict[str, Any]:
+    """Select several Stage2 parents for every prompt automatically."""
     plan_dir, plan = load_plan(output_root, plan_id)
     if not (plan_dir / "PARENT_SCORING_COMPLETE.json").is_file():
         raise FileNotFoundError("parent scoring is not complete")
 
-    best_by_candidate: list[dict[str, Any]] = []
+    parent_rows: list[dict[str, Any]] = []
     for candidate in plan["candidates"]:
         scoring_path = (
             _parent_final_dir(plan_dir, str(candidate["id"]))
@@ -1003,76 +1162,120 @@ def select_parents(
         options = [
             row
             for row in rows
-            if row["stage"] == "stage2"
-            and row.get("eligible_for_refinement") is True
+            if row.get("stage") == "stage2"
+            and row.get("quiet_zone_variant") == "raw"
+            and bool(row.get("visual_guard_pass"))
         ]
-        if not options:
-            options = [row for row in rows if row["stage"] == "stage2"]
-        best = sorted(options, key=_row_rank)[0]
-        best_by_candidate.append(best)
+        if options:
+            parent_rows.append(options[0])
 
-    safe = [row for row in best_by_candidate if bool(row["visual_guard_pass"])]
-    if not safe:
-        raise RuntimeError("E046 has no visually-safe Stage2 parent")
-    safe_sorted = sorted(safe, key=_row_rank)
-    count = int(plan["selected_parent_count"])
+    if not parent_rows:
+        raise RuntimeError("E046 has no visually-safe raw Stage2 parent")
+
+    annotated = _annotate_prompt_objectives(parent_rows, plan)
+    selected_per_prompt = int(plan.get("selected_parents_per_prompt") or 1)
+    refinement_minimum = int(
+        (plan.get("validity_policy") or {}).get(
+            "refinement_minimum_exact_presets",
+            16,
+        )
+    )
 
     selected: list[dict[str, Any]] = []
-    used_prompts: set[str] = set()
-    for row in safe_sorted:
-        if str(row["prompt_id"]) in used_prompts:
-            continue
-        selected.append({**row, "selection_reason": "best_scan_diverse_prompt"})
-        used_prompts.add(str(row["prompt_id"]))
-        if len(selected) >= max(1, count - 1):
-            break
+    prompt_summaries: list[dict[str, Any]] = []
+    prompt_keys = sorted({str(row["prompt_key"]) for row in annotated})
 
-    remaining = [
-        row
-        for row in safe
-        if str(row["candidate_id"])
-        not in {str(item["candidate_id"]) for item in selected}
-    ]
-    if len(selected) < count and remaining:
-        exact_values = sorted(
-            int(row["wechat_exact_presets"]) for row in remaining
+    for prompt_key in prompt_keys:
+        group = [row for row in annotated if row["prompt_key"] == prompt_key]
+        ranked = sorted(group, key=_prompt_tournament_rank)
+        chosen: list[dict[str, Any]] = []
+
+        # Main candidate: best validity tier + combined prompt/beauty score.
+        primary = dict(ranked[0])
+        primary["selection_reason"] = "best_multiobjective_in_prompt"
+        chosen.append(primary)
+
+        # Challenger: the most visually attractive candidate close enough to the
+        # decoding frontier for SR-MPGD to have a realistic chance to improve it.
+        if selected_per_prompt > 1:
+            challenger_pool = [
+                row
+                for row in group
+                if row["candidate_id"] != primary["candidate_id"]
+                and int(row.get("wechat_exact_presets") or 0) >= refinement_minimum
+            ]
+            if not challenger_pool:
+                challenger_pool = [
+                    row
+                    for row in ranked[1:]
+                    if row["candidate_id"] != primary["candidate_id"]
+                ]
+            if challenger_pool:
+                challenger = sorted(
+                    challenger_pool,
+                    key=lambda row: (
+                        -_finite_number(row.get("prompt_visual_score"), -1e9),
+                        -int(row.get("software_validity_tier") or 0),
+                        -int(row.get("wechat_exact_presets") or 0),
+                        _finite_number(row.get("module_error_rate"), 1e9),
+                    ),
+                )[0]
+                challenger = dict(challenger)
+                challenger["selection_reason"] = (
+                    "beauty_challenger_near_decode_frontier"
+                )
+                chosen.append(challenger)
+
+        for row in ranked:
+            if len(chosen) >= selected_per_prompt:
+                break
+            if row["candidate_id"] in {
+                item["candidate_id"] for item in chosen
+            }:
+                continue
+            filler = dict(row)
+            filler["selection_reason"] = "next_prompt_tournament_candidate"
+            chosen.append(filler)
+
+        selected.extend(chosen[:selected_per_prompt])
+        prompt_summaries.append(
+            {
+                "prompt_key": prompt_key,
+                "prompt_id": group[0]["prompt_id"],
+                "prompt": group[0]["prompt"],
+                "candidate_count": len(group),
+                "selected_count": len(chosen[:selected_per_prompt]),
+                "best_parent_candidate_id": primary["candidate_id"],
+                "best_parent_validity_tier": primary["software_validity_tier"],
+                "best_parent_wechat_exact_presets": primary[
+                    "wechat_exact_presets"
+                ],
+                "best_parent_multiobjective_score": primary[
+                    "multiobjective_prompt_score"
+                ],
+            }
         )
-        median_exact = exact_values[len(exact_values) // 2]
-        frontier = sorted(
-            remaining,
-            key=lambda row: (
-                abs(int(row["wechat_exact_presets"]) - median_exact),
-                -float(row.get("clip_aesthetic") or -1e9),
-                -float(row.get("hpsv2_1") or -1e9),
-            ),
-        )[0]
-        selected.append({**frontier, "selection_reason": "frontier_learning_case"})
 
-    for row in safe_sorted:
-        if len(selected) >= count:
-            break
-        if str(row["candidate_id"]) in {
-            str(item["candidate_id"]) for item in selected
-        }:
-            continue
-        selected.append({**row, "selection_reason": "fill_best_remaining"})
-
-    selected = selected[:count]
     payload = {
         "experiment": EXPERIMENT,
         "plan_id": plan_id,
         "selected_parent_count": len(selected),
-        "requested_parent_count": count,
+        "selected_parents_per_prompt": selected_per_prompt,
+        "prompt_count": len(prompt_summaries),
         "selection_policy": (
-            "safe Stage2; top WeChat exact with prompt diversity plus one frontier case"
+            "per-prompt hard WeChat validity tiers, then weighted prompt/beauty "
+            "score; second parent is a beauty challenger near the decode frontier"
         ),
         "selected": selected,
+        "prompt_summaries": prompt_summaries,
         "srmpgd_recipes": plan["srmpgd_recipes"],
         "created_at_utc": utc_now(),
         "production_ready": False,
     }
     atomic_write_json(plan_dir / "selected-parents.json", payload)
     _write_csv(plan_dir / "selected-parents.csv", selected)
+    atomic_write_json(plan_dir / "parent-tournament.json", prompt_summaries)
+    _write_csv(plan_dir / "parent-tournament.csv", prompt_summaries)
     return payload
 
 
@@ -1668,7 +1871,12 @@ def _flatten_rows_for_csv(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, A
 
 
 def _pareto_front(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
-    candidates = [dict(row) for row in rows if bool(row.get("eligible_final"))]
+    candidates = [
+        dict(row)
+        for row in rows
+        if bool(row.get("eligible_final"))
+        and bool(row.get("software_valid_final", True))
+    ]
     front: list[dict[str, Any]] = []
     for row in candidates:
         row_values = (
@@ -1787,6 +1995,7 @@ def aggregate(
         if duplicate_of is None:
             first_by_hash[image_hash] = row_id
 
+    rows = _annotate_prompt_objectives(rows, plan)
     safe = [
         row
         for row in rows
@@ -1794,8 +2003,54 @@ def aggregate(
         and not bool(row.get("uniform_quiet_zone_replacement"))
     ]
     if not safe:
-        raise RuntimeError("E046 produced no safe final candidate")
-    winner = sorted(safe, key=_row_rank)[0]
+        raise RuntimeError("E046 produced no safe raw Stage2/SR-MPGD candidate")
+
+    prompt_keys = sorted({
+        f"{candidate['prompt_id']}::v{int(candidate.get('prompt_variant_index') or 0)}"
+        for candidate in plan["candidates"]
+    })
+    prompt_results: list[dict[str, Any]] = []
+    best_by_prompt: list[dict[str, Any]] = []
+    unresolved_prompt_keys: list[str] = []
+
+    for prompt_key in prompt_keys:
+        prompt_rows = [row for row in safe if row.get("prompt_key") == prompt_key]
+        valid_rows = [row for row in prompt_rows if bool(row.get("software_valid_final"))]
+        if valid_rows:
+            prompt_winner = dict(sorted(valid_rows, key=_prompt_tournament_rank)[0])
+            prompt_winner["prompt_result_status"] = "software_valid_final"
+            best_by_prompt.append(prompt_winner)
+            prompt_results.append({
+                "prompt_key": prompt_key,
+                "prompt_id": prompt_winner["prompt_id"],
+                "prompt": prompt_winner["prompt"],
+                "status": "software_valid_final",
+                "candidate_count": len(prompt_rows),
+                "valid_candidate_count": len(valid_rows),
+                "winner": prompt_winner,
+            })
+        else:
+            unresolved_prompt_keys.append(prompt_key)
+            best_available = (
+                dict(sorted(prompt_rows, key=_prompt_tournament_rank)[0])
+                if prompt_rows
+                else None
+            )
+            prompt_results.append({
+                "prompt_key": prompt_key,
+                "prompt_id": (best_available or {}).get("prompt_id"),
+                "prompt": (best_available or {}).get("prompt"),
+                "status": "no_software_valid_final",
+                "candidate_count": len(prompt_rows),
+                "valid_candidate_count": 0,
+                "best_available": best_available,
+            })
+
+    winner = (
+        sorted(best_by_prompt, key=_prompt_tournament_rank)[0]
+        if best_by_prompt
+        else None
+    )
     pareto = _pareto_front(rows)
 
     dataset_dir = plan_dir / "dataset"
@@ -1829,8 +2084,14 @@ def aggregate(
             "schema": "e047-training-contract-from-e046-v1",
             "experiment": EXPERIMENT,
             "plan_id": plan_id,
-            "primary_target": "wechat_exact_presets",
+            "primary_target": "multiobjective_prompt_score",
+            "hard_validity_targets": [
+                "wechat_original_exact",
+                "wechat_exact_presets>=34",
+                "visual_guard_pass",
+            ],
             "secondary_targets": [
+                "wechat_exact_presets",
                 "wechat_original_exact",
                 "clip_aesthetic",
                 "hpsv2_1",
@@ -1874,10 +2135,27 @@ def aggregate(
     atomic_write_json(dataset_dir / "pareto-front.json", pareto)
     _write_csv(dataset_dir / "pareto-front.csv", _flatten_rows_for_csv(pareto))
 
-    best_by_prompt: list[dict[str, Any]] = []
-    for prompt_id in sorted({str(row["prompt_id"]) for row in safe}):
-        prompt_rows = [row for row in safe if str(row["prompt_id"]) == prompt_id]
-        best_by_prompt.append(sorted(prompt_rows, key=_row_rank)[0])
+    atomic_write_json(dataset_dir / "prompt-results.json", prompt_results)
+    _write_csv(
+        dataset_dir / "prompt-results.csv",
+        [
+            {
+                "prompt_key": item["prompt_key"],
+                "prompt_id": item.get("prompt_id"),
+                "prompt": item.get("prompt"),
+                "status": item["status"],
+                "candidate_count": item["candidate_count"],
+                "valid_candidate_count": item["valid_candidate_count"],
+                "winner_candidate_id": (item.get("winner") or {}).get("candidate_id"),
+                "winner_variant": (item.get("winner") or {}).get("variant"),
+                "winner_wechat_exact_presets": (item.get("winner") or {}).get("wechat_exact_presets"),
+                "winner_multiobjective_prompt_score": (item.get("winner") or {}).get("multiobjective_prompt_score"),
+                "best_available_candidate_id": (item.get("best_available") or {}).get("candidate_id"),
+                "best_available_wechat_exact_presets": (item.get("best_available") or {}).get("wechat_exact_presets"),
+            }
+            for item in prompt_results
+        ],
+    )
     atomic_write_json(dataset_dir / "best-by-prompt.json", best_by_prompt)
     _write_csv(
         dataset_dir / "best-by-prompt.csv",
@@ -1930,22 +2208,59 @@ def aggregate(
 
     pipeline = plan_dir / "pipeline"
     pipeline.mkdir(parents=True, exist_ok=True)
-    winner_image = Image.open(str(winner["image_path"])).convert("RGB")
-    _save_png(pipeline / "99-FINAL-QR.png", winner_image)
-    if winner.get("latent_path") and Path(str(winner["latent_path"])).is_file():
-        shutil.copy2(
-            Path(str(winner["latent_path"])),
-            pipeline / "99-FINAL-latent.safetensors",
+    by_prompt_root = pipeline / "by-prompt"
+    by_prompt_root.mkdir(parents=True, exist_ok=True)
+
+    for prompt_result in prompt_results:
+        prompt_id = str(prompt_result.get("prompt_id") or prompt_result["prompt_key"])
+        prompt_dir = by_prompt_root / prompt_id
+        prompt_dir.mkdir(parents=True, exist_ok=True)
+        if prompt_result["status"] == "software_valid_final":
+            prompt_winner = prompt_result["winner"]
+            image = Image.open(str(prompt_winner["image_path"])).convert("RGB")
+            _save_png(prompt_dir / "FINAL-QR.png", image)
+            if (
+                prompt_winner.get("latent_path")
+                and Path(str(prompt_winner["latent_path"])).is_file()
+            ):
+                shutil.copy2(
+                    Path(str(prompt_winner["latent_path"])),
+                    prompt_dir / "FINAL-latent.safetensors",
+                )
+            atomic_write_json(
+                prompt_dir / "FINAL-metadata.json",
+                {
+                    "status": "software_valid_final",
+                    "winner": prompt_winner,
+                    "validity_source": "qr-scanner-wechat exact payload",
+                    "manual_verification_required_for_selection": False,
+                    "production_ready": False,
+                },
+            )
+        else:
+            atomic_write_json(
+                prompt_dir / "NO-VALID-FINAL.json",
+                prompt_result,
+            )
+
+    if winner is not None:
+        winner_image = Image.open(str(winner["image_path"])).convert("RGB")
+        _save_png(pipeline / "99-FINAL-QR.png", winner_image)
+        if winner.get("latent_path") and Path(str(winner["latent_path"])).is_file():
+            shutil.copy2(
+                Path(str(winner["latent_path"])),
+                pipeline / "99-FINAL-latent.safetensors",
+            )
+        atomic_write_json(
+            pipeline / "99-FINAL-metadata.json",
+            {
+                "winner": winner,
+                "validity_source": "qr-scanner-wechat exact payload",
+                "manual_verification_required_for_selection": False,
+                "production_ready": False,
+                "uniform_quiet_zone_replacement": False,
+            },
         )
-    atomic_write_json(
-        pipeline / "99-FINAL-metadata.json",
-        {
-            "winner": winner,
-            "phone_validated": False,
-            "production_ready": False,
-            "uniform_quiet_zone_replacement": False,
-        },
-    )
 
     best_items = []
     for row in best_by_prompt:
@@ -1955,7 +2270,8 @@ def aggregate(
                 Image.open(str(row["image_path"])).convert("RGB"),
                 (
                     f"WeChat={row['wechat_exact_presets']}/37 "
-                    f"{row['source_kind']} {row['variant']}"
+                    f"Multi={float(row.get('multiobjective_prompt_score') or 0):.3f} "
+                    f"CLIP={float(row.get('clip_score') or 0):.3f}"
                 ),
             )
         )
@@ -2018,21 +2334,30 @@ def aggregate(
         "unique_pixel_hash_count": len(first_by_hash),
         "pixel_duplicate_count": sum(bool(row["pixel_duplicate"]) for row in rows),
         "safe_final_row_count": len(safe),
+        "software_valid_final_row_count": sum(
+            bool(row.get("software_valid_final")) for row in safe
+        ),
+        "prompt_count": len(prompt_keys),
+        "software_valid_prompt_count": len(best_by_prompt),
+        "unresolved_prompt_count": len(unresolved_prompt_keys),
+        "unresolved_prompt_keys": unresolved_prompt_keys,
+        "all_prompts_have_software_valid_final": not unresolved_prompt_keys,
         "pareto_row_count": len(pareto),
         "phone_sample_pending_count": len(phone_sample),
         "wechat_bucket_counts": exact_histogram,
-        "winner_candidate_id": winner["candidate_id"],
-        "winner_source_kind": winner["source_kind"],
-        "winner_variant": winner["variant"],
-        "winner_srmpgd_recipe_id": winner.get("srmpgd_recipe_id"),
-        "winner_iteration": winner.get("iteration"),
-        "winner_gamma": winner.get("gamma"),
-        "winner_wechat_exact_presets": winner["wechat_exact_presets"],
-        "winner_wechat_exact_rate": winner["wechat_exact_rate"],
-        "winner_wechat_original_exact": winner["wechat_original_exact"],
-        "winner_clip_aesthetic": winner.get("clip_aesthetic"),
-        "winner_hpsv2_1": winner.get("hpsv2_1"),
-        "winner_clip_score": winner.get("clip_score"),
+        "winner_candidate_id": winner.get("candidate_id") if winner else None,
+        "winner_source_kind": winner.get("source_kind") if winner else None,
+        "winner_variant": winner.get("variant") if winner else None,
+        "winner_srmpgd_recipe_id": winner.get("srmpgd_recipe_id") if winner else None,
+        "winner_iteration": winner.get("iteration") if winner else None,
+        "winner_gamma": winner.get("gamma") if winner else None,
+        "winner_wechat_exact_presets": winner.get("wechat_exact_presets") if winner else None,
+        "winner_wechat_exact_rate": winner.get("wechat_exact_rate") if winner else None,
+        "winner_wechat_original_exact": winner.get("wechat_original_exact") if winner else None,
+        "winner_multiobjective_prompt_score": winner.get("multiobjective_prompt_score") if winner else None,
+        "winner_clip_aesthetic": winner.get("clip_aesthetic") if winner else None,
+        "winner_hpsv2_1": winner.get("hpsv2_1") if winner else None,
+        "winner_clip_score": winner.get("clip_score") if winner else None,
         "winner_uniform_quiet_zone_replacement": False,
         "software_dataset_complete": True,
         "software_advisor_training_candidate": (
@@ -2043,7 +2368,9 @@ def aggregate(
         "phone_surrogate_training_authorized": False,
         "production_ready": False,
         "next_action": (
-            "REVIEW_E046_NOTEBOOK_THEN_FREEZE_E047_TRAIN_SPLITS_AND_PHONE_SAMPLE"
+            "FREEZE_PROMPT_WINNERS_AND_PREPARE_E047"
+            if not unresolved_prompt_keys
+            else "RUN_DEEPER_SEARCH_FOR_UNRESOLVED_PROMPTS"
         ),
         "created_at_utc": utc_now(),
     }
@@ -2058,11 +2385,18 @@ def aggregate(
                 f"- rows: **{len(rows)}**",
                 f"- unique rasters: **{len(first_by_hash)}**",
                 f"- Pareto rows: **{len(pareto)}**",
+                f"- valid prompt winners: **{len(best_by_prompt)}/{len(prompt_keys)}**",
                 (
-                    "- winner WeChat exact: "
+                    "- global winner WeChat exact: "
                     f"**{winner['wechat_exact_presets']}/37**"
+                    if winner is not None
+                    else "- global winner: **none**"
                 ),
-                f"- winner: `{winner['candidate_id']} / {winner['variant']}`",
+                (
+                    f"- global winner: `{winner['candidate_id']} / {winner['variant']}`"
+                    if winner is not None
+                    else "- unresolved prompts require a deeper automatic search"
+                ),
                 "- uniform quiet-zone replacement: **forbidden**",
                 "- phone validated: **no**",
                 "- production ready: **no**",

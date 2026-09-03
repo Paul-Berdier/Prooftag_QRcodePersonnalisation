@@ -1,0 +1,146 @@
+{
+  "patch": "E046 multiobjective per-prompt generation tournament",
+  "base_commit_expected": "443d8a43465fb2660c1e279d2a2c0da146aa4bd7",
+  "old_smoke_plan_preserved": "b2621671e0334f6a",
+  "purpose": "Generate multiple QR candidates for every prompt and automatically export the best software-valid and beautiful QR per prompt.",
+  "selection_contract": {
+    "hard_gate": {
+      "visual_guard_pass": true,
+      "raw_only": true,
+      "wechat_original_exact_required": true,
+      "minimum_wechat_exact_presets": 34,
+      "exact_payload_only": true
+    },
+    "within_prompt_weights": {
+      "wechat_robustness": 0.4,
+      "clip_prompt_alignment": 0.25,
+      "hps_human_preference": 0.2,
+      "clip_aesthetic": 0.15
+    },
+    "beauty_can_compensate_invalid_qr": false,
+    "manual_selection_required": false,
+    "stage1_final_eligible": false,
+    "scene_preserving_final_eligible": false,
+    "stage2_raw_final_eligible": true,
+    "srmpgd_raw_final_eligible": true
+  },
+  "profiles": {
+    "smoke": {
+      "prompts": 2,
+      "parents_per_prompt": 3,
+      "parents": 6,
+      "selected_parents": 2,
+      "srmpgd_trajectories": 2
+    },
+    "pilot": {
+      "prompts": 8,
+      "parents_per_prompt": 6,
+      "parents": 48,
+      "selected_parents": 16,
+      "srmpgd_trajectories": 48
+    },
+    "full": {
+      "prompts": 8,
+      "parents_per_prompt": 16,
+      "parents": 128,
+      "selected_parents": 16,
+      "srmpgd_trajectories": 64
+    }
+  },
+  "outputs": [
+    "dataset/prompt-results.json",
+    "dataset/best-by-prompt.json",
+    "pipeline/by-prompt/<prompt-id>/FINAL-QR.png",
+    "pipeline/by-prompt/<prompt-id>/FINAL-metadata.json",
+    "pipeline/by-prompt/<prompt-id>/NO-VALID-FINAL.json when unresolved"
+  ],
+  "validation": {
+    "python_compile": "passed",
+    "bash_syntax": "passed",
+    "notebooks_rebuilt": "passed",
+    "pytest": "30 passed",
+    "gpu_execution": "must run on pcIA"
+  },
+  "files": [
+    {
+      "path": "E046_A_LIRE.txt",
+      "size_bytes": 2489,
+      "sha256": "5f60bc229d8bd675545d73dd9bfea129acb444aa67b0b6c0ae82973cc091502a"
+    },
+    {
+      "path": "E046_MULTIOBJECTIVE_PROMPT_TOURNAMENT_A_LIRE.txt",
+      "size_bytes": 2249,
+      "sha256": "da707dde6cc79b24ea46ccef3ff9995c006e7f84ec42348b6e1a0f98ee1f2a42"
+    },
+    {
+      "path": "docs/e046-controlled-best-generator.md",
+      "size_bytes": 6644,
+      "sha256": "569c64a57c618dcf8b103d417b7c3f67b5e6c34e7bf68b04c2e9a3028b5c69c3"
+    },
+    {
+      "path": "docs/e046-parameter-coverage.json",
+      "size_bytes": 1801,
+      "sha256": "a0b76a8cf328fc60f2624ad823b228c115be5db43d9c54fc7ffc9e74354040ef"
+    },
+    {
+      "path": "docs/e046-wechat-scoring-policy.md",
+      "size_bytes": 1144,
+      "sha256": "7b24736f1b3ed83a987e3a82d07079c4846de9febe92bf2a19069ee837104a96"
+    },
+    {
+      "path": "notebooks/48_e046_controlled_best_generator.ipynb",
+      "size_bytes": 34307,
+      "sha256": "b6a36501433950d2d59251d5dba80b734256c95cd7a3cfbb840d67bb123935d1"
+    },
+    {
+      "path": "notebooks/49_e046_visual_atlas.ipynb",
+      "size_bytes": 15507,
+      "sha256": "b23b5c3a83cf6fc9bbd0c77a299bfde16594e504b389a5dec949d8e2273a7d6b"
+    },
+    {
+      "path": "prooftag_qr/e046_campaign.py",
+      "size_bytes": 105429,
+      "sha256": "1e23474a5a0aa0359698cd5e41278e6207f3710b89506bfe69aff99bb9745f1b"
+    },
+    {
+      "path": "prooftag_qr/e046_catalog.py",
+      "size_bytes": 20231,
+      "sha256": "a553d1aa082cfe7dcae20c3f25852c6055a31ffe50c1ad20b9405af0ac865c31"
+    },
+    {
+      "path": "scripts/build_e046_notebooks.py",
+      "size_bytes": 34662,
+      "sha256": "4b6b5ad50bcbe9299710c886e777b5820a4d5eb14c369599f7d6e77a9354464f"
+    },
+    {
+      "path": "scripts/deploy-e046-notebooks.sh",
+      "size_bytes": 4883,
+      "sha256": "6c37a7b9c79cdec6f5022657c09d59a32dc21065998b2079ce88b012289a8c73"
+    },
+    {
+      "path": "tests/test_e046_aggregate.py",
+      "size_bytes": 7818,
+      "sha256": "2ea3db8ffc235659d6c2557515b1e80ec475ea89c354635bce9273509132a100"
+    },
+    {
+      "path": "tests/test_e046_catalog.py",
+      "size_bytes": 2428,
+      "sha256": "61bfecd8b60dbd58a94449994c83c3a3f3acf10680d699b44687d15ee444b1c9"
+    },
+    {
+      "path": "tests/test_e046_notebooks.py",
+      "size_bytes": 1316,
+      "sha256": "0d98152b094770a3be409d1e8d1e204649f66b6aea4c76e34cb410bfed8d9633"
+    },
+    {
+      "path": "tests/test_e046_plan.py",
+      "size_bytes": 1889,
+      "sha256": "0d29dcd8bf269bf49c3143616cd4fa12c4164e8308509d2bb837db52641c1615"
+    },
+    {
+      "path": "tests/test_e046_selection.py",
+      "size_bytes": 6034,
+      "sha256": "4a1920cc66fe619efca34206aa8991e351ef2f8a6d7560e55e12c3d35e375e4e"
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+E046 — MULTIOBJECTIVE PROMPT TOURNAMENT
+
+Base attendue :
+443d8a43465fb2660c1e279d2a2c0da146aa4bd7
+
+Pourquoi ce patch existe
+------------------------
+L'ancien profil pilot ne générait qu'un parent par prompt et le classement
+mettait trop directement WeChat devant les autres métriques. Cela ne répondait
+pas à l'objectif : produire automatiquement, pour chaque prompt, un QR à la
+fois valide, fidèle au prompt et beau.
+
+Nouvelle politique
+------------------
+1. Plusieurs QR indépendants sont générés pour CHAQUE prompt.
+2. Un QR invalide ne peut jamais gagner grâce à son esthétique.
+3. Gate logiciel final :
+   - visual_guard_pass=true
+   - raster raw uniquement
+   - payload original exact avec qr-scanner-wechat
+   - au moins 34/37 presets exacts
+4. Dans le palier valide, score automatique par prompt :
+   - 40 % robustesse WeChat
+   - 25 % CLIPScore / respect du prompt
+   - 20 % HPSv2 / préférence visuelle
+   - 15 % CLIP-Aesthetic
+   - MER utilisé en départage et diagnostic
+5. Stage1 et scene-preserving restent visibles dans le dataset/notebook mais ne
+   peuvent pas être exportés comme QR finaux.
+6. Seuls stage2_raw et srmpgd_raw peuvent gagner.
+
+Inspiration du premier bon smoke
+--------------------------------
+La recette m0_balanced_public qui avait donné le parent brutaliste à 36/37 est
+utilisée comme ancre pour chaque prompt. Elle est comparée à cinq autres
+recettes pilot : paper-noise, scan-Q, aesthetic-public, scan-mid et aesthetic-Q.
+
+Volume réel du pilot
+--------------------
+- 8 prompts
+- 6 parents Stage1/Stage2 par prompt
+- 48 parents au total
+- 2 parents retenus automatiquement par prompt
+- 3 recettes SR-MPGD par parent
+- 48 trajectoires SR-MPGD
+- tous les checkpoints et latents conservés
+- un pipeline/by-prompt/<prompt-id>/FINAL-QR.png si le gate automatique passe
+
+Le profil full réalise 128 parents et 64 trajectoires SR-MPGD.
+
+Commande après commit/push/pull et déploiement
+----------------------------------------------
+PROOFTAG_E046_PROFILE=pilot \
+bash scripts/run-e046-controlled-campaign.sh
+
+Aucun choix manuel n'est nécessaire. WeChat vérifie automatiquement la validité
+logicielle, puis les métriques CLIP/HPS/Aesthetic choisissent le meilleur rendu
+pour chaque prompt.

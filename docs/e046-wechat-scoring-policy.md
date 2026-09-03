@@ -1,6 +1,6 @@
 # E046 — politique de score QR
 
-## Principal
+## Gate de validité automatique
 
 ```text
 engine = qr-scanner-wechat via qr-verify@0.2.0
@@ -19,9 +19,18 @@ wechat_repetitions
 wechat_engine
 ```
 
-## Secondaires
+## Objectifs visuels et sémantiques
 
-Les métriques suivantes sont diagnostiques ou contraintes :
+Après le gate WeChat, le gagnant de chaque prompt est choisi automatiquement avec :
+
+```text
+40 % robustesse WeChat
+25 % CLIPScore / respect du prompt
+20 % HPSv2
+15 % CLIP-Aesthetic
+```
+
+Les métriques suivantes restent aussi enregistrées comme diagnostics ou contraintes :
 
 ```text
 module_error_rate
@@ -36,7 +45,7 @@ saturation
 quiet-zone luminance/texture
 ```
 
-Aucun mélange de votes OpenCV/ZBar/ZXing n'est utilisé comme cible.
+Aucun mélange de votes OpenCV/ZBar/ZXing n'est utilisé. La beauté ne peut jamais compenser un QR qui échoue au gate WeChat.
 
 ## Vérité finale
 

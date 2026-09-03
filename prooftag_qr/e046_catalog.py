@@ -79,6 +79,7 @@ class CandidateSpec:
     prompt_id: str
     prompt_variant_index: int
     parent_recipe_id: str
+    replicate_index: int
     seed: int
     payload: str
     prompt: str
@@ -255,26 +256,48 @@ SRMPGD_RECIPES: tuple[SRMPGDRecipe, ...] = (
 
 
 PROFILE_SPECS: dict[str, dict[str, Any]] = {
+    # Two prompts × three parent recipes. This validates the tournament logic.
     "smoke": {
         "prompt_variant_indices": (0,),
         "prompt_limit": 2,
-        "selected_parent_count": 1,
+        "parent_recipe_ids": (
+            "m0_balanced_public",
+            "m2_scan_q",
+            "m3_aesthetic_public",
+        ),
+        "replicates_per_recipe": 1,
+        "selected_parents_per_prompt": 1,
         "srmpgd_recipe_ids": ("g250_r100_i04",),
     },
+    # Eight prompts × six genuinely different Stage1/Stage2 recipes. Two
+    # candidates per prompt then receive three SR-MPGD trajectories each.
     "pilot": {
         "prompt_variant_indices": (0,),
         "prompt_limit": 8,
-        "selected_parent_count": 4,
+        "parent_recipe_ids": (
+            "m0_balanced_public",
+            "m1_paper_noise",
+            "m2_scan_q",
+            "m3_aesthetic_public",
+            "m5_scan_mid",
+            "m6_aesthetic_q",
+        ),
+        "replicates_per_recipe": 1,
+        "selected_parents_per_prompt": 2,
         "srmpgd_recipe_ids": (
             "g250_r100_i04",
             "g500_r200_i08",
             "g1000_r150_i08",
         ),
     },
+    # Eight prompts × all eight masks/recipes × two deterministic seeds.
+    # This is 128 parents followed by 64 independent SR-MPGD trajectories.
     "full": {
-        "prompt_variant_indices": (0, 1, 2),
+        "prompt_variant_indices": (0,),
         "prompt_limit": 8,
-        "selected_parent_count": 8,
+        "parent_recipe_ids": tuple(recipe.id for recipe in PARENT_RECIPES),
+        "replicates_per_recipe": 2,
+        "selected_parents_per_prompt": 2,
         "srmpgd_recipe_ids": tuple(recipe.id for recipe in SRMPGD_RECIPES),
     },
 }
@@ -302,33 +325,46 @@ def srmpgd_recipe_by_id(recipe_id: str) -> SRMPGDRecipe:
 
 
 def build_candidates(profile: str) -> tuple[CandidateSpec, ...]:
+    """Create several independent parent generations for every prompt."""
     if profile not in PROFILE_SPECS:
         raise ValueError(f"unknown E046 profile: {profile}")
+
     spec = PROFILE_SPECS[profile]
     candidates: list[CandidateSpec] = []
     prompts = PROMPTS[: int(spec["prompt_limit"])]
+    recipe_ids = tuple(str(value) for value in spec["parent_recipe_ids"])
+    replicates = int(spec["replicates_per_recipe"])
+
     for prompt_index, prompt in enumerate(prompts):
         for variant_index in spec["prompt_variant_indices"]:
-            recipe_index = (prompt_index * 3 + int(variant_index) * 5) % len(PARENT_RECIPES)
-            recipe = PARENT_RECIPES[recipe_index]
-            seed = 72_046 + prompt_index * 1_009 + int(variant_index) * 101 + recipe_index * 17
-            candidate_id = (
-                f"c{len(candidates) + 1:03d}_{prompt.id}_v{int(variant_index)}_"
-                f"{recipe.id}"
-            )
-            candidates.append(
-                CandidateSpec(
-                    id=candidate_id,
-                    prompt_id=prompt.id,
-                    prompt_variant_index=int(variant_index),
-                    parent_recipe_id=recipe.id,
-                    seed=seed,
-                    payload=prompt.payload,
-                    prompt=prompt.variants[int(variant_index)],
-                    prompt_family=prompt.family,
-                    quiet_zone_hint=prompt.quiet_zone_hint,
-                )
-            )
+            for recipe_position, recipe_id in enumerate(recipe_ids):
+                recipe = parent_recipe_by_id(recipe_id)
+                for replicate_index in range(replicates):
+                    seed = (
+                        72_046
+                        + prompt_index * 100_003
+                        + int(variant_index) * 10_007
+                        + recipe_position * 1_009
+                        + replicate_index * 101
+                    )
+                    candidate_id = (
+                        f"c{len(candidates) + 1:04d}_{prompt.id}_"
+                        f"v{int(variant_index)}_{recipe.id}_s{replicate_index}"
+                    )
+                    candidates.append(
+                        CandidateSpec(
+                            id=candidate_id,
+                            prompt_id=prompt.id,
+                            prompt_variant_index=int(variant_index),
+                            parent_recipe_id=recipe.id,
+                            replicate_index=replicate_index,
+                            seed=seed,
+                            payload=prompt.payload,
+                            prompt=prompt.variants[int(variant_index)],
+                            prompt_family=prompt.family,
+                            quiet_zone_hint=prompt.quiet_zone_hint,
+                        )
+                    )
     return tuple(candidates)
 
 
@@ -359,7 +395,49 @@ def scientific_plan(
         "candidates": [asdict(candidate) for candidate in candidates],
         "parent_recipes": [asdict(recipe) for recipe in PARENT_RECIPES],
         "srmpgd_recipes": selected_srmpgd,
-        "selected_parent_count": int(profile_spec["selected_parent_count"]),
+        "expected_parent_count": len(candidates),
+        "expected_prompt_count": (
+            int(profile_spec["prompt_limit"])
+            * len(tuple(profile_spec["prompt_variant_indices"]))
+        ),
+        "selected_parents_per_prompt": int(
+            profile_spec["selected_parents_per_prompt"]
+        ),
+        "selected_parent_count": (
+            int(profile_spec["selected_parents_per_prompt"])
+            * int(profile_spec["prompt_limit"])
+            * len(tuple(profile_spec["prompt_variant_indices"]))
+        ),
+        "expected_refinement_count": (
+            int(profile_spec["selected_parents_per_prompt"])
+            * int(profile_spec["prompt_limit"])
+            * len(tuple(profile_spec["prompt_variant_indices"]))
+            * len(selected_srmpgd)
+        ),
+        "validity_policy": {
+            "final_original_exact_required": True,
+            "final_minimum_exact_presets": 34,
+            "ideal_minimum_exact_presets": 37,
+            "refinement_minimum_exact_presets": 16,
+            "meaning": (
+                "WeChat is a hard software-validity gate. Prompt alignment and "
+                "aesthetic scores choose the best-looking candidate inside each "
+                "validity tier; beauty can never compensate for an invalid QR."
+            ),
+        },
+        "multiobjective_policy": {
+            "within_prompt_normalization": "min-max; neutral 0.5 for constants",
+            "weights": {
+                "wechat_robustness": 0.40,
+                "clip_prompt_alignment": 0.25,
+                "hps_human_preference": 0.20,
+                "clip_aesthetic": 0.15,
+            },
+            "module_error_rate": "ascending tie-breaker and diagnostic",
+            "stage1_final_eligible": False,
+            "scene_preserving_final_eligible": False,
+            "raw_stage2_and_raw_srmpgd_only": True,
+        },
         "geometry": {
             "qr_version": QR_VERSION,
             "qr_module_size": QR_MODULE_SIZE,
@@ -379,13 +457,13 @@ def scientific_plan(
         },
         "objective_priority": [
             "visual_guard_pass",
+            "software_validity_tier",
+            "multiobjective_prompt_score",
             "wechat_exact_presets",
-            "wechat_original_exact",
-            "raw_artwork_when_wechat_tied",
-            "scene_preserving_quiet_zone_pass",
-            "clip_aesthetic",
+            "clip_prompt_alignment",
             "hpsv2_1",
-            "clip_score",
+            "clip_aesthetic",
+            "module_error_rate",
         ],
         "other_decoders_role": "diagnostic_only_not_in_objective",
         "production_ready": False,
@@ -415,7 +493,16 @@ def validate_catalog() -> None:
     assert all(prompt.payload.startswith("https://ptag.io/") for prompt in PROMPTS)
     assert set(PROFILE_SPECS) == {"smoke", "pilot", "full"}
     for profile, spec in PROFILE_SPECS.items():
-        assert spec["selected_parent_count"] <= len(build_candidates(profile))
+        assert int(spec["selected_parents_per_prompt"]) >= 1
+        assert int(spec["replicates_per_recipe"]) >= 1
+        assert len(spec["parent_recipe_ids"]) >= 1
+        assert (
+            int(spec["selected_parents_per_prompt"])
+            * int(spec["prompt_limit"])
+            <= len(build_candidates(profile))
+        )
+        for parent_recipe_id in spec["parent_recipe_ids"]:
+            parent_recipe_by_id(parent_recipe_id)
         for recipe_id in spec["srmpgd_recipe_ids"]:
             srmpgd_recipe_by_id(recipe_id)
 

@@ -75,6 +75,10 @@ for column, default in (
     ("row_id", None),
     ("pixel_duplicate", False),
     ("projection_was_active", False),
+    ("software_validity_tier", 0),
+    ("software_valid_final", False),
+    ("prompt_visual_score", np.nan),
+    ("multiobjective_prompt_score", np.nan),
 ):
     if column not in df.columns:
         df[column] = default
@@ -96,10 +100,14 @@ Cette campagne génère un **nouveau dataset propre**. Elle ne recycle pas les
 
 ## Règles scientifiques
 
-- vérité QR logicielle principale : **qr-scanner-wechat via qr-verify@0.2.0** ;
-- payload exact uniquement ;
-- 37 presets, trois répétitions conservatrices ;
-- OpenCV, ZBar et ZXing ne votent pas dans le score principal ;
+- validité QR logicielle : **qr-scanner-wechat via qr-verify@0.2.0** ;
+- payload exact uniquement, 37 presets, trois répétitions conservatrices ;
+- un QR invalide ne peut jamais gagner grâce à son esthétique ;
+- à l'intérieur d'un palier WeChat valide, sélection automatique multiobjectif :
+  **40 % robustesse WeChat + 25 % CLIPScore/prompt + 20 % HPSv2 +
+  15 % CLIP-Aesthetic** ;
+- OpenCV, ZBar et ZXing restent diagnostiques et ne votent pas ;
+- plusieurs recettes et seeds sont générées pour chaque prompt ;
 - raster brut toujours conservé ;
 - aucune bordure blanche/uniforme éligible comme sortie finale ;
 - variante `scene_preserving` : pas de crop et cœur 580×580 octet-identique ;
@@ -182,7 +190,8 @@ display({
 candidate_df = pd.DataFrame(plan["candidates"])
 display(candidate_df[[
     "id", "prompt_id", "prompt_family", "prompt_variant_index",
-    "parent_recipe_id", "seed", "payload", "quiet_zone_hint", "prompt"
+    "parent_recipe_id", "replicate_index", "seed", "payload",
+    "quiet_zone_hint", "prompt"
 ]].style.set_properties(subset=["prompt", "quiet_zone_hint"], **{"white-space": "normal"}))
 """
     ),
@@ -361,7 +370,57 @@ if not df.empty:
     display(by_recipe)
 """
     ),
-    md("## 8. Compromis QR / esthétique"),
+    md("## 8. Tournoi automatique multiobjectif par prompt"),
+    code(
+        r"""
+if not df.empty and "multiobjective_prompt_score" in df:
+    tournament = df[
+        (df["eligible_final"] == True)
+        & (df["quiet_zone_variant"] == "raw")
+    ].copy()
+    columns = [
+        "prompt_id", "candidate_id", "source_kind", "parent_recipe_id",
+        "srmpgd_recipe_id", "iteration", "software_validity_tier",
+        "software_valid_final", "wechat_exact_presets",
+        "clip_score", "hpsv2_1", "clip_aesthetic",
+        "prompt_visual_score", "multiobjective_prompt_score",
+        "module_error_rate", "image_path",
+    ]
+    display(
+        tournament.sort_values(
+            [
+                "prompt_id", "software_validity_tier",
+                "multiobjective_prompt_score",
+            ],
+            ascending=[True, False, False],
+        ).reindex(columns=columns)
+    )
+else:
+    display(Markdown("Tournoi disponible après agrégation."))
+"""
+    ),
+    code(
+        r"""
+if not df.empty and "multiobjective_prompt_score" in df:
+    valid_plot = df[df["eligible_final"] == True].copy()
+    if not valid_plot.empty:
+        plt.figure(figsize=(11, 7))
+        scatter = plt.scatter(
+            valid_plot["clip_score"],
+            valid_plot["wechat_exact_presets"],
+            s=60 + 180 * valid_plot["multiobjective_prompt_score"].fillna(0),
+            c=valid_plot["prompt_visual_score"],
+            alpha=0.65,
+        )
+        plt.xlabel("CLIPScore — respect du prompt")
+        plt.ylabel("WeChat exact / 37")
+        plt.title("Validité d'abord, beauté et prompt dans chaque palier")
+        plt.colorbar(scatter, label="Score visuel prompt/HPS/AES")
+        plt.tight_layout()
+        plt.show()
+"""
+    ),
+    md("## 9. Compromis QR / esthétique"),
     code(
         r"""
 if not df.empty:
@@ -421,7 +480,7 @@ if not df.empty:
     plt.show()
 """
     ),
-    md("## 9. Quiet zone : brut contre scene-preserving"),
+    md("## 10. Quiet zone : brut contre scene-preserving"),
     code(
         r"""
 if not df.empty:
@@ -481,7 +540,7 @@ l'œuvre, conserve les couleurs à basse fréquence, lisse les détails locaux e
 éclaircit sans crop. Le cœur QR doit garder exactement le même hash.
 """
     ),
-    md("## 10. SR-MPGD : trajectoires, gamma, projection et no-op"),
+    md("## 11. SR-MPGD : trajectoires, gamma, projection et no-op"),
     code(
         r"""
 if not df.empty:
@@ -532,7 +591,7 @@ if not df.empty and "pixel_duplicate" in df:
     display(duplicate)
 """
     ),
-    md("## 11. Gardes visuelles et erreurs techniques"),
+    md("## 12. Gardes visuelles et erreurs techniques"),
     code(
         r"""
 if not df.empty:
@@ -551,7 +610,7 @@ for path in failure_paths[:50]:
     display(json.loads(path.read_text(encoding="utf-8")))
 """
     ),
-    md("## 12. Pareto et gagnants"),
+    md("## 13. Pareto et gagnants"),
     code(
         r"""
 pareto_path = R / "dataset/pareto-front.json"
@@ -559,8 +618,10 @@ if pareto_path.is_file():
     pareto_df = pd.DataFrame(json.loads(pareto_path.read_text(encoding="utf-8")))
     pareto_columns = [
         "candidate_id", "source_kind", "srmpgd_recipe_id", "variant",
-        "iteration", "gamma", "wechat_exact_presets",
-        "wechat_original_exact", "clip_aesthetic", "hpsv2_1",
+        "iteration", "gamma", "software_validity_tier",
+        "software_valid_final", "wechat_exact_presets",
+        "wechat_original_exact", "multiobjective_prompt_score",
+        "prompt_visual_score", "clip_aesthetic", "hpsv2_1",
         "clip_score", "lpips", "image_path"
     ]
     display(pareto_df.reindex(columns=pareto_columns))
@@ -575,13 +636,14 @@ if best_path.is_file():
     best_df = pd.DataFrame(json.loads(best_path.read_text(encoding="utf-8")))
     best_columns = [
         "prompt_id", "candidate_id", "source_kind", "variant",
-        "srmpgd_recipe_id", "iteration", "wechat_exact_presets",
-        "clip_aesthetic", "hpsv2_1", "image_path"
+        "srmpgd_recipe_id", "iteration", "software_validity_tier",
+        "wechat_exact_presets", "multiobjective_prompt_score",
+        "clip_score", "hpsv2_1", "clip_aesthetic", "image_path"
     ]
     display(best_df.reindex(columns=best_columns))
 """
     ),
-    md("## 13. Galerie des meilleurs candidats"),
+    md("## 14. Galerie des meilleurs candidats"),
     code(
         r"""
 def show_gallery(rows, title, columns=4, limit=24):
@@ -600,7 +662,11 @@ def show_gallery(rows, title, columns=4, limit=24):
             axis.imshow(PILImage.open(path).convert("RGB"))
         axis.set_title(
             f"{row['prompt_id']}\n{row['source_kind']} {row['variant']}\n"
-            f"WeChat {row['wechat_exact_presets']}/37",
+            f"WeChat {row['wechat_exact_presets']}/37 · "
+            f"Multi {float(row.get('multiobjective_prompt_score') or 0):.3f}\n"
+            f"CLIP {float(row.get('clip_score') or 0):.3f} · "
+            f"HPS {float(row.get('hpsv2_1') or 0):.3f} · "
+            f"AES {float(row.get('clip_aesthetic') or 0):.2f}",
             fontsize=9,
         )
         axis.axis("off")
@@ -623,7 +689,7 @@ elif not df.empty:
     show_gallery(fallback, "Meilleurs candidats partiels")
 """
     ),
-    md("## 14. Pipeline complète du gagnant"),
+    md("## 15. Pipeline complète et QR final par prompt"),
     code(
         r"""
 if verdict is None:
@@ -651,6 +717,12 @@ else:
     ),
     code(
         r"""
+by_prompt_root = R / "pipeline/by-prompt"
+if by_prompt_root.is_dir():
+    for final_path in sorted(by_prompt_root.glob("*/FINAL-QR.png")):
+        display(Markdown(f"### Final automatique — {final_path.parent.name}"))
+        display(Image(filename=str(final_path)))
+
 for name in (
     "best-by-prompt-contact-sheet.png",
     "pareto-contact-sheet.png",
@@ -662,7 +734,7 @@ for name in (
         display(Image(filename=str(path)))
 """
     ),
-    md("## 15. Préparation E047 et téléphone"),
+    md("## 16. Préparation E047 et téléphone"),
     code(
         r"""
 if verdict is not None:

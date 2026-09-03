@@ -23,7 +23,8 @@ def test_main_notebook_is_visual_and_complete():
         "WeChat exacte / 37",
         "Quiet zone : brut contre scene-preserving",
         "SR-MPGD : trajectoires",
-        "Pipeline complète du gagnant",
+        "Pipeline complète et QR final par prompt",
+        "Tournoi automatique multiobjectif par prompt",
         "Préparation E047",
     ):
         assert phrase in source

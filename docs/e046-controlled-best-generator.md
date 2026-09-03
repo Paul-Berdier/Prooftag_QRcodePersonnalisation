@@ -27,76 +27,92 @@ Si HPS ou QR-Verify échoue, les générations GPU déjà promues restent intact
 Si un Job GPU échoue, sa tentative reste sous `attempts/` et la relance saute
 toutes les tâches possédant déjà `GENERATION_COMPLETE.json`.
 
-## Source de vérité QR logicielle
+## Sélection automatique : valide d'abord, beau ensuite
 
-Le pont du projet utilise :
+E046 ne réduit plus le problème à un score unique. Pour chaque prompt, plusieurs
+QR sont générés avec des seeds, masques, paramètres Stage 1/Stage 2 et recettes
+SR-MPGD différents.
 
-```javascript
-import { scan } from "qr-scanner-wechat"
-```
-
-dans `qr_verify_bridge/bridge.mjs`.
-
-Le label principal est donc uniquement :
+La sélection automatique se fait en deux niveaux :
 
 ```text
-wechat_exact_presets / 37
-wechat_exact_rate
-wechat_original_exact
+1. GATE DE VALIDITÉ LOGICIELLE
+   - garde visuelle passée
+   - raster brut uniquement
+   - payload exact sur le preset original WeChat
+   - au moins 34/37 presets exacts
+
+2. CLASSEMENT MULTIOBJECTIF DANS LE PALIER VALIDE
+   - 40 % robustesse WeChat /37
+   - 25 % CLIPScore : respect du prompt
+   - 20 % HPSv2 : préférence visuelle
+   - 15 % CLIP-Aesthetic : esthétique globale
+   - MER croissant utilisé en départage/diagnostic
 ```
 
-Le payload doit être exact. Les autres décodeurs ne contribuent pas au score
-principal. Le téléphone reste la vérité produit finale et n'est pas considéré
-comme disponible dans E046.
+Un QR très beau mais invalide ne peut jamais gagner. À l'inverse, parmi les QR
+valides, celui qui correspond le mieux au prompt et obtient les meilleurs scores
+visuels gagne automatiquement. Aucune validation manuelle n'intervient dans la
+sélection.
+
+Le pont du projet utilise `qr-scanner-wechat` via `qr-verify@0.2.0`, avec payload
+exact, 37 presets et trois répétitions conservatrices. OpenCV, ZBar et ZXing
+restent des diagnostics et ne votent pas.
+
+La recette `m0_balanced_public`, qui a donné le premier parent smoke à 36/37, est
+réutilisée comme ancre pour **chaque prompt**, puis comparée à des recettes plus
+scan-oriented, paper-noise et aesthetic-oriented.
 
 ## Profils
 
-### smoke
+### smoke tournoi
 
-- 2 parents ;
-- 1 parent sélectionné ;
-- 1 recette SR-MPGD ;
-- à lancer obligatoirement avant `pilot`.
+- 2 prompts ;
+- 3 générations Stage1/Stage2 par prompt ;
+- 6 parents au total ;
+- 1 parent sélectionné par prompt ;
+- 2 trajectoires SR-MPGD ;
+- valide la logique de meilleur QR **par prompt**.
 
-### pilot
+### pilot — campagne réelle
 
 - 8 prompts ;
-- 8 masques QR ;
-- 8 parents ;
-- 4 parents sélectionnés ;
-- 3 recettes SR-MPGD ;
-- 12 trajectoires SR-MPGD ;
-- tous les checkpoints conservés.
+- 6 recettes Stage1/Stage2 par prompt ;
+- 48 parents ;
+- 2 parents sélectionnés par prompt ;
+- 3 recettes SR-MPGD par parent ;
+- 48 trajectoires SR-MPGD ;
+- un `FINAL-QR.png` automatique par prompt si le gate WeChat est satisfait.
 
-### full
+### full — recherche profonde
 
-- 8 prompts × 3 formulations = 24 parents ;
-- 8 parents sélectionnés ;
-- 4 recettes SR-MPGD ;
-- 32 trajectoires.
+- 8 prompts ;
+- 8 recettes/masques × 2 seeds par prompt ;
+- 128 parents ;
+- 2 parents sélectionnés par prompt ;
+- 4 recettes SR-MPGD par parent ;
+- 64 trajectoires SR-MPGD.
 
 Le profil est intégré au hash du plan. Une relance doit réutiliser le même
 `PROOFTAG_E046_PROFILE`.
 
+## Sorties finales par prompt
+
+```text
+pipeline/by-prompt/<prompt-id>/FINAL-QR.png
+pipeline/by-prompt/<prompt-id>/FINAL-metadata.json
+```
+
+Si aucun candidat ne satisfait automatiquement le gate de validité, E046 écrit
+`NO-VALID-FINAL.json` pour ce prompt au lieu de présenter un QR invalide comme
+un résultat final. Le verdict liste alors les prompts à approfondir.
+
 ## Espace couvert
 
-Le pilot couvre :
-
-- huit familles visuelles ;
-- huit masques QR légaux ;
-- ECC M et Q ;
-- plusieurs seeds ;
-- Stage 1 : steps, CFG, ControlNet, control start/end ;
-- Stage 2 : `public_random` et `paper_stage1_noise`, strength, steps,
-  ControlNet scale, poids SRG et perceptuel ;
-- SR-MPGD : gamma 250/500/1000, rayons .10/.15/.20, 4 ou 8 itérations,
-  projection et backtracking ;
-- brut vs composition périphérique `scene_preserving`.
-
-La première campagne verrouille version 3, modules de 20 px, padding 78 px et
-canvas 736 px pour ne pas mélanger une modification géométrique avec la recherche
-de paramètres. Ces axes seront ouverts dans une campagne ultérieure une fois le
-dataset E046 audité.
+Le pilot couvre huit familles visuelles, six recettes distinctes par prompt,
+les initialisations `public_random` et `paper_stage1_noise`, ECC M/Q, plusieurs
+masques, paramètres Stage1/Stage2 et trois régimes SR-MPGD (gamma 250/500/1000,
+rayons 0.10/0.15/0.20, 4 ou 8 itérations).
 
 ## Quiet zone sans effacement uniforme
 
@@ -149,21 +165,19 @@ dark ratio et hash du cœur.
     └── COMPLETE.json
 ```
 
-## Classement
+## Classement et Pareto
 
-On filtre d'abord les gardes visuelles. Puis le classement maximise :
+Le classement est calculé séparément pour chaque prompt. La validité WeChat est
+un gate dur, puis les métriques WeChat, CLIPScore, HPSv2 et CLIP-Aesthetic sont
+normalisées dans le prompt et combinées selon les poids enregistrés dans
+`plan.json`. Le front de Pareto ne contient que des candidats logiciels valides.
 
-1. WeChat exact / 37 ;
-2. exactitude du preset original ;
-3. raster brut si le score WeChat est identique ;
-4. sécurité de la composition périphérique ;
-5. CLIP-Aesthetic ;
-6. HPSv2 ;
-7. CLIPScore ;
-8. baisse de MER en diagnostic.
+Stage1 et les variantes `scene_preserving` restent dans le dataset pour l'analyse,
+mais ne peuvent pas devenir des sorties finales. Seuls `stage2_raw` et les
+checkpoints `srmpgd_raw` sont éligibles.
 
-Le front de Pareto est également exporté. Aucun gagnant n'est déclaré
-`production_ready`.
+Aucun gagnant n'est déclaré `production_ready`; cette mention est distincte de la
+validité automatique WeChat utilisée ici.
 
 ## Échantillon téléphone
 

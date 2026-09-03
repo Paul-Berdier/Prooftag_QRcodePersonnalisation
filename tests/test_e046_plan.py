@@ -42,7 +42,7 @@ def test_plan_requires_and_records_e045_contract(tmp_path: Path):
     assert plan_dir.is_dir()
     assert loaded["e045_plan_id"] == "288024247c39d585"
     assert loaded["e045_manifest_sha256"] == "c" * 64
-    assert len(loaded["candidates"]) == 2
+    assert len(loaded["candidates"]) == 6
     latest = json.loads((output / "LATEST.json").read_text(encoding="utf-8"))
     assert latest["status"] == "planned"
 
