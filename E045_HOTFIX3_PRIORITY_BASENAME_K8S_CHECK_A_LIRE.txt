@@ -1,0 +1,29 @@
+E045 HOTFIX 3 — priorité raster par nom de fichier + contrôle notebook k3s
+
+Diagnostic du second run :
+- le correctif de classification fonctionne : max_files est BLOCKED,
+  deterministic et non retryable ;
+- mais l'inventaire sélectionne encore > 200000 fichiers.
+
+Cause précise :
+`_generic_artifact_image_is_priority()` cherchait les tokens de priorité
+(stage1/stage2/srmpgd/...) dans `path.as_posix()`, donc dans le chemin complet.
+Un dossier comme `/data/artifacts/.../stage2/frames/` rendait alors chaque
+`frame-000001.png` prioritaire. Le filtre était donc largement neutralisé.
+
+Correction :
+- tokens de priorité évalués uniquement sur `path.name` ;
+- parent `stage2` ou `srmpgd` => aucune promotion automatique ;
+- fichier explicitement nommé `winner-stage2-final.png` => conservé ;
+- image différée référencée par CSV/JSON => toujours réindexée/hashée à la demande ;
+- ajout du compteur `generic_artifact_priority_images`.
+
+Résilience déploiement :
+- le dernier contrôle notebook ne fait plus `docker run` sur l'hôte ;
+- il exécute Python dans le Deployment notebook k3s déjà prêt ;
+- le timeout du socket `/run/containerd/containerd.sock` ne peut donc plus
+  produire un faux échec après un déploiement réussi.
+
+Aucune suppression /data.
+Aucun paramètre scientifique de génération/entraînement modifié.
+Conserver les anciens plans 43f4c6... et 5ab5707... comme traces des échecs.

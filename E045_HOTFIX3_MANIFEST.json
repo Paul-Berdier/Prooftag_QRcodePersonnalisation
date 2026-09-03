@@ -1,0 +1,50 @@
+{
+  "hotfix": "e045-priority-basename-k8s-check-v1",
+  "base_commit_observed": "4c059d9f655db0a0460ebd8eb17ff16755f00112",
+  "observed_failed_plan": "5ab5707f1c731d20",
+  "root_cause": "priority tokens were matched against the complete artifact path; parent directories such as stage2/srmpgd promoted every descendant raster",
+  "scientific_parameters_changed": false,
+  "generation_training_changed": false,
+  "persistent_data_deleted": false,
+  "validation": {
+    "bash_syntax": "passed",
+    "pytest": "\u001b[32m\u001b[32m\u001b[1m26 passed\u001b[0m\u001b[32m in 0.22s\u001b[0m\u001b[0m"
+  },
+  "files": [
+    {
+      "path": "E045_HOTFIX3_PRIORITY_BASENAME_K8S_CHECK_A_LIRE.txt",
+      "size_bytes": 1431,
+      "sha256": "a0fabcce848ae49979e160c6f2e40f6b270c599a09d4c207d2701f6b6c6b0c7a"
+    },
+    {
+      "path": "prooftag_qr/e045_foundation.py",
+      "size_bytes": 75796,
+      "sha256": "bec5701a9d0006670defe8961ba98f1540d368d8ed3c9ef8c9eb63027ba03cc6"
+    },
+    {
+      "path": "scripts/deploy-e045-notebook.sh",
+      "size_bytes": 5090,
+      "sha256": "d4f49efbb973833778d865de41aaefbd76e8a292accab4e27cdb56c082ad0883"
+    },
+    {
+      "path": "tests/test_e045_deployment.py",
+      "size_bytes": 1438,
+      "sha256": "fb95e3908ae900584545260b156f77d4c9b95688f0f4ddc27bd081c42a1a3eaa"
+    },
+    {
+      "path": "tests/test_e045_host_python.py",
+      "size_bytes": 676,
+      "sha256": "c29a15fd2f631bdd8a8711ee444f279b50a2aef8bc6c61e686ade588141770f8"
+    },
+    {
+      "path": "tests/test_e045_hotfix3.py",
+      "size_bytes": 449,
+      "sha256": "cc671fff9652e5f2ee59f6f052e20502237cc0e7516f9ca0b8b0ba9862663dea"
+    },
+    {
+      "path": "tests/test_e045_smart_inventory.py",
+      "size_bytes": 4995,
+      "sha256": "d2738b8efb76397f72ce7c494f828d48f7dcdaf33b7558fb880009fb838d6614"
+    }
+  ]
+}

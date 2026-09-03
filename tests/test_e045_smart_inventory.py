@@ -101,3 +101,42 @@ def test_max_files_is_configuration_error_not_transient_retry():
     assert decision.kind == "deterministic"
     assert decision.retryable is False
     assert decision.operator_action_required is True
+
+def test_priority_token_in_parent_directory_does_not_promote_all_frames(tmp_path: Path):
+    """Régression du run réel 4c059d9: le dossier stage2 promouvait tous ses PNG."""
+    cfg = _config(tmp_path)
+    generic = cfg.data_root / "artifacts" / "some-run" / "stage2" / "frames"
+    generic.mkdir(parents=True)
+
+    ordinary = generic / "frame-000001.png"
+    explicit = generic / "winner-stage2-final.png"
+    Image.new("RGB", (16, 16), "white").save(ordinary)
+    Image.new("RGB", (16, 16), "white").save(explicit)
+
+    stats = {}
+    selected = {
+        path.relative_to(cfg.data_root).as_posix()
+        for path in _walk_relevant_files(cfg, selection_stats=stats)
+    }
+
+    assert "artifacts/some-run/stage2/frames/frame-000001.png" not in selected
+    assert "artifacts/some-run/stage2/frames/winner-stage2-final.png" in selected
+    assert stats["generic_artifact_images_deferred"] == 1
+    assert stats["generic_artifact_priority_images"] == 1
+
+
+def test_priority_token_in_srmpgd_parent_directory_does_not_promote_frame(tmp_path: Path):
+    cfg = _config(tmp_path)
+    generic = cfg.data_root / "artifacts" / "srmpgd" / "trajectory"
+    generic.mkdir(parents=True)
+
+    image = generic / "000123.png"
+    Image.new("RGB", (16, 16), "white").save(image)
+
+    stats = {}
+    selected = list(_walk_relevant_files(cfg, selection_stats=stats))
+
+    assert image not in selected
+    assert stats["generic_artifact_images_deferred"] == 1
+    assert stats["generic_artifact_priority_images"] == 0
+

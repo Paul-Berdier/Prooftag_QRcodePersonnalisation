@@ -14,4 +14,5 @@ def test_e045_deploy_selects_python3_on_debian_host():
 def test_container_python_calls_are_not_rewritten_to_host_python():
     text = (ROOT / "scripts/deploy-e045-notebook.sh").read_text(encoding="utf-8")
     assert "python - <<'PY'" in text
-    assert 'docker run --rm -i --entrypoint python' in text
+    assert 'deployment/"$notebook_deployment"' in text
+    assert '-c "$notebook_container" --' in text

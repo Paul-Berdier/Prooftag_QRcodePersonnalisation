@@ -29,6 +29,9 @@ def test_scripts_never_delete_persistent_e045_data_or_follow_logs():
     assert "Aucun résultat /data n'a été supprimé" in deploy
 
 
-def test_notebook_image_runtime_check_receives_heredoc_on_stdin():
+def test_notebook_runtime_check_receives_heredoc_in_kubernetes():
     deploy = (ROOT / "scripts/deploy-e045-notebook.sh").read_text(encoding="utf-8")
-    assert 'docker run --rm -i --entrypoint python "$notebook_image" -' in deploy
+    assert 'deployment/"$notebook_deployment"' in deploy
+    assert '-c "$notebook_container" --' in deploy
+    assert "python - <<'PY'" in deploy
+    assert 'docker run --rm -i --entrypoint python "$notebook_image"' not in deploy

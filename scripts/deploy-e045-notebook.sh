@@ -11,6 +11,7 @@ notebook="47_e045_foundation_and_resilience.ipynb"
 namespace="${PROOFTAG_QR_NAMESPACE:-qr-core}"
 api_deployment="${PROOFTAG_QR_DEPLOYMENT:-prooftag-qr}"
 notebook_deployment="${PROOFTAG_QR_NOTEBOOK_DEPLOYMENT:-prooftag-qr-notebook}"
+notebook_container="${PROOFTAG_QR_NOTEBOOK_CONTAINER:-notebook}"
 kubectl_bin="${KUBECTL:-kubectl}"
 
 host_python="${PROOFTAG_HOST_PYTHON:-}"
@@ -116,14 +117,21 @@ PY
 fi
 
 if [[ "$action" == "notebook" || "$action" == "all" ]]; then
-  docker run --rm -i --entrypoint python "$notebook_image" - <<'PY'
+  # Le Deployment notebook vient déjà d'être mis à jour et vérifié. Le dernier
+  # contrôle se fait dans k3s, pas via `docker run`, afin qu'une indisponibilité
+  # ponctuelle du socket containerd de l'hôte ne transforme pas un déploiement
+  # réussi en faux échec.
+  "$kubectl_bin" rollout status deployment/"$notebook_deployment"     -n "$namespace" --timeout=1200s
+  "$kubectl_bin" exec -i -n "$namespace"     deployment/"$notebook_deployment"     -c "$notebook_container" --     python - <<'PY'
 from pathlib import Path
 from prooftag_qr.e045_registry import EXPERIMENTS
 from prooftag_qr.e045_parameter_space import PARAMETERS
-assert Path("/workspace/notebooks/47_e045_foundation_and_resilience.ipynb").is_file()
+
+notebook = Path("/workspace/notebooks/47_e045_foundation_and_resilience.ipynb")
+assert notebook.is_file(), notebook
 assert len(EXPERIMENTS) == 45
 assert len(PARAMETERS) >= 90
-print("Image notebook E045 OK:", len(EXPERIMENTS), len(PARAMETERS))
+print("Runtime notebook E045 OK:", notebook, len(EXPERIMENTS), len(PARAMETERS))
 PY
 fi
 

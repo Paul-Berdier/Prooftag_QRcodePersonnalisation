@@ -417,8 +417,23 @@ def _is_generic_artifact_image(path: Path, data_root: Path) -> bool:
 
 
 def _generic_artifact_image_is_priority(path: Path) -> bool:
-    lower = path.as_posix().lower()
-    return any(token in lower for token in GENERIC_ARTIFACT_PRIORITY_IMAGE_TOKENS)
+    """Priorité uniquement explicite dans le nom du fichier.
+
+    Ne jamais inspecter le chemin complet ici : des répertoires tels que
+    ``artifacts/.../stage2/...`` ou ``.../srmpgd/...`` peuvent contenir des
+    dizaines de milliers de frames intermédiaires. Regarder ``as_posix()``
+    transformait alors chaque PNG descendant en image prioritaire et annulait
+    pratiquement tout le filtrage E045.
+
+    Une image générique non prioritaire reste récupérable : si un CSV/JSON
+    d'observation la référence, `_ensure_referenced_artifact` l'indexe à la
+    demande pendant l'extraction des observations.
+    """
+    filename = path.name.lower()
+    return any(
+        token in filename
+        for token in GENERIC_ARTIFACT_PRIORITY_IMAGE_TOKENS
+    )
 
 
 def _walk_relevant_files(
@@ -442,6 +457,7 @@ def _walk_relevant_files(
     stats.setdefault("discovered_allowed_files", 0)
     stats.setdefault("selected_files", 0)
     stats.setdefault("generic_artifact_images_deferred", 0)
+    stats.setdefault("generic_artifact_priority_images", 0)
     stats.setdefault("deferred_by_extension", {})
 
     for current, directories, files in os.walk(data_root):
@@ -467,6 +483,7 @@ def _walk_relevant_files(
                     deferred = stats["deferred_by_extension"]
                     deferred[extension] = int(deferred.get(extension, 0)) + 1
                     continue
+                stats["generic_artifact_priority_images"] += 1
 
             stats["selected_files"] += 1
             yield path
