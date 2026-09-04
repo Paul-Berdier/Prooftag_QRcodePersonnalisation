@@ -1,0 +1,36 @@
+{
+  "patch": "E046 terminal SRL fidelity rescue",
+  "base_commit_expected": "258a9fc8b81a79472f14c5bdab4dc2bfb911b207",
+  "purpose": "Continue the existing E046 pilot after a recipe-specific official-SRL fidelity mismatch, without loosening tolerance or regenerating successes.",
+  "terminal_error": "local upstream SRL port diverged from the pinned official class",
+  "scientific_policy": {
+    "loosen_srl_tolerance": false,
+    "retry_same_terminal_branch": false,
+    "quarantine_unusable_branch": true,
+    "continue_other_refinements": true,
+    "aggregate_successful_tasks": true
+  },
+  "persistent_data_deleted": false,
+  "files": [
+    {
+      "path": "docs/e046-terminal-srl-rescue.md",
+      "size_bytes": 1506,
+      "sha256": "293e667750615b0cd16686d718d4e2d927d8f75787c3baafec3737e452654d69"
+    },
+    {
+      "path": "scripts/resume-e046-terminal-srl.sh",
+      "size_bytes": 16137,
+      "sha256": "6f6a56b21c63d097b679b16a6b6e663bbf97dda734d5b1344d6f2d18cc210ced"
+    },
+    {
+      "path": "tests/test_e046_terminal_srl_rescue.py",
+      "size_bytes": 1116,
+      "sha256": "da893e21484a7eaeb308f92e9526f03132b68f25875d94f424872f5cf8435f7a"
+    }
+  ],
+  "validation": {
+    "bash_syntax": "passed",
+    "static_contract_test": "included",
+    "runtime": "to be executed on pcIA against the existing plan"
+  }
+}
