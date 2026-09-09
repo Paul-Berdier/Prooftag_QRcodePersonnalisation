@@ -208,6 +208,12 @@ bash scripts/deploy-e046-large-dataset.sh check
 bash scripts/deploy-e046-large-dataset.sh deploy
 ```
 
+Sur le cluster K3s local, `status.containerStatuses.imageID` peut être rendu soit sous la forme
+OCI `dépôt@sha256:…`, soit comme le seul digest de configuration `sha256:…` après un import direct.
+Le second format n'est accepté que s'il est strictement égal au digest enregistré au build. Les
+Jobs emploient alors le tag propre au commit déjà importé avec `imagePullPolicy: Never`, et le
+processus GPU compare en plus `/app/prooftag-build-commit.txt` au commit gelé dans le plan.
+
 Après déploiement, créer seulement le plan smoke :
 
 ```bash

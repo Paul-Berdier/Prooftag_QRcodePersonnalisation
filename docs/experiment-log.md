@@ -1835,6 +1835,12 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   verdict lorsque la tâche exacte possède ensuite une promotion atomique valide. Une divergence
   SRL terminale ne peut pas être contournée par le retry générique. Un plan déjà `COMPLETE` est
   seulement revérifié, sans réécrire scoring, agrégat ou verdict.
+- **Compatibilité K3s locale — 9 septembre 2026 :** le premier déploiement smoke a été annulé
+  proprement parce que containerd expose l'`imageID` importé comme digest de configuration
+  `sha256:…`, et non comme `dépôt@sha256:…`. Le contrat accepte désormais les deux formes sans
+  relâcher l'identité : la forme locale doit égaler exactement le digest du build, les Jobs ne
+  tirent aucune autre image (`imagePullPolicy: Never`) et vérifient le commit embarqué. Aucun Job
+  scientifique E046 large n'avait commencé et aucune donnée `/data` n'a été supprimée.
 - **Intégrité :** les listes/status utilisent le contrôle rapide taille/mtime, mais toute
   consommation scientifique re-hashe les artefacts. La vérification finale exige un parent unique
   par candidat et, pour chaque SR-MPGD réussi, exactement les checkpoints contigus et uniques

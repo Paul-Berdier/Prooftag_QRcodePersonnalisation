@@ -29,6 +29,7 @@ def test_large_gpu_jobs_are_single_gpu_sequential_and_persistent():
         assert pod["runtimeClassName"] == "nvidia"
         assert pod["restartPolicy"] == "Never"
         container = pod["containers"][0]
+        assert container["imagePullPolicy"] == "Never"
         assert command in container["command"]
         assert container["resources"]["requests"]["nvidia.com/gpu"] == "1"
         assert container["resources"]["limits"]["nvidia.com/gpu"] == "1"
@@ -117,7 +118,8 @@ def test_large_runner_is_safe_resumable_and_smoke_by_default():
     )
     assert "flock -n 9" in text
     assert '"$action" == "plan" || "$action" == "run"' in text
-    assert "status.containerStatuses.imageID" in text
+    assert "status.containerStatuses" in text
+    assert ".imageID" in text
     assert 'current_kind="$(' in text
     assert "parallel" not in text.lower()
     assert "rm -rf" not in text
@@ -222,6 +224,10 @@ def test_large_deployer_checks_contract_without_launching_full():
     ) < restore_body.index('--replicas="$previous_notebook"')
     assert '"$deployed_commit" == "$git_sha"' in text
     assert "pod_image_id" in text
+    assert 'normalized_pod_image_id" =~ ^sha256:' in text
+    assert 'deployed_build_digest" =~ ^sha256:' in text
+    assert '"$normalized_pod_image_id" == "$deployed_build_digest"' in text
+    assert 'normalized_pod_image_id" =~ @sha256:' in text
     assert "prooftag-build-commit.txt" in text
     assert "run-e046-large-dataset.sh run" in text
     assert "rm -rf" not in text
@@ -252,6 +258,10 @@ def test_main_image_bakes_and_deployers_verify_an_independent_commit_attestation
     assert "/app/prooftag-build-commit.txt" in large_deployer
     assert "/app/prooftag-build-commit.txt" in large_runner
     assert 'embedded_commit" != "$deployed_commit"' in large_runner
+    assert 'normalized_image_id" =~ ^sha256:' in large_runner
+    assert '"$normalized_image_id" != "$build_image_digest"' in large_runner
+    assert 'image="$image_tag"' in large_runner
+    assert 'normalized_image_id" =~ @sha256:' in large_runner
 def test_large_scripts_have_bash_syntax_when_bash_is_available():
     import os
     import shutil

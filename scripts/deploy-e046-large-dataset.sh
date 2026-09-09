@@ -427,6 +427,10 @@ deployed_image="$(
   "$kubectl_bin" get deployment "$api_deployment" -n "$namespace" \
     -o jsonpath='{.spec.template.spec.containers[?(@.name=="api")].image}'
 )"
+deployed_build_digest="$(
+  "$kubectl_bin" get deployment "$api_deployment" -n "$namespace" \
+    -o jsonpath='{.spec.template.spec.containers[?(@.name=="api")].env[?(@.name=="PROOFTAG_RUNTIME_IMAGE_DIGEST")].value}'
+)"
 api_pod="$(
   "$kubectl_bin" get pods -n "$namespace" \
     -l app=prooftag-qr --field-selector=status.phase=Running \
@@ -457,10 +461,23 @@ embedded_commit="$(
   echo "Attestation commit incohérente : image=$embedded_commit env=$deployed_commit git=$git_sha" >&2
   exit 1
 }
-[[ "${pod_image_id#docker-pullable://}" =~ @sha256:[0-9a-f]{64}$ ]] || {
-  echo "ImageID API non épinglable : $pod_image_id" >&2
+[[ "$deployed_build_digest" =~ ^sha256:[0-9a-f]{64}$ ]] || {
+  echo "Digest de build déclaré par l'API invalide : $deployed_build_digest" >&2
   exit 1
 }
+normalized_pod_image_id="${pod_image_id#docker-pullable://}"
+if [[ "$normalized_pod_image_id" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+  [[ "$normalized_pod_image_id" == "$deployed_build_digest" ]] || {
+    echo "Digest local K3s incohérent : pod=$normalized_pod_image_id build=$deployed_build_digest" >&2
+    exit 1
+  }
+elif [[ "$normalized_pod_image_id" =~ @sha256:[0-9a-f]{64}$ ]]; then
+  : # Forme canonique d'un runtime alimenté par un registre OCI.
+else
+  echo "ImageID API non vérifiable : $pod_image_id" >&2
+  exit 1
+fi
+echo "ImageID API vérifié : $normalized_pod_image_id"
 "$kubectl_bin" exec -i -n "$namespace" \
   deployment/"$api_deployment" -c api -- python - <<'PY'
 from prooftag_qr.e046_catalog import EXPERIMENT as PILOT_EXPERIMENT

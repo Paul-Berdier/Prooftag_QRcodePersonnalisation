@@ -17,6 +17,7 @@ from prooftag_qr.e046_large_campaign import (
     EXPERIMENT,
     PARENT_GENERATION_REQUIRED,
     PLAN_SCHEMA,
+    _assert_runtime_provenance,
     _best_by_prompt,
     _bind_e046_iteration_zero_to_parent,
     _dataset_summary,
@@ -76,6 +77,25 @@ def _plan(profile: str) -> dict:
         runtime_image_digest=RUNTIME_DIGEST,
         runtime_scientific_contract=_frozen_runtime_contract(),
     )
+
+
+def test_runtime_provenance_checks_environment_and_embedded_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    attestation = tmp_path / "prooftag-build-commit.txt"
+    attestation.write_text(SOURCE_COMMIT, encoding="ascii")
+    monkeypatch.setattr(large_campaign, "BUILD_COMMIT_ATTESTATION", attestation)
+    monkeypatch.setenv("PROOFTAG_RUNTIME_IMAGE", RUNTIME_IMAGE)
+    monkeypatch.setenv("PROOFTAG_RUNTIME_IMAGE_DIGEST", RUNTIME_DIGEST)
+
+    assert _assert_runtime_provenance(_plan("smoke")) == (
+        RUNTIME_IMAGE,
+        RUNTIME_DIGEST,
+    )
+
+    attestation.write_text("c" * 40, encoding="ascii")
+    with pytest.raises(RuntimeError, match="embedded build commit"):
+        _assert_runtime_provenance(_plan("smoke"))
 
 
 @pytest.mark.parametrize(

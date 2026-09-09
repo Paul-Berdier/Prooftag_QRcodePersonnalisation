@@ -414,7 +414,7 @@ cancel_current_job() {
 }
 
 load_runtime_identity() {
-  local api_pod api_image_id pod_spec_image embedded_commit
+  local api_pod api_image_id pod_spec_image embedded_commit normalized_image_id
   source_commit="$(git rev-parse HEAD)"
   ensure_api
   image_tag="$(
@@ -472,15 +472,24 @@ load_runtime_identity() {
     echo "Attestation commit incohérente : image=$embedded_commit env=$deployed_commit Git=$source_commit" >&2
     exit 1
   fi
-  image="${api_image_id#docker-pullable://}"
-  if [[ ! "$image" =~ @sha256:[0-9a-f]{64}$ ]]; then
-    echo "ImageID API non épinglable : $api_image_id" >&2
+  normalized_image_id="${api_image_id#docker-pullable://}"
+  if [[ "$normalized_image_id" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+    if [[ "$normalized_image_id" != "$build_image_digest" ]]; then
+      echo "Digest local K3s incohérent : pod=$normalized_image_id build=$build_image_digest" >&2
+      exit 1
+    fi
+    # Une image importée directement dans K3s expose parfois uniquement son
+    # digest de configuration. Ce digest n'est pas une référence OCI tirable :
+    # les Jobs utilisent donc le tag unique du commit déjà présent localement.
+    image="$image_tag"
+    image_digest="$normalized_image_id"
+  elif [[ "$normalized_image_id" =~ @sha256:[0-9a-f]{64}$ ]]; then
+    image="$normalized_image_id"
+    image_digest="${normalized_image_id##*@}"
+  else
+    echo "ImageID API non vérifiable : $api_image_id" >&2
     exit 1
   fi
-  image_digest="${image##*@}"
-  # PROOFTAG_RUNTIME_IMAGE_DIGEST est le digest de configuration construit par
-  # Docker. image_digest est ici le digest du manifeste réellement exécuté,
-  # obtenu via status.containerStatuses.imageID et utilisable dans image@sha256.
 }
 
 latest_plan_metadata() {

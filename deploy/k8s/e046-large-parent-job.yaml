@@ -37,7 +37,7 @@ spec:
       containers:
         - name: e046-large
           image: "__IMAGE__"
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Never
           command:
             - python
             - -m

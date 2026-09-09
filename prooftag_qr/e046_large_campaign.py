@@ -98,6 +98,7 @@ LATEST_SCHEMA = "e046-large-latest-v1"
 TERMINAL_SRL_FRAGMENT = (
     "local upstream SRL port diverged from the pinned official class"
 )
+BUILD_COMMIT_ATTESTATION = Path("/app/prooftag-build-commit.txt")
 
 # The large campaign measures 13 independently designed generation/QR factors.
 DOE_PARAMETER_COUNT = 13
@@ -1093,6 +1094,14 @@ def _assert_runtime_provenance(plan: Mapping[str, Any]) -> tuple[str, str]:
         )
     if runtime_digest != str(plan["runtime_image_digest"]):
         raise RuntimeError("runtime image digest differs from scientific plan")
+    try:
+        embedded_commit = BUILD_COMMIT_ATTESTATION.read_text(
+            encoding="ascii"
+        ).strip()
+    except OSError as exc:
+        raise RuntimeError("embedded build commit attestation is unavailable") from exc
+    if embedded_commit != str(plan["source_commit"]):
+        raise RuntimeError("embedded build commit differs from scientific plan")
     return runtime_image, runtime_digest
 
 
@@ -3171,7 +3180,11 @@ def validate_group_split(
             if group is None:
                 continue
             folds_by_group.setdefault(str(group), set()).add(item[field])
-        leaking = {group: sorted(map(str, folds)) for group, folds in folds_by_group.items() if len(folds) > 1}
+        leaking = {
+            group: sorted(map(str, folds))
+            for group, folds in folds_by_group.items()
+            if len(folds) > 1
+        }
         if leaking:
             sample = dict(list(leaking.items())[:3])
             raise ValueError(
