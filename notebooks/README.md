@@ -583,3 +583,30 @@ jupyter lab notebooks\01_srpg_step_by_step.ipynb
 
 Il réutilise le dossier déjà extrait ou écrit dans `.prooftag-notebook-cache` à côté de l'archive.
 Ce notebook d'analyse n'utilise pas le GPU du serveur.
+
+## E046 large — contrôle du dataset advisor
+
+Le notebook `50_e046_large_advisor_dataset.ipynb` analyse la nouvelle expérience séparée
+`e046-large-advisor-dataset-v1`. Il fonctionne sur un plan partiel ou terminé et ne lance aucune
+génération : progression, couverture prompts/DOE, distributions WeChat/CLIP/HPS/Aesthetic,
+corrélations, Pareto, taux par famille/masque/ECC, hard negatives, trajectoires SR-MPGD et
+planches de QR sont produits uniquement à partir des artefacts promus sous `/data`. Une galerie
+séparée montre immédiatement les Stage 2 promus qui attendent encore leur scoring.
+
+Il reste volontairement léger : aucun calcul CUDA, aucun entraînement et au plus 24 images
+par planche. Pour choisir un plan autre que `LATEST.json`, définir
+`PROOFTAG_E046_LARGE_PLAN_ID` dans l'environnement du pod avant l'ouverture.
+
+Depuis PowerShell :
+
+```powershell
+.\scripts\notebook-remote.ps1 -Reset -Notebook 50_e046_large_advisor_dataset.ipynb
+```
+
+Ce notebook est classé en analyse hors ligne par les lanceurs Windows et serveur : le kernel
+reste en CPU. Le contrat E046 impose malgré tout `notebook=0` pendant chaque Job GPU : demander
+`pause-after-current`, attendre le retour du runner, puis ouvrir cette vue entre deux séquences. Le script
+`deploy-e046-large-dataset.sh deploy` construit et déploie automatiquement son image avec l'image
+API/Jobs, ce qui évite d'ouvrir une ancienne version. Relancer **Run > Run All Cells** actualise les
+compteurs sans modifier la campagne. Le protocole opérateur complet est dans
+[`../docs/e046-large-advisor-dataset.md`](../docs/e046-large-advisor-dataset.md).

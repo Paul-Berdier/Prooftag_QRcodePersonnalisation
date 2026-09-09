@@ -23,6 +23,12 @@ FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
 ARG DIFFQRCODER_COMMIT=e24ea73ee2e13c7e6e87cb422e8b11784e70ae00
 ARG QART_COMMIT=6e0e00804a1994db7098432c19fadfc552071e30
 ARG HPSV2_COMMIT=866735ecaae999fa714bd9edfa05aa2672669ee3
+ARG PROOFTAG_BUILD_COMMIT=development
+
+# This identity is baked into the image at build time.  The manifest below is
+# deliberately independent from PROOFTAG_GIT_COMMIT, which Kubernetes injects
+# later and could otherwise attest only its own declarative configuration.
+LABEL org.opencontainers.image.revision="${PROOFTAG_BUILD_COMMIT}"
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -45,6 +51,8 @@ COPY --from=qr-verify-builder /opt/prooftag-qr-verify /opt/prooftag-qr-verify
 WORKDIR /app
 COPY pyproject.toml README.md alembic.ini ./
 COPY prooftag_qr ./prooftag_qr
+COPY data/e046_prompt_catalog_v2.json ./data/e046_prompt_catalog_v2.json
+COPY data/e046_large_doe_v1.json ./data/e046_large_doe_v1.json
 COPY migrations ./migrations
 # E040's final-pipeline evidence must contain the archived Stage-1 raster.
 COPY docs/e035-assets/e034-observed-stage1.png ./docs/e035-assets/e034-observed-stage1.png
@@ -77,6 +85,8 @@ RUN qart help >/dev/null \
     && python -c "from prooftag_qr.qr import generate_diffqrcoder_qr; from prooftag_qr.validation import QRVerifyDecoder; p='https://ptag.io/t/build'; d=QRVerifyDecoder(); a=d.decode_presets(generate_diffqrcoder_qr(p).image); d.close(); assert len(a)==37 and all(x['text']==p for x in a); print('qr-verify WASM bridge OK: 37/37')" \
     && test -f /app/docs/e035-assets/e034-observed-stage1.png \
     && echo "QArt revision archive OK: $QART_COMMIT"
+
+RUN PROOFTAG_BUILD_COMMIT_VALUE="${PROOFTAG_BUILD_COMMIT}" python -c "import os,re; from pathlib import Path; value=os.environ['PROOFTAG_BUILD_COMMIT_VALUE']; assert value == 'development' or re.fullmatch(r'[0-9a-f]{40}', value), value; Path('/app/prooftag-build-commit.txt').write_text(value + chr(10), encoding='ascii'); print('Build commit manifest:', value)"
 
 RUN useradd --create-home --uid 10001 app \
     && mkdir -p /data /cache /opt/torch-cache \

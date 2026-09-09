@@ -5,7 +5,9 @@ node_modules
 __pycache__
 .pytest_cache
 .ruff_cache
-data
+data/*
+!data/e046_prompt_catalog_v2.json
+!data/e046_large_doe_v1.json
 artifacts
 tests
 *.pyc

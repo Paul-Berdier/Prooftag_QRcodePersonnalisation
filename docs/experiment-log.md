@@ -1799,3 +1799,57 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   restent séparés. Production et élargissement automatique restent interdits ; un STOP technique
   ou scientifique est archivé sans régénération GPU implicite.
 - **Protocole :** `docs/e034-srmpgd-four-iteration-gate.md`.
+
+## E046 large — infrastructure du dataset advisor — 4 septembre 2026
+
+- **État :** implémentation locale et tests CPU ; aucune campagne full lancée et aucun résultat
+  scientifique revendiqué.
+- **But :** produire les observations nécessaires au futur conseiller
+  `prompt + payload + paramètres → scores attendus`, et non entraîner un générateur.
+- **Séparation historique :** nouvelle racine `/data/e046-large-advisor-dataset-v1` ; le moteur et
+  le runner refusent explicitement `/data/e045-foundation-v1`,
+  `/data/e046-controlled-best-generator-v1` et tous leurs descendants. Les plans E045/E046
+  existants restent immuables.
+- **Catalogue :** 256 prompts canoniques, 16 familles × 16, textes/IDs/payloads uniques et neuf
+  tags structurels. Les payloads courts vont de `https://ptag.io/d2/0001` à `0256`.
+- **DOE :** 12 configurations indépendantes par prompt, dont l'ancre E044 et 11 points maximin
+  d'un hypercube latin déterministe sur 13 facteurs. Le profil complet prévoit donc exactement
+  3 072 parents Stage 2 indépendants ; smoke 8 et pilot 192.
+- **Mesure principale :** seul `stage2_raw` reçoit systématiquement QR-Verify WeChat 37 × 3,
+  CLIPScore, HPSv2.1, CLIP-Aesthetic, MER et les gardes. Stage 1 est conservé comme provenance et
+  ne peut jamais être livré. Les hard negatives sont conservés.
+- **Phase B :** sélection automatique, diverse et informative de 256 à 320 parents en full, puis
+  au plus 640 trajectoires SR-MPGD. Les checkpoints d'une trajectoire sont étiquetés corrélés et
+  ne peuvent pas traverser les groupes d'un futur split.
+- **Politique d'échec :** une divergence du port SRL officiel devient
+  `scientific_fidelity_mismatch`, terminale pour la branche, non relançable et non utilisable,
+  sans arrêter les tâches indépendantes. Elle n'autorise aucun relâchement de fidélité.
+- **Analyse :** `notebooks/50_e046_large_advisor_dataset.ipynb` est une vue CPU en lecture seule,
+  compatible avec une campagne partielle. Il affiche progression, couverture, distributions,
+  corrélations, Pareto, taux de succès, importance descriptive, échecs et planches visuelles. Une
+  galerie séparée expose les derniers Stage 2 promus avant scoring ; la force Stage 2 inactive sous
+  `public_random` est exclue des associations numériques.
+- **Déploiement/reprise :** les images API/Jobs et notebook sont construites ensemble avec une
+  attestation du commit embarquée. Un échec post-déploiement restaure et vérifie les révisions
+  Kubernetes précédentes. Les erreurs transitoires restent archivées mais cessent de bloquer le
+  verdict lorsque la tâche exacte possède ensuite une promotion atomique valide. Une divergence
+  SRL terminale ne peut pas être contournée par le retry générique. Un plan déjà `COMPLETE` est
+  seulement revérifié, sans réécrire scoring, agrégat ou verdict.
+- **Intégrité :** les listes/status utilisent le contrôle rapide taille/mtime, mais toute
+  consommation scientifique re-hashe les artefacts. La vérification finale exige un parent unique
+  par candidat et, pour chaque SR-MPGD réussi, exactement les checkpoints contigus et uniques
+  `0..max_iterations` ; une trajectoire tronquée est invalide.
+- **Coexistence :** le notebook E046 utilise `offline-cpu` lorsqu'il est ouvert, mais le contrat de
+  campagne maintient tout de même `notebook=0` pendant chaque Job. L'inspection intermédiaire se
+  fait après `pause-after-current`, entre deux séquences GPU. Toute remise en route de l'API ou
+  restauration post-déploiement est refusée en présence d'un autre pod GPU dans le cluster.
+- **Budget initial full :** environ 278,8 h séquentielles (217,6 h GPU, 61,2 h scoring CPU) et
+  26,0 Gio selon des hypothèses volontairement conservatrices (180 s/parent, 360 s/trajectoire,
+  30 s et 25 s de scoring). L'ETA mesurée des tâches terminées remplace ensuite cette estimation.
+- **Splits :** `dataset/splits.json` fige un GroupKFold par prompt (5 plis, stratifié par famille)
+  et un leave-family-out ; `advisor-training-contract.json` déclare les features/cibles E047 sans
+  aucun modèle entraîné.
+- **Porte suivante :** réussir le smoke et sa vérification de manifeste avant de planifier le
+  pilot. Le full reste une décision opérateur explicite après le pilot.
+- **Documentation :** `docs/e046-large-advisor-dataset.md` et
+  `E046_LARGE_DATASET_A_LIRE.txt`.

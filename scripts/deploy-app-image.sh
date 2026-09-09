@@ -64,7 +64,7 @@ image="${image_repository}:${git_tag}"
 
 echo "Construction de $image depuis $git_sha"
 docker build \
-  --label "org.opencontainers.image.revision=${git_sha}" \
+  --build-arg "PROOFTAG_BUILD_COMMIT=${git_sha}" \
   -t "$image" .
 
 image_revision="$(
@@ -74,15 +74,23 @@ image_revision="$(
 image_digest="$(
   docker image inspect "$image" --format '{{.Id}}'
 )"
+image_build_commit="$(
+  docker run --rm --entrypoint python "$image" -c \
+    "from pathlib import Path; print(Path('/app/prooftag-build-commit.txt').read_text(encoding='ascii').strip())"
+)"
 if [[ "$image_revision" != "$git_sha" ]]; then
   echo "Révision de l'image inattendue : $image_revision != $git_sha" >&2
+  exit 1
+fi
+if [[ "$image_build_commit" != "$git_sha" ]]; then
+  echo "Commit embarqué inattendu : $image_build_commit != $git_sha" >&2
   exit 1
 fi
 if [[ ! "$image_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
   echo "Digest de l'image inattendu : $image_digest" >&2
   exit 1
 fi
-echo "Image Docker construite : $image ($image_digest, révision $image_revision)"
+echo "Image Docker construite : $image ($image_digest, révision $image_revision, manifeste $image_build_commit)"
 
 docker save "$image" | sudo k3s ctr images import -
 
@@ -158,6 +166,10 @@ echo "Pod courant vérifié : pod=$pod image=$running_image"
 kubectl -n "$namespace" exec "$pod" -c "$container" -- \
   python -c \
   "import os; expected = {'PROOFTAG_GIT_COMMIT': '$git_sha', 'PROOFTAG_RUNTIME_IMAGE': '$image', 'PROOFTAG_RUNTIME_IMAGE_DIGEST': '$image_digest'}; actual = {key: os.environ.get(key) for key in expected}; assert actual == expected, (actual, expected); print('Identité runtime API vérifiée:', actual)"
+
+kubectl -n "$namespace" exec "$pod" -c "$container" -- \
+  python -c \
+  "from pathlib import Path; expected='$git_sha'; actual=Path('/app/prooftag-build-commit.txt').read_text(encoding='ascii').strip(); assert actual == expected, (actual, expected); print('Commit embarqué dans l image vérifié:', actual)"
 
 kubectl -n "$namespace" exec "$pod" -c "$container" -- \
   python -c \

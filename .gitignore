@@ -12,7 +12,9 @@ __pycache__/
 *.egg-info/
 build/
 dist/
-data/
+data/*
+!data/e046_prompt_catalog_v2.json
+!data/e046_large_doe_v1.json
 artifacts/
 benchmark-results/
 /20??????T??????Z-????????/

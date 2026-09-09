@@ -20,15 +20,15 @@ import dataclasses
 import hashlib
 import json
 import os
-import shutil
 import sqlite3
 import tempfile
 import time
 import traceback
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterable, Iterator, Literal, Mapping, Sequence
+from typing import Any, Literal
 
 TaskStatus = Literal[
     "pending",
@@ -122,11 +122,15 @@ def atomic_write_bytes(path: Path, payload: bytes, mode: int = 0o644) -> None:
             os.fsync(stream.fileno())
         os.chmod(tmp, mode)
         os.replace(tmp, path)
-        dir_fd = os.open(path.parent, os.O_DIRECTORY)
-        try:
-            os.fsync(dir_fd)
-        finally:
-            os.close(dir_fd)
+        # POSIX can durably fsync the parent directory after replace. Windows
+        # exposes neither O_DIRECTORY nor an equivalent directory-fsync through
+        # os.open; the file itself has already been flushed above.
+        if hasattr(os, "O_DIRECTORY"):
+            dir_fd = os.open(path.parent, os.O_DIRECTORY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
     except BaseException:
         with contextlib.suppress(FileNotFoundError):
             tmp.unlink()
@@ -212,14 +216,20 @@ def classify_failure(error: BaseException | str) -> FailureDecision:
             kind="resource",
             retryable=False,
             operator_action_required=True,
-            reason="Les mêmes ressources et la même spécification reproduiraient probablement l'échec.",
+            reason=(
+                "Les mêmes ressources et la même spécification reproduiraient "
+                "probablement l'échec."
+            ),
         )
     if any(token in lowered for token in deterministic_tokens):
         return FailureDecision(
             kind="deterministic",
             retryable=False,
             operator_action_required=True,
-            reason="Le contrat, les entrées ou le code doivent être corrigés avant une nouvelle tentative.",
+            reason=(
+                "Le contrat, les entrées ou le code doivent être corrigés avant "
+                "une nouvelle tentative."
+            ),
         )
     if any(token in lowered for token in transient_tokens):
         return FailureDecision(
@@ -979,11 +989,12 @@ def promote_attempt(
 
     final_dir.parent.mkdir(parents=True, exist_ok=True)
     os.replace(attempt_dir, final_dir)
-    dir_fd = os.open(final_dir.parent, os.O_DIRECTORY)
-    try:
-        os.fsync(dir_fd)
-    finally:
-        os.close(dir_fd)
+    if hasattr(os, "O_DIRECTORY"):
+        dir_fd = os.open(final_dir.parent, os.O_DIRECTORY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
     return json.loads(
         (final_dir / "PROMOTION_MANIFEST.json").read_text(encoding="utf-8")
     )

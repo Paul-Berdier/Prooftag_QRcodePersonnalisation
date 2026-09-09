@@ -23,6 +23,9 @@ FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
 ARG DIFFQRCODER_COMMIT=e24ea73ee2e13c7e6e87cb422e8b11784e70ae00
 ARG QART_COMMIT=6e0e00804a1994db7098432c19fadfc552071e30
 ARG EXPECTED_NOTEBOOK=notebooks/21_e026_prompt_parameter_advisor.ipynb
+ARG PROOFTAG_BUILD_COMMIT=development
+
+LABEL org.opencontainers.image.revision="${PROOFTAG_BUILD_COMMIT}"
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -43,7 +46,10 @@ RUN apt-get update \
 WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY prooftag_qr ./prooftag_qr
+COPY data/e046_prompt_catalog_v2.json ./data/e046_prompt_catalog_v2.json
+COPY data/e046_large_doe_v1.json ./data/e046_large_doe_v1.json
 COPY docs/e031-prospective-stage2-holdout.md ./docs/e031-prospective-stage2-holdout.md
+RUN PROOFTAG_BUILD_COMMIT_VALUE="${PROOFTAG_BUILD_COMMIT}" python -c "import os,re; from pathlib import Path; value=os.environ['PROOFTAG_BUILD_COMMIT_VALUE']; assert value == 'development' or re.fullmatch(r'[0-9a-f]{40}', value), value; Path('/app/prooftag-build-commit.txt').write_text(value + chr(10), encoding='ascii'); print('Build commit manifest:', value)"
 RUN pip install --upgrade pip \
     && pip install '.[notebook,optimizer]' \
     && pip install \

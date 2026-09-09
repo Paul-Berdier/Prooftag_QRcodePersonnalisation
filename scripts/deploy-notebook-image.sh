@@ -68,7 +68,7 @@ image_notebook="/workspace/${expected_notebook}"
 echo "Construction de $image depuis $git_sha"
 docker build -f Dockerfile.notebook \
   --build-arg "EXPECTED_NOTEBOOK=${expected_notebook}" \
-  --label "org.opencontainers.image.revision=${git_sha}" \
+  --build-arg "PROOFTAG_BUILD_COMMIT=${git_sha}" \
   -t "$image" .
 
 image_revision="$(
@@ -78,12 +78,36 @@ image_revision="$(
 image_digest="$(
   docker image inspect "$image" --format '{{.Id}}'
 )"
+attestation_file="$(mktemp "${TMPDIR:-/tmp}/prooftag-notebook-attestation.XXXXXX")"
+attestation_container=""
+cleanup_attestation() {
+  if [[ -n "$attestation_container" ]]; then
+    docker rm -f "$attestation_container" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "$attestation_file" ]]; then
+    rm -f -- "$attestation_file"
+  fi
+}
+trap cleanup_attestation EXIT
+attestation_container="$(docker create --entrypoint /bin/true "$image")"
+docker cp \
+  "${attestation_container}:/app/prooftag-build-commit.txt" \
+  "$attestation_file"
+image_build_commit="$(tr -d '\r\n' <"$attestation_file")"
+cleanup_attestation
+attestation_container=""
+attestation_file=""
+trap - EXIT
 if [[ "$image_revision" != "$git_sha" ]]; then
   echo "Révision de l'image inattendue : $image_revision != $git_sha" >&2
   exit 1
 fi
 if [[ ! "$image_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
   echo "Digest de l'image inattendu : $image_digest" >&2
+  exit 1
+fi
+if [[ "$image_build_commit" != "$git_sha" ]]; then
+  echo "Commit embarqué inattendu : $image_build_commit != $git_sha" >&2
   exit 1
 fi
 echo "Notebook vérifié pendant le build : $image_notebook"
@@ -138,6 +162,8 @@ if [[ "${replicas:-0}" -gt 0 ]]; then
     "deployment/${deployment}" --timeout=1200s
   pod="$(ready_pod_for_image "$image")"
   kubectl -n "$namespace" exec "$pod" -- test -f "$image_notebook"
+  kubectl -n "$namespace" exec "$pod" -- \
+    python -c "from pathlib import Path; expected='$git_sha'; actual=Path('/app/prooftag-build-commit.txt').read_text(encoding='ascii').strip(); assert actual == expected, (actual, expected); print('Commit notebook embarqué vérifié:', actual)"
   echo "Notebook vérifié dans le pod prêt : $pod:$image_notebook ($image)"
 fi
 

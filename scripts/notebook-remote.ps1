@@ -31,7 +31,8 @@ param(
         "27_e032_srmpgd_paper_reconstruction.ipynb",
         "28_e033_srmpgd_microdiagnostic.ipynb",
         "29_e034_srmpgd_four_iteration_gate.ipynb",
-        "30_e035_srmpgd_loss_fidelity_gate.ipynb"
+        "30_e035_srmpgd_loss_fidelity_gate.ipynb",
+        "50_e046_large_advisor_dataset.ipynb"
     )]
     [string]$Notebook = "02_generate_live_on_gpu.ipynb",
     [switch]$Reset,
@@ -342,8 +343,10 @@ try {
 
             }
             elseif (
-                $Notebook -eq
-                "25_e030_reliable_qrverify_cascade.ipynb"
+                $Notebook -in @(
+                    "25_e030_reliable_qrverify_cascade.ipynb",
+                    "50_e046_large_advisor_dataset.ipynb"
+                )
             ) {
 
                 Write-Host (

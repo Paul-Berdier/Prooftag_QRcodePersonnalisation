@@ -1,0 +1,98 @@
+E046 LARGE — À LIRE AVANT DE LANCER
+===================================
+
+BUT
+---
+Construire un dataset pour entraîner plus tard un conseiller de paramètres.
+Ce n'est pas l'entraînement d'un générateur et ce n'est pas encore E047.
+
+VOLUMES
+-------
+smoke :   4 prompts x  2 configs =    8 parents
+pilot :  32 prompts x  6 configs =  192 parents
+full  : 256 prompts x 12 configs = 3 072 parents
+
+Le profil par défaut est smoke. Le full ne part jamais automatiquement.
+
+EMPLACEMENT
+-----------
+Nouveau dataset : /data/e046-large-advisor-dataset-v1
+Ancien E045     : /data/e045-foundation-v1 (intouchable)
+Ancien E046     : /data/e046-controlled-best-generator-v1 (intouchable)
+
+ORDRE OBLIGATOIRE
+-----------------
+1. Déployer le commit propre et vérifier son digest. Le déploiement met à jour
+   l'image API/Jobs ET l'image notebook E046.
+2. Créer le plan smoke, sans génération :
+     bash scripts/run-e046-large-dataset.sh plan
+3. Lire les nombres et les SHA-256 affichés.
+4. Lancer le smoke seulement :
+     bash scripts/run-e046-large-dataset.sh run
+5. Suivre :
+     bash scripts/run-e046-large-dataset.sh status
+     bash scripts/run-e046-large-dataset.sh progress
+     bash scripts/run-e046-large-dataset.sh logs
+6. Valider à la fin :
+     bash scripts/run-e046-large-dataset.sh verify
+
+PAUSE ET REPRISE
+----------------
+Finir le Job courant puis ne plus en lancer :
+  bash scripts/run-e046-large-dataset.sh pause-after-current
+
+Reprendre sans recalculer les tâches déjà promues :
+  bash scripts/run-e046-large-dataset.sh resume
+
+Arrêter immédiatement le Job courant en conservant /data :
+  bash scripts/run-e046-large-dataset.sh cancel-current
+
+SCORING ET SÉLECTION
+--------------------
+L'observation parente principale est uniquement Stage 2 raw.
+Stage 1 est conservé pour la provenance mais n'est jamais livrable.
+
+Un résultat final doit être brut, passer la garde visuelle, décoder exactement
+le payload original et réussir au moins 34 presets WeChat sur 37. L'esthétique
+ne peut jamais faire gagner un QR invalide.
+
+Les mauvais QR restent dans le dataset. Ils sont indispensables au futur modèle.
+Les checkpoints d'une trajectoire SR-MPGD sont corrélés et ne comptent jamais
+comme plusieurs générations indépendantes.
+
+DATASET PRODUIT (dossier <plan>/dataset)
+----------------------------------------
+parent-observations.jsonl/csv   : 1 ligne par parent Stage 2 raw (observation principale)
+srmpgd-observations.jsonl/csv   : checkpoints SR-MPGD, étiquetés corrélés
+advisor-observations.jsonl/csv  : union, avec trajectory_id / generation_group_id
+splits.json                     : GroupKFold par prompt (5 plis) + leave-family-out
+advisor-training-contract.json  : features/cibles E047, aucun modèle entraîné
+data-summary, parameter-coverage, prompt-coverage, score-distributions
+
+BUDGET INITIAL (hypothèses conservatrices, remplacées par l'ETA observée)
+------------------------------------------------------------------------
+smoke : ~1,1 h            pilot : ~23,6 h et 2,3 Gio
+full  : ~278,8 h (217,6 h GPU + 61,2 h scoring CPU) et ~26 Gio
+
+ERREURS
+-------
+Une divergence de fidélité SRL officielle est terminale pour cette branche,
+non relançable et non utilisable, mais les autres tâches continuent.
+Une autre erreur technique invalide le smoke jusqu'à diagnostic.
+
+NOTEBOOK DE CONTRÔLE
+--------------------
+notebooks/50_e046_large_advisor_dataset.ipynb
+
+Ce notebook est CPU, en lecture seule et sans génération automatique. Il montre
+la progression, les couvertures, scores, Pareto, hard negatives et images QR.
+Il montre aussi les derniers Stage 2 déjà générés mais pas encore scorés. Il peut
+être ouvert en mode offline-cpu après une pause au terme du Job courant :
+  bash scripts/run-e046-large-dataset.sh pause-after-current
+  .\scripts\notebook-remote.ps1 -Reset -Notebook 50_e046_large_advisor_dataset.ipynb
+Avant la reprise, l'arrêter avec -Stop ; resume remet de toute façon le notebook
+à zéro avant le prochain Job GPU.
+
+RÉFÉRENCE COMPLÈTE
+------------------
+docs/e046-large-advisor-dataset.md
