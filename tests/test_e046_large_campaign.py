@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -136,6 +137,28 @@ def test_plan_is_deterministic_and_freezes_catalog_and_doe() -> None:
         + summary["estimated_cpu_scoring_hours"]
         == pytest.approx(summary["estimated_hours"], abs=0.2)
     )
+
+
+def test_runtime_contract_fingerprints_installed_qr_verify_bridge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    installed = tmp_path / "prooftag-qr-verify"
+    installed.mkdir()
+    (installed / "bridge.mjs").write_text("bridge", encoding="utf-8")
+    (installed / "package-lock.json").write_text("lock", encoding="utf-8")
+    monkeypatch.setenv(
+        "PROOFTAG_QR_QR_VERIFY_BRIDGE", str(installed / "bridge.mjs")
+    )
+
+    contract = _runtime_scientific_contract(Settings())
+
+    digest = hashlib.sha256()
+    digest.update(b"qr-verify@0.2.0")
+    digest.update(b"bridge.mjs")
+    digest.update(b"bridge")
+    digest.update(b"package-lock.json")
+    digest.update(b"lock")
+    assert contract["qr_verify"]["implementation_sha256"] == digest.hexdigest()
 
 
 def test_plan_loading_rejects_semantic_tampering(tmp_path: Path) -> None:

@@ -262,6 +262,19 @@ def test_main_image_bakes_and_deployers_verify_an_independent_commit_attestation
     assert '"$normalized_image_id" != "$build_image_digest"' in large_runner
     assert 'image="$image_tag"' in large_runner
     assert 'normalized_image_id" =~ @sha256:' in large_runner
+
+
+def test_large_runtime_contract_uses_the_installed_qr_verify_bridge():
+    campaign = _read("prooftag_qr/e046_large_campaign.py")
+    dockerfile = _read("Dockerfile")
+    notebook_dockerfile = _read("Dockerfile.notebook")
+
+    assert 'os.environ.get("PROOFTAG_QR_QR_VERIFY_BRIDGE")' in campaign
+    expected = "PROOFTAG_QR_QR_VERIFY_BRIDGE=/opt/prooftag-qr-verify/bridge.mjs"
+    assert expected in dockerfile
+    assert expected in notebook_dockerfile
+
+
 def test_large_scripts_have_bash_syntax_when_bash_is_available():
     import os
     import shutil

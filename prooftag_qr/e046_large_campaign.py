@@ -477,7 +477,12 @@ def _runtime_scientific_contract(settings: Any | None = None) -> dict[str, Any]:
     settings_contract = {
         field: getattr(settings, field) for field in SCIENTIFIC_SETTINGS_FIELDS
     }
-    bridge = Path(__file__).resolve().parent.parent / "qr_verify_bridge/bridge.mjs"
+    default_bridge = (
+        Path(__file__).resolve().parent.parent / "qr_verify_bridge/bridge.mjs"
+    )
+    bridge = Path(
+        os.environ.get("PROOFTAG_QR_QR_VERIFY_BRIDGE") or default_bridge
+    )
     lock = bridge.parent / "package-lock.json"
     digest = hashlib.sha256()
     digest.update(QRVerifyDecoder.engine_version.encode("utf-8"))

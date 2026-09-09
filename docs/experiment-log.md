@@ -1841,6 +1841,11 @@ SR-MPGD ; la protection fonctionnelle devient E013a afin de ne pas mélanger deu
   relâcher l'identité : la forme locale doit égaler exactement le digest du build, les Jobs ne
   tirent aucune autre image (`imagePullPolicy: Never`) et vérifient le commit embarqué. Aucun Job
   scientifique E046 large n'avait commencé et aucune donnée `/data` n'a été supprimée.
+- **Préflight QR-Verify — 9 septembre 2026 :** après validation de l'image K3s, la première
+  création du plan smoke a détecté que l'empreinte scientifique cherchait encore le bridge dans
+  l'arborescence source. Elle résout désormais le chemin réellement configuré dans l'image
+  (`/opt/prooftag-qr-verify/bridge.mjs`) et son lock associé. Le plan a échoué avant toute
+  génération ; il n'existe donc aucune observation partielle à migrer ou supprimer.
 - **Intégrité :** les listes/status utilisent le contrôle rapide taille/mtime, mais toute
   consommation scientifique re-hashe les artefacts. La vérification finale exige un parent unique
   par candidat et, pour chaque SR-MPGD réussi, exactement les checkpoints contigus et uniques
