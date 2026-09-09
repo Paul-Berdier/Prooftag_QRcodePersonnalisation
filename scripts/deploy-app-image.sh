@@ -74,10 +74,26 @@ image_revision="$(
 image_digest="$(
   docker image inspect "$image" --format '{{.Id}}'
 )"
-image_build_commit="$(
-  docker run --rm --entrypoint python "$image" -c \
-    "from pathlib import Path; print(Path('/app/prooftag-build-commit.txt').read_text(encoding='ascii').strip())"
-)"
+attestation_file="$(mktemp "${TMPDIR:-/tmp}/prooftag-app-attestation.XXXXXX")"
+attestation_container=""
+cleanup_attestation() {
+  if [[ -n "$attestation_container" ]]; then
+    docker rm -f "$attestation_container" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "$attestation_file" ]]; then
+    rm -f -- "$attestation_file"
+  fi
+}
+trap cleanup_attestation EXIT
+attestation_container="$(docker create --entrypoint /bin/true "$image")"
+docker cp \
+  "${attestation_container}:/app/prooftag-build-commit.txt" \
+  "$attestation_file"
+image_build_commit="$(tr -d '\r\n' <"$attestation_file")"
+cleanup_attestation
+attestation_container=""
+attestation_file=""
+trap - EXIT
 if [[ "$image_revision" != "$git_sha" ]]; then
   echo "Révision de l'image inattendue : $image_revision != $git_sha" >&2
   exit 1

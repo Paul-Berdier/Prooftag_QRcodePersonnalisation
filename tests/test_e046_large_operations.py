@@ -244,6 +244,9 @@ def test_main_image_bakes_and_deployers_verify_an_independent_commit_attestation
     assert '--build-arg "PROOFTAG_BUILD_COMMIT=${git_sha}"' in app_deployer
     assert "image_build_commit" in app_deployer
     assert "/app/prooftag-build-commit.txt" in app_deployer
+    assert "docker run" not in app_deployer
+    assert "docker create" in app_deployer
+    assert "docker cp" in app_deployer
     assert '--build-arg "PROOFTAG_BUILD_COMMIT=${git_sha}"' in notebook_deployer
     assert "/app/prooftag-build-commit.txt" in notebook_deployer
     assert "/app/prooftag-build-commit.txt" in large_deployer
