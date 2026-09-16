@@ -1,0 +1,61 @@
+VALIDATION DU ZIP — 16 septembre 2026
+
+Exécution locale : 20 tests unittest réussis.
+Environnement de test : Python 3.13, scikit-learn 1.8.0, NumPy 2.3.5,
+Matplotlib 3.10.8, Pillow 12.3.0.
+
+Couverture :
+- calcul des dates Europe/Paris, marge d'une heure, refus des heures passées/ambiguës ;
+- Jobs CPU sans demande GPU, Jobs GPU bornés, absence de token Kubernetes dans les workers ;
+- source PVC en lecture seule, UID 10001, absence de nodeName contournant le scheduler ;
+- unité de récupération indépendante et ExecStopPost ;
+- refus de changer un déploiement dont l'UID/template a changé ;
+- refus de supprimer un Job appartenant à un autre run ;
+- porte de lecture ne pouvant pas être compensée par un score esthétique ;
+- allowlist des features, exclusion des sorties mesurées et de la seed ordinale ;
+- groupement avant déduplication et exclusion des rasters aux labels contradictoires ;
+- métriques sur un test ne comportant qu'une seule classe ;
+- filtre conservateur d'affichage des cadres blancs ;
+- entraînement complet sur observations SYNTHETIQUES, séparation fit/calibration/test,
+  sérialisation, rechargement, inférence et création des graphiques ;
+- export GIF et MP4 de petites images de TEST, sans déclarer un faux succès de scan.
+
+Vérifications supplémentaires :
+- bash -n scripts/qr-night.sh : succès ;
+- parsing AST de tous les modules Python : succès ;
+- systemd-analyze verify des quatre unités générées : succès ;
+- validation de l'intégrité des fichiers du ZIP par manifeste SHA-256.
+
+LIMITES
+Le Kubernetes simulé des tests n'est pas pcIA.
+Aucun entraînement sur les données réelles, aucun test CUDA, aucune coupure vLLM et
+aucune exécution de ce ZIP sur le serveur de l'utilisateur n'ont été réalisés ici.
+Le build réel, les paquets de l'image existante, les droits PVC, le cache des modèles
+et le scoring effectif seront contrôlés par la commande prepare AVANT de pouvoir programmer.
+Le code scientifique est protégé par vérification des hashes du commit existant.
+Les métriques synthétiques des tests ne sont pas livrées comme résultats du projet.
+test_training_serialization_partitions_and_report (test_integration.IntegrationTests.test_training_serialization_partitions_and_report) ... ok
+test_real_frames_export_without_fake_scan (test_media.MediaTests.test_real_frames_export_without_fake_scan) ... ok
+test_ambiguous_dst_refused (test_night.CoreTests.test_ambiguous_dst_refused) ... ok
+test_atomic_json_and_path (test_night.CoreTests.test_atomic_json_and_path) ... ok
+test_cpu_job_no_gpu (test_night.CoreTests.test_cpu_job_no_gpu) ... ok
+test_deadline (test_night.CoreTests.test_deadline) ... ok
+test_exact_payload (test_night.CoreTests.test_exact_payload) ... ok
+test_gate_does_not_use_aesthetic_to_compensate (test_night.CoreTests.test_gate_does_not_use_aesthetic_to_compensate) ... ok
+test_gpu_job_bounded (test_night.CoreTests.test_gpu_job_bounded) ... ok
+test_late_start_refused (test_night.CoreTests.test_late_start_refused) ... ok
+test_mutation_refuses_changed_deployment (test_night.CoreTests.test_mutation_refuses_changed_deployment) ... ok
+test_no_foreign_job_deletion (test_night.CoreTests.test_no_foreign_job_deletion) ... ok
+test_recovery_independent_unit (test_night.CoreTests.test_recovery_independent_unit) ... ok
+test_short_window_refused (test_night.CoreTests.test_short_window_refused) ... ok
+test_sources_readonly (test_night.CoreTests.test_sources_readonly) ... ok
+test_conflicting_raster_excluded (test_night.MLTests.test_conflicting_raster_excluded) ... ok
+test_duplicate_union (test_night.MLTests.test_duplicate_union) ... ok
+test_feature_allowlist (test_night.MLTests.test_feature_allowlist) ... ok
+test_single_class_metrics (test_night.MLTests.test_single_class_metrics) ... ok
+test_white_band_display_filter (test_night.MLTests.test_white_band_display_filter) ... ok
+
+----------------------------------------------------------------------
+Ran 20 tests in 3.309s
+
+OK

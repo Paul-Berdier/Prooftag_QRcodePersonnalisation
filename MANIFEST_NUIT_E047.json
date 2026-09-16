@@ -1,0 +1,24 @@
+{
+  "schema": "qr-night-release-v1",
+  "base_commit": "bfa4cdce4c6333e5214af6f3468a24a5374302c1",
+  "files": {
+    "README_NUIT_E047.md": "f2065020b82c8cd31cbd736377449ad2ffeef5c2c511fc3421a865481cc66421",
+    "docs/INTEGRATION_NUIT_E047.md": "f8897b08744549e09b3a7f58e3f9bbb017dd1a9b0a2994ed10024deff97b557b",
+    "docs/TESTS_NUIT_E047.txt": "3f02c87272448643d34e7cec8cc803f067c4c30a5d9c7d0dd2b68e0b37a7a5cb",
+    "nightops/.gitignore": "6f4ff2992c4e2558837e2e09c39ed2bba140658755b22d046aab810ea2c90ca0",
+    "nightops/Dockerfile": "2bcdf12fd9f0dbf5fc7231f3323c55c9032cd55691fa0700155ee878b8a267de",
+    "nightops/config.json": "cef9318040dfcc17c2b0b80a8304f47605b77f2f426864cfa3b439cd06da4705",
+    "nightops/prompts.json": "4f2583ebe87c9247ffa95a797833247c922aa74a8c5a6d83d4b4320ad72abfd1",
+    "nightops/qrnight/__init__.py": "253889a1c0718f1ecbee087041923d2b3bafca67c515fb543b008a31f73e83c1",
+    "nightops/qrnight/common.py": "8f197f931babf78f55dc4779b6317e755ffd306ac9c4c6a858c0bf96cdb2810d",
+    "nightops/qrnight/host.py": "1a787995246cdf824d62d43a52f0bd9b49d7efc0ccada260217bbf76aab36ba7",
+    "nightops/qrnight/learning.py": "d4409dde11ebded7269bfd761190104206449855d1a1ad68097391b9e66f92eb",
+    "nightops/qrnight/report.py": "0fe9a206dbec70366783a64c461923fda1adb2ceb24ca1eb6615d6898277f89a",
+    "nightops/qrnight/worker.py": "57c13646a7586f6802c731134def49479e1aa7c5878940b97783f484d49262a6",
+    "nightops/requirements-media.txt": "99962e495fdf8e36e3338bef857d0f96fb6b46c0d2e07da653cc92e4775e7792",
+    "nightops/tests/test_integration.py": "d102e2ecfd13833d6768a8de0b5a3a643d8f1677f2c2fa9955c4db1c1f4447d0",
+    "nightops/tests/test_media.py": "163b1870373ad0a222fae151b19daa025c89b15e915dc47ec4d7fa83df787453",
+    "nightops/tests/test_night.py": "3e6fe4684057cfe26fdfb655f3a54352b5a192e221a14d78bde1e3decf35d2bd",
+    "scripts/qr-night.sh": "62903c4a4a769b24560240cb8973bea8f584b392582f588b9bb52ae32f8a7797"
+  }
+}
