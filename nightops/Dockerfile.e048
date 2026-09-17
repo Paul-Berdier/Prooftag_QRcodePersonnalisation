@@ -1,0 +1,12 @@
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+USER root
+COPY qrnight /opt/qr-nightly/qrnight
+ENV PYTHONPATH=/opt/qr-nightly:/app:/opt/DiffQRCoder \
+    PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 \
+    MPLBACKEND=Agg MPLCONFIGDIR=/tmp/matplotlib \
+    TOKENIZERS_PARALLELISM=false
+RUN python -B -m py_compile /opt/qr-nightly/qrnight/e048_worker.py && \
+    python -B -c "from qrnight.e048_worker import _profiles; print('E048 worker import OK')"
+USER 10001
+WORKDIR /app

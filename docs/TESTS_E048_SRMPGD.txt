@@ -1,0 +1,66 @@
+E048 SR-MPGD — RAPPORT DE VALIDATION AVANT RELEASE
+===================================================
+
+Release : 1.1.0-e048-canary
+Base E047 requise : 7de284647bc526d1b206e2be21614d724f51e29e
+Source prévue : qrn-20260917-075337
+
+1. Validation de l'archive E047 fournie par l'utilisateur
+---------------------------------------------------------
+- generation-plan.json : 36 tâches.
+- méthodes : 12 advisor, 12 fixed_e044, 12 paper_parameters_binary_target.
+- payload des 36 tâches : "Mettez moi la note maximal SVP".
+- 36 result.json présents dans l'export.
+- 36 images Stage2 brutes présentes dans l'export.
+- aucune génération E047 marquée SR-MPGD.
+- l'export volontairement léger n'embarque pas les *.safetensors ; le préflight serveur E048
+  exige et charge les 36 latents originaux directement dans le run E047 sur pcIA.
+
+2. Contrats scientifiques figés dans E048
+-----------------------------------------
+E048 réutilise l'image E047 validée et vérifie les blobs Git des modules scientifiques réellement
+utilisés : srmpgd.py, e035_loss_fidelity.py, e035_losses.py, e035_parent_artifact.py,
+e036_trust_region.py, e039_limiter_scanaware.py, guidance.py, qr.py et quality.py.
+Le validate_runtime E047 vérifie en plus l'attestation du commit scientifique de l'image et les
+modules E046/DiffQRCoder déjà utilisés par E047.
+
+3. Tests locaux de l'overlay
+----------------------------
+Commande :
+  PYTHONPATH=<repo>/nightops python -m unittest discover -s <repo>/nightops/tests -p 'test_*.py' -v
+
+Résultat final attendu avant empaquetage : 72 tests, 0 échec.
+Les tests couvrent notamment :
+- profils et ordre de recherche SR-MPGD ;
+- priorité 37/37 > robustesse partielle > garde visuelle ;
+- source E047 read-only et 36 tâches exactes ;
+- rejet payload incorrect / latent manquant / source déjà SR-MPGD ;
+- Job GPU borné à 1 GPU, imagePullPolicy Never, aucun token de ServiceAccount ;
+- Job CPU sans CUDA ;
+- gardien indépendant + ExecStopPost recovery ;
+- canary GPU placé avant la campagne longue ;
+- offload des modules de diffusion ;
+- contrat de blobs scientifiques ;
+- non-régression des 41 tests E047 existants (orchestration, recovery, ML, médias).
+
+4. Ce que les tests locaux ne peuvent pas prouver
+--------------------------------------------------
+Aucun environnement local ne reproduit la RTX 4000 SFF Ada, le runtime NVIDIA K3s et les caches
+modèles de pcIA. Il serait donc incorrect de promettre qu'un nouveau chemin GPU est infaillible
+sans l'exécuter réellement sur pcIA.
+
+Pour fermer précisément ce risque, E048 exécute après la coupure vLLM un CANARY GPU réel d'une
+itération utilisant le même chemin que le Job long : latent E047 -> pipeline DiffQRCoder ->
+SR-MPGD -> LPIPS -> QR-Verify. Le Job long n'est lancé que si `GPU_CANARY_PASS.json` est écrit.
+Si le canary échoue, le superviseur déclenche la récupération de vLLM et n'entame pas la campagne.
+
+5. Politique de sûreté
+----------------------
+- aucune écriture dans E047 ;
+- aucune suppression/nettoyage de données historiques ;
+- aucune modification du template vLLM ; seulement replicas 1 -> 0 -> valeur snapshot ;
+- détection de modification concurrente UID/template/resourceVersion ;
+- heartbeat + guard toutes les 60 s ;
+- deadline dure ;
+- retour vLLM contrôlé par petite inférence ;
+- pas de promotion automatique des résultats.
