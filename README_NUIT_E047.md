@@ -1,3 +1,7 @@
+> **Correctif immédiat 1.1.0 livré avec ce dossier :** suivre
+> `README_LANCEMENT_IMMEDIAT_E047.md` pour `start-now`. Le texte ci-dessous
+> décrit le mode nocturne v1 historique; ses dates ne doivent pas être recopiées aujourd'hui.
+
 # Reprise nocturne QR / E047 — version 1.0.0
 
 Ce ZIP contient **du code complet**, branché sur les primitives réelles du dépôt

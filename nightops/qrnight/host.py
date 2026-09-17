@@ -121,9 +121,15 @@ r=urllib.request.Request(b+"/v1/chat/completions",data=json.dumps(p).encode(),he
 v=json.load(urllib.request.urlopen(r,timeout=75));assert v.get("choices")
 '''
     code += 'print(json.dumps({"health":True,"model":m,"tiny_inference":' + str(inference) + '}))'
-    p = k("exec", "-n", cfg["vllm_namespace"], "deployment/" + cfg["vllm_deployment"],
-          "-c", "vllm", "--", "python", "-c", code, timeout=110)
-    return json.loads(p.stdout)
+    # This is the interpreter observed in the production vLLM image.
+    # Do not install an alias into the live container or change its image.
+    p = k("exec", "--request-timeout=105s", "-n", cfg["vllm_namespace"],
+          "deployment/" + cfg["vllm_deployment"], "-c", "vllm", "--",
+          "/usr/bin/python3", "-c", code, timeout=110)
+    result = json.loads(p.stdout)
+    if result.get("health") is not True or not result.get("model"):
+        raise RuntimeError("Le contrôle vLLM n'a pas renvoyé un état valide")
+    return result
 
 
 def build_image(repo, install, output, base):
@@ -350,6 +356,8 @@ def guard(r):
     if not (r / "SCHEDULED").exists() or (r / "RESTORED.json").exists(): return
     cfg = read(r / "config.json")
     should = time.time() >= cfg["stop_epoch"] or (r / "CANCEL").exists()
+    if (r / "STARTING.json").exists() and not (r / "STARTED").exists():
+        should |= time.time() - read(r / "STARTING.json")["epoch"] > 180
     if (r / "STARTED").exists() and (r / "heartbeat.json").exists():
         h = read(r / "heartbeat.json")
         boot = Path("/proc/sys/kernel/random/boot_id").read_text().strip()
@@ -363,6 +371,19 @@ def guard(r):
 
 
 def run(r):
+    """A recovered service is not a successful scientific run."""
+    try:
+        return _run_pipeline(r)
+    except Exception as exc:
+        failure = {"at": utc(), "type": type(exc).__name__, "error": str(exc)[:6000],
+                   "phase": read(r / "PHASE.json") if (r / "PHASE.json").exists() else "STARTUP",
+                   "scientific_success": False}
+        write(r / "FAILED.json", failure)
+        log(r, "ECHEC CAMPAGNE : " + failure["error"])
+        raise
+
+
+def _run_pipeline(r):
     cfg = read(r / "config.json"); work = Path(cfg["artifacts"])
     if not (r / "PREPARED.json").exists() or not (r / "SCHEDULED").exists():
         raise RuntimeError("Run non validé et programmé : utiliser prepare puis schedule")
@@ -370,7 +391,14 @@ def run(r):
         raise RuntimeError("Timer de restauration indépendant absent")
     if (r / "STARTED").exists() or (r / "CANCEL").exists():
         raise RuntimeError("Run déjà commencé ou annulé; aucune reprise GPU implicite")
-    if not cfg["start_epoch"] <= time.time() < cfg["start_epoch"] + 900:
+    if cfg.get("launch_mode") == "immediate":
+        auth = read(r / "IMMEDIATE_AUTHORIZED.json")
+        if (auth.get("run_id") != cfg["run_id"]
+                or auth.get("confirmation") != "COUPURE-VLLM-AUTORISEE"
+                or not auth["epoch"] <= time.time() < auth["epoch"] + 300
+                or time.time() >= cfg["stop_epoch"]):
+            raise RuntimeError("Autorisation immédiate absente, expirée ou invalide")
+    elif not cfg["start_epoch"] <= time.time() < cfg["start_epoch"] + 900:
         raise RuntimeError("Fenêtre de démarrage manquée; ne pas démarrer en journée")
     clock_ok()
     # Hold the existing E046 scheduler's lock as well as our own instance lock.
@@ -387,17 +415,22 @@ def run(r):
         write(r / "STARTED", {"at": utc()})
         heartbeat(r)
         try:
+            write(r / "PHASE.json", {"phase": "INVENTORY", "at": utc()})
             inv = launch(r, cfg, "inventory", min(time.time() + 1200, cfg["score_until"] - 120))
             states = wait(r, cfg, [inv], min(time.time() + 1200, cfg["score_until"] - 120))
             if states[inv] != "success" or not (work / "inventory.json").is_file():
                 raise RuntimeError("Inventaire incomplet en erreur")
+            write(r / "PHASE.json", {"phase": "SCORING_CPU", "at": utc()})
             jobs = [launch(r, cfg, "score", cfg["score_until"],
                            ["--shard", str(i), "--shards", str(cfg["cpu_workers"])], suffix=f"-{i}")
                     for i in range(cfg["cpu_workers"])]
-            wait(r, cfg, jobs, cfg["score_until"])
+            scoring_states = wait(r, cfg, jobs, cfg["score_until"])
+            if not any((work / "scores").glob("*.json")):
+                raise RuntimeError("Aucune observation scorée : " + json.dumps(scoring_states))
             wait_no_owned_pods(cfg)  # no concurrent writes while training snapshot is frozen
             train_end = min(cfg["train_until"], time.time() + 2700)
             if train_end > time.time() + 180:
+                write(r / "PHASE.json", {"phase": "TRAINING_CPU", "at": utc()})
                 tr = launch(r, cfg, "train", train_end)
                 wait(r, cfg, [tr], train_end)
             if time.time() < cfg["generate_until"] - cfg["max_generation_seconds"]:
@@ -405,7 +438,10 @@ def run(r):
                 s = wait(r, cfg, [q], time.time() + 180)
                 if s[q] == "success":
                     generation = read(work / "generation-plan.json")["tasks"]
-                    cut(r, cfg)
+                    if generation:
+                        write(r / "PHASE.json", {"phase": "GENERATION_GPU", "at": utc(),
+                              "planned_tasks": len(generation)})
+                        cut(r, cfg)
                     for i, task in enumerate(generation):
                         if time.time() > cfg["generate_until"] - 180: break
                         end = min(time.time() + cfg["max_generation_seconds"], cfg["generate_until"])
@@ -414,9 +450,17 @@ def run(r):
                         wait_no_owned_pods(cfg)
             if time.time() < cfg["stop_epoch"] - 90:
                 end = min(time.time() + 1000, cfg["stop_epoch"] - 30)
+                write(r / "PHASE.json", {"phase": "REPORT_CPU", "at": utc()})
                 j = launch(r, cfg, "report", end)
                 wait(r, cfg, [j], end)
-            write(r / "FINISHED.json", {"at": utc(), "report_exists": (work / "report/index.html").is_file()})
+            training_path = work / "model/training-report.json"
+            training = read(training_path) if training_path.is_file() else {}
+            completed = len(list((work / "generated").glob("*/result.json")))
+            write(r / "FINISHED.json", {"at": utc(),
+                  "report_exists": (work / "report/index.html").is_file(),
+                  "advisor_trained": training.get("trained", False),
+                  "completed_generations": completed,
+                  "scope": "Pipeline terminé ou borné; inspecter chaque résultat et les échecs."})
         finally:
             recover(r)
     finally:
@@ -492,6 +536,8 @@ def prepare(args):
     cfg["run_id"] = "qrn-" + datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     cfg["configmap"] = cfg["run_id"] + "-config"
     states = idle_check(cfg)
+    vllm_preflight = health(cfg, True)
+    print("vLLM préflight : santé + modèle + petite inférence OK : " + vllm_preflight["model"], flush=True)
     if args.cpu_workers is not None:
         if args.cpu_workers not in (1, 2): raise ValueError("1 ou 2 workers CPU autorisés")
         cfg["cpu_workers"] = args.cpu_workers
@@ -582,11 +628,23 @@ def arm(r, acknowledge):
 def status(r):
     cfg = read(r / "config.json")
     print(json.dumps({k: cfg[k] for k in ("run_id", "start_paris", "stop_paris", "ready_paris", "artifacts")}, indent=2))
-    for name in ("PREPARED.json", "SCHEDULED", "STARTED", "CUT.json", "FINISHED.json", "RESTORED.json", "RECOVERY_ERROR.json"):
+    if (r / "FAILED.json").exists():
+        print("CAMPAGNE=ECHEC (RESTORED ne signifie pas entraînement réussi)")
+    elif (r / "FINISHED.json").exists():
+        print("CAMPAGNE=PIPELINE_TERMINE; vérifier les résultats scientifiques ci-dessous")
+    elif (r / "RESTORED.json").exists():
+        print("CAMPAGNE=INTERROMPUE_OU_NON_DEMARREE; restauration seule")
+    elif (r / "STARTED").exists():
+        print("CAMPAGNE=EN_COURS")
+    else:
+        print("CAMPAGNE=NON_DEMARREE")
+    for name in ("PREPARED.json", "SCHEDULED", "STARTING.json", "STARTED", "PHASE.json", "CUT.json", "FAILED.json", "FINISHED.json", "RESTORED.json", "RECOVERY_ERROR.json"):
         p = r / name
         if p.exists(): print(name, p.read_text()[:2500] if p.suffix == ".json" else "OUI")
     for p in Path(cfg["artifacts"]).glob("score-progress-*.json"):
         print(p.name, p.read_text())
+    command(["systemctl", "show", cfg["run_id"] + ".service", "-p", "ActiveState", "-p", "SubState",
+             "-p", "Result", "-p", "ExecMainStatus"], check=False)
     command(["systemctl", "list-timers", "--all", cfg["run_id"] + "*", "--no-pager"], check=False)
     print("STATE=" + str(r))
 
@@ -601,7 +659,7 @@ def export(r):
                 tf.add(p, arcname=str(p.relative_to(base)), recursive=False)
         for p in (r / "job-results").glob("*.json"):
             tf.add(p, arcname="operations/job-results/" + p.name)
-        for name in ("RESTORED.json", "RECOVERY_ERROR.json", "events.log", "last-jobs.json"):
+        for name in ("RESTORED.json", "FAILED.json", "FINISHED.json", "PHASE.json", "RECOVERY_ERROR.json", "events.log", "last-jobs.json"):
             if (r / name).exists(): tf.add(r / name, arcname="operations/" + name)
     if os.environ.get("SUDO_UID"):
         os.chown(dest, int(os.environ["SUDO_UID"]), int(os.environ["SUDO_GID"]))
@@ -610,9 +668,12 @@ def export(r):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("action", choices=["prepare", "schedule", "run", "guard", "recover", "status", "logs", "cancel", "export", "cleanup"])
+    p.add_argument("action", choices=["prepare", "start-now", "schedule", "run", "guard", "recover", "status", "logs", "cancel", "export", "cleanup"])
     p.add_argument("--repo", default=str(Path.cwd()))
     p.add_argument("--start")
+    p.add_argument("--reuse-prepared-run", help="Run dont l'image worker déjà validée est réutilisée")
+    p.add_argument("--max-hours", type=float, default=12,
+                   help="Budget total depuis la commande, dernière heure réservée à vLLM (5 à 17 h)")
     p.add_argument("--ready-by")
     p.add_argument("--run-id")
     p.add_argument("--confirm")
@@ -620,6 +681,11 @@ def main():
     p.add_argument("--output-root", default="/home/paul/qr-night-runs")
     args = p.parse_args(); root_only()
     STATE_ROOT.mkdir(parents=True, exist_ok=True); os.chmod(STATE_ROOT, 0o700)
+    if args.action == "start-now":
+        if not args.reuse_prepared_run:
+            p.error("start-now exige --reuse-prepared-run; aucun ancien run n'est réarmé")
+        from .immediate import start_now
+        start_now(args); return
     if args.action == "prepare":
         if not args.start or not args.ready_by: p.error("prepare exige --start et --ready-by")
         prepare(args); return
