@@ -2,8 +2,61 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import sys
 import tempfile
+import types
 import unittest
+
+
+def _install_host_test_shims() -> None:
+    """Allow dependency-light host test runners to import Linux/container modules.
+
+    The E048 production supervisor only runs on Debian and the E048 worker only runs
+    inside the pinned QR container. Windows lacks ``fcntl`` and pcIA host Python
+    intentionally has no Pillow. These shims are test-only and deliberately raise if
+    code tries to *use* the unavailable dependency, so they cannot turn a runtime
+    dependency failure into a passing behavioral test.
+    """
+    try:
+        import fcntl as _fcntl  # noqa: F401
+    except ModuleNotFoundError:
+        shim = types.ModuleType("fcntl")
+        shim.LOCK_EX = 2
+        shim.LOCK_NB = 4
+        shim.LOCK_UN = 8
+
+        def _missing_flock(*_args, **_kwargs):
+            raise RuntimeError("fcntl indisponible: shim réservé aux tests d'import")
+
+        shim.flock = _missing_flock
+        sys.modules["fcntl"] = shim
+
+    try:
+        from PIL import Image as _image  # noqa: F401
+    except ModuleNotFoundError:
+        pil = types.ModuleType("PIL")
+
+        def _module(name: str):
+            module = types.ModuleType(f"PIL.{name}")
+
+            def _missing(*_args, **_kwargs):
+                raise RuntimeError(
+                    f"Pillow/{name} indisponible: shim réservé aux tests d'import"
+                )
+
+            module.__getattr__ = lambda _attr: _missing
+            return module
+
+        pil.Image = _module("Image")
+        pil.ImageDraw = _module("ImageDraw")
+        pil.ImageFont = _module("ImageFont")
+        sys.modules["PIL"] = pil
+        sys.modules["PIL.Image"] = pil.Image
+        sys.modules["PIL.ImageDraw"] = pil.ImageDraw
+        sys.modules["PIL.ImageFont"] = pil.ImageFont
+
+
+_install_host_test_shims()
 
 from qrnight import e048_host, e048_worker
 

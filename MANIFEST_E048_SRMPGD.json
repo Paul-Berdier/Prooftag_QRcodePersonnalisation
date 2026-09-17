@@ -11,8 +11,9 @@
     "nightops/e048_config.json": "d2f8916b38adc75bf4fafc8995980d714b044129437cd5b718805ba48fba7861",
     "nightops/qrnight/e048_host.py": "372554c71f35183ab49c6772fa4d9ffc4ae2d67102d68a4acf3b606ea75ca794",
     "nightops/qrnight/e048_worker.py": "ea229bd2fa254045bff2698c9940c31b6b0a5f73a57d7a86aef3243abfcdeaec",
-    "nightops/tests/test_e048.py": "b1d5d94aa518eee65e88b17eb90f730877249c003cd954e8b704fd95c9d3657e",
+    "nightops/tests/test_e048.py": "3e3903575b1097a13c6c4a594bfe7a7ed0e3627d3f75799cec915c9b7ea7e9ab",
     "scripts/e048-install-pc.ps1": "7014b1a37c33744a027017f422bed18762b07b2c0134b1b51fe6050e8866e8e3",
     "scripts/e048-srmpgd.sh": "55a91cb48abe90fc1ea8a7be6dbc08ef3ad49932e169819d731a085ee5df68b7"
-  }
+  },
+  "pack_revision": "v2-dependency-light-host-tests"
 }
