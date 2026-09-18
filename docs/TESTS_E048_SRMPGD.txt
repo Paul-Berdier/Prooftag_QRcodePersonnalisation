@@ -1,66 +1,92 @@
-E048 SR-MPGD — RAPPORT DE VALIDATION AVANT RELEASE
-===================================================
+E048 SR-MPGD V3 — RAPPORT DE VALIDATION
+========================================
 
-Release : 1.1.0-e048-canary
+Release : 1.2.0-e048-e040-canary
+Pack : v3-e040-validated-trajectory
 Base E047 requise : 7de284647bc526d1b206e2be21614d724f51e29e
-Source prévue : qrn-20260917-075337
+Source : qrn-20260917-075337
 
-1. Validation de l'archive E047 fournie par l'utilisateur
----------------------------------------------------------
-- generation-plan.json : 36 tâches.
-- méthodes : 12 advisor, 12 fixed_e044, 12 paper_parameters_binary_target.
-- payload des 36 tâches : "Mettez moi la note maximal SVP".
-- 36 result.json présents dans l'export.
-- 36 images Stage2 brutes présentes dans l'export.
-- aucune génération E047 marquée SR-MPGD.
-- l'export volontairement léger n'embarque pas les *.safetensors ; le préflight serveur E048
-  exige et charge les 36 latents originaux directement dans le run E047 sur pcIA.
+1. Correction V3
+----------------
+La V2 mélangeait le helper générique SR-MPGD et la politique d'offload E035/E046.
+La V3 retire ce chemin et appelle directement :
+  prooftag_qr.e040_checkpoint_frontier._run_trajectory
+avec :
+  - E039Config ;
+  - Recipe E040 ;
+  - _offload_diffusion_modules ;
+  - VAE float32 pendant la trajectoire ;
+  - restauration du dtype VAE ;
+  - SRL upstream officielle chargée par E040 ;
+  - QR-Verify réel sur chaque checkpoint.
 
-2. Contrats scientifiques figés dans E048
------------------------------------------
-E048 réutilise l'image E047 validée et vérifie les blobs Git des modules scientifiques réellement
-utilisés : srmpgd.py, e035_loss_fidelity.py, e035_losses.py, e035_parent_artifact.py,
-e036_trust_region.py, e039_limiter_scanaware.py, guidance.py, qr.py et quality.py.
-Le validate_runtime E047 vérifie en plus l'attestation du commit scientifique de l'image et les
-modules E046/DiffQRCoder déjà utilisés par E047.
+2. Contrat scientifique additionnel
+------------------------------------
+E048 V3 atteste les blobs Git de :
+  srmpgd.py
+  e035_loss_fidelity.py
+  e035_losses.py
+  e035_parent_artifact.py
+  e036_trust_region.py
+  e038_recipe_frontier.py
+  e039_limiter_scanaware.py
+  e040_checkpoint_frontier.py
+  e040_model_bridge.py
+  guidance.py
+  qr.py
+  quality.py
 
-3. Tests locaux de l'overlay
-----------------------------
+Le validate_runtime E047 atteste en plus le commit scientifique et les modules E046/DiffQRCoder.
+
+3. Tests overlay E048
+---------------------
 Commande :
-  PYTHONPATH=<repo>/nightops python -m unittest discover -s <repo>/nightops/tests -p 'test_*.py' -v
+  PYTHONPATH=<repo>/nightops python3 -m unittest discover -s nightops/tests -p 'test_e048.py' -v
 
-Résultat final attendu avant empaquetage : 72 tests, 0 échec.
+Résultat :
+  Ran 41 tests
+  OK
+
 Les tests couvrent notamment :
-- profils et ordre de recherche SR-MPGD ;
-- priorité 37/37 > robustesse partielle > garde visuelle ;
-- source E047 read-only et 36 tâches exactes ;
-- rejet payload incorrect / latent manquant / source déjà SR-MPGD ;
-- Job GPU borné à 1 GPU, imagePullPolicy Never, aucun token de ServiceAccount ;
-- Job CPU sans CUDA ;
-- gardien indépendant + ExecStopPost recovery ;
-- canary GPU placé avant la campagne longue ;
-- offload des modules de diffusion ;
-- contrat de blobs scientifiques ;
-- non-régression des 41 tests E047 existants (orchestration, recovery, ML, médias).
+  - ordre et bornes des profils ;
+  - ranking strict 37/37 ;
+  - QR-Verify de chaque checkpoint ;
+  - source E047 read-only ;
+  - latent/payload/task-count ;
+  - Job GPU avec 1 GPU ;
+  - CPU sans CUDA ;
+  - ServiceAccount désactivé ;
+  - imagePullPolicy Never ;
+  - TORCH_HOME/HF_HOME explicites ;
+  - gardien indépendant ;
+  - ExecStopPost recovery ;
+  - contrat E040/E039 ;
+  - VAE float32 + restauration dtype ;
+  - GPU_CANARY_FAILED visible dans status ;
+  - canary avant optimisation longue.
 
-4. Ce que les tests locaux ne peuvent pas prouver
---------------------------------------------------
-Aucun environnement local ne reproduit la RTX 4000 SFF Ada, le runtime NVIDIA K3s et les caches
-modèles de pcIA. Il serait donc incorrect de promettre qu'un nouveau chemin GPU est infaillible
-sans l'exécuter réellement sur pcIA.
+4. Non-régression NightOps
+--------------------------
+Sur un workspace contenant la base E047 + overlay V3 :
+  PYTHONPATH=<repo>/nightops python3 -m unittest discover -s nightops/tests -p 'test_*.py'
 
-Pour fermer précisément ce risque, E048 exécute après la coupure vLLM un CANARY GPU réel d'une
-itération utilisant le même chemin que le Job long : latent E047 -> pipeline DiffQRCoder ->
-SR-MPGD -> LPIPS -> QR-Verify. Le Job long n'est lancé que si `GPU_CANARY_PASS.json` est écrit.
-Si le canary échoue, le superviseur déclenche la récupération de vLLM et n'entame pas la campagne.
+Résultat :
+  Ran 82 tests
+  OK
 
-5. Politique de sûreté
-----------------------
-- aucune écriture dans E047 ;
-- aucune suppression/nettoyage de données historiques ;
-- aucune modification du template vLLM ; seulement replicas 1 -> 0 -> valeur snapshot ;
-- détection de modification concurrente UID/template/resourceVersion ;
-- heartbeat + guard toutes les 60 s ;
-- deadline dure ;
-- retour vLLM contrôlé par petite inférence ;
-- pas de promotion automatique des résultats.
+5. Limite assumée
+-----------------
+L'environnement local ne possède pas le GPU RTX 4000 SFF Ada ni le runtime NVIDIA K3s de pcIA.
+Le dernier risque est donc testé par un canary GPU réel avant la campagne longue. En cas d'échec :
+  - GPU_CANARY_FAILED.json est écrit avec traceback ;
+  - le Job optimize n'est pas lancé ;
+  - la restauration vLLM est engagée.
+
+
+=== V4 CROSS-PLATFORM TEST HARNESS ===
+- Cause corrigée: les deux tests CanaryMarkerTests appelaient le writer POSIX qrnight.common.write sur Windows, où os.O_DIRECTORY n'existe pas.
+- Production inchangée: common.write reste utilisé dans les Jobs Linux/Kubernetes.
+- Tests canary: writer JSON portable injecté uniquement via unittest.mock.
+- Validation Linux/container-like: 41/41 tests E048 OK.
+- Validation Windows-like simulée avec os.O_DIRECTORY absent: 41/41 tests E048 OK.
+- Suite nightops complète: 82/82 tests OK.

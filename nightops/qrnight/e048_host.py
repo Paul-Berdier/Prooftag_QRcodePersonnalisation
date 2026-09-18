@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from . import host
 from .common import LABEL, read, write, sha, digest, schedule, alive, gpu_requested, utc, check_id
 
-VERSION = "1.1.0-e048-canary"
+VERSION = "1.2.0-e048-e040-canary"
 EXPECTED_BASE_COMMIT = "7de284647bc526d1b206e2be21614d724f51e29e"
 STATE_ROOT = Path("/var/lib/prooftag-qr-e048")
 INSTALL_ROOT = Path("/opt/prooftag-qr-e048")
@@ -157,6 +157,8 @@ def manifest(cfg: dict, action: str, name: str, deadline: float, gpu: bool) -> d
             {"name": "QRNIGHT_IMAGE", "value": cfg["image"]},
             {"name": "QRNIGHT_IMAGE_DIGEST", "value": cfg["image_id"]},
             {"name": "HF_HOME", "value": "/cache/huggingface"},
+            {"name": "TORCH_HOME", "value": "/cache/torch"},
+            {"name": "XDG_CACHE_HOME", "value": "/cache/xdg"},
             {"name": "HF_HUB_OFFLINE", "value": "1"},
             {"name": "TRANSFORMERS_OFFLINE", "value": "1"},
             {"name": "PROOFTAG_QR_MODEL_CACHE_DIR", "value": "/cache"},
@@ -525,6 +527,9 @@ def status(r: Path) -> None:
     canary = Path(cfg["artifacts"]) / "GPU_CANARY_PASS.json"
     if canary.exists():
         print("GPU_CANARY_PASS.json", canary.read_text(encoding="utf-8"))
+    canary_failed = Path(cfg["artifacts"]) / "GPU_CANARY_FAILED.json"
+    if canary_failed.exists():
+        print("GPU_CANARY_FAILED.json", canary_failed.read_text(encoding="utf-8")[:12000])
     progress = Path(cfg["artifacts"]) / "progress.json"
     if progress.exists():
         print("progress.json", progress.read_text(encoding="utf-8"))
@@ -542,7 +547,9 @@ def export(r: Path) -> None:
                 continue
             rel = path.relative_to(base)
             # L'export garde les preuves, meilleurs PNG et GIF, pas les latents ni les centaines de previews.
-            if path.suffix == ".safetensors" or "previews" in rel.parts or "qr-cache" in rel.parts:
+            if (path.suffix == ".safetensors" or "previews" in rel.parts or
+                    "trajectory" in rel.parts or "qr-cache" in rel.parts or
+                    "qr-evidence" in rel.parts):
                 continue
             archive.add(path, arcname=str(rel), recursive=False)
         for name in ("PREPARED.json", "FINISHED.json", "FAILED.json", "RESTORED.json", "RECOVERY_ERROR.json", "events.log"):

@@ -1,90 +1,123 @@
-# E048 — SR-MPGD nocturne sur les 36 Stage2 E047
+# E048 V4 — SR-MPGD sur les 36 Stage2 E047
 
-Version de release : `1.1.0-e048-canary`.
+**Révision du pack : `v4-cross-platform-canary-tests`**
+
+V4 conserve **strictement le chemin scientifique V3 E039/E040** et corrige uniquement le harness de tests poste développeur : les tests de marqueurs du canary utilisent désormais un writer JSON portable au lieu de déclencher `qrnight.common.write`, dont la garantie d'atomicité `O_DIRECTORY` est volontairement POSIX/Linux. Le code de production continue d'utiliser le writer durable Linux dans les Jobs pcIA.
+
+Le script `scripts/e048-install-pc.ps1` sait aussi réparer un overlay V3 échoué **uniquement si les fichiers sales sont tous des fichiers E048 gérés par le pack** ; il refuse toute autre modification locale.
+
+# E048 — SR-MPGD adaptatif sur les 36 Stage2 E047
+
+Version de release : `1.2.0-e048-e040-canary`.
+Pack : `v3-e040-validated-trajectory`.
+
+## Pourquoi cette V3 existe
+
+La V2 a correctement bloqué la campagne longue au canary GPU, mais son worker mélangeait deux
+chemins SR-MPGD différents : le helper générique `run_srmpgd` et la politique d'offload issue des
+campagnes E035/E046. Cette combinaison n'était pas le chemin déjà validé historiquement sur le
+projet.
+
+La V3 supprime ce mélange. Elle réutilise directement le moteur de trajectoire déjà employé par
+E046/E040 : `e040_checkpoint_frontier._run_trajectory`, avec `E039Config`, l'offload E035, VAE en
+float32, SRL upstream officielle et checkpoints persistés.
+
+Aucun Stage1/Stage2 E047 n'est régénéré. Les 36 artefacts source restent montés en lecture seule.
 
 ## Objectif
 
-E048 ne régénère ni Stage1 ni Stage2. Elle prend comme source le run E047 terminé
-`qrn-20260917-075337`, monte ses artefacts en **lecture seule**, charge les 36
-`stage2-latent.safetensors`, puis cherche une amélioration SR-MPGD de la robustesse QR.
+Pour chaque sortie E047 :
 
-La priorité de sélection est :
+1. conserver le Stage2 brut comme baseline ;
+2. charger son latent Stage2 original ;
+3. appliquer plusieurs trajectoires SR-MPGD bornées ;
+4. scorer **chaque checkpoint** avec le vrai QR-Verify ;
+5. arrêter les profils suivants dès qu'un checkpoint strict `37/37` + payload exact est retenu ;
+6. à robustesse QR égale, préférer le checkpoint qui modifie le moins l'image.
 
-1. QR strict `37/37` + payload exact sur l'image originale ;
+Ordre de priorité :
+
+1. `37/37` + payload original exact ;
 2. nombre de presets exacts ;
 3. décodage original exact ;
-4. à égalité QR, modification visuelle minimale (LPIPS / MAE / delta latent).
+4. LPIPS / changement moyen / delta latent minimum.
 
-Le Stage2 brut reste toujours candidat. Une optimisation qui n'améliore pas le QR ne peut donc
-pas remplacer arbitrairement l'image source.
+## Profils
 
-## Stratégie SR-MPGD
-
-Les quatre premières branches reprennent les zones de paramètres déjà présentes dans le catalogue
-E046 :
+Les quatre premières zones reprennent les recettes E046 :
 
 - `catalog_g250_r100_i04` ;
 - `catalog_g500_r200_i08` ;
 - `catalog_g1000_r150_i08` ;
 - `catalog_g500_r150_i08_visual`.
 
-Si aucun 37/37 n'est trouvé, trois branches plus longues utilisent le même moteur SR-MPGD gardé :
+Puis, si nécessaire :
 
 - `extended_g500_i16` ;
 - `extended_g1000_i24` ;
-- `robust_i32` (pertes robustes blur/downscale/brightness/contrast).
+- `robust_i32`.
 
-Chaque itération reçoit un vrai QR-Verify. Les gardes visuels du moteur `guarded_production`
-restent actifs. Un 37/37 arrête les profils suivants pour le candidat concerné.
+Les paramètres V3 correspondent directement au moteur E039/E040 : `gamma`, `latent_radius_rms`,
+`max_iterations`, `lpips_weight`, `lpips_budget`, `core_mae_budget`, `full_module_weight` et
+`max_backtracks`.
 
-## Garde-fous opérationnels
+## Garde-fous
 
-- le cœur E047/E046 est réutilisé sans modification ;
-- les 36 sources E047 sont montées read-only ;
-- le commit E047 source doit être exactement `7de284647bc526d1b206e2be21614d724f51e29e` ;
-- les blobs Git des modules scientifiques SR-MPGD sont vérifiés dans le conteneur ;
-- `prepare` effectue un préflight CPU réel, vérifie les 36 latents, les imports et l'API SR-MPGD ;
-- vLLM reste actif pendant `prepare` ;
-- au démarrage nocturne, le snapshot vLLM est pris puis le gardien indépendant est déjà actif ;
-- après la coupure de vLLM, **un canary GPU réel d'une itération** teste DiffQRCoder + latent
-  + SR-MPGD + LPIPS + QR-Verify ;
-- si le canary échoue, la campagne s'arrête et la restauration vLLM est engagée ;
-- le Job long est borné par la deadline ;
-- 30 minutes sont réservées au rapport et 1 heure entière à la restauration de production ;
-- le template/UID du déploiement vLLM est vérifié avant toute remise à l'échelle ;
-- la restauration valide `/health`, `/v1/models` et une petite inférence ;
+- source E047 `qrn-20260917-075337` obligatoire ;
+- commit scientifique E047 attendu : `7de284647bc526d1b206e2be21614d724f51e29e` ;
+- 36 images + 36 latents + 36 résultats requis ;
+- source E047 montée read-only ;
+- blobs Git des dépendances SR-MPGD/E038/E039/E040 vérifiés dans le worker ;
+- image Docker additive, aucun `pip install` au lancement ;
+- `TORCH_HOME=/cache/torch` explicite ;
+- préflight CPU avant toute coupure vLLM ;
+- snapshot et health-check vLLM avant coupure ;
+- canary GPU réel avant la campagne longue ;
+- si le canary échoue, `GPU_CANARY_FAILED.json` contient le traceback et le run long ne démarre pas ;
+- guard systemd indépendant toutes les 60 s ;
+- deadline dure ;
+- restauration vLLM contrôlée par `/health`, `/v1/models` et petite inférence ;
 - aucune promotion automatique en production.
 
-## Fenêtre recommandée cette nuit
+## Canary V3
 
-```text
-Départ calcul : 2026-09-17 22:00 Europe/Paris
-Arrêt calcul  : 2026-09-18 07:00 Europe/Paris
-Objectif vLLM : 2026-09-18 08:00 Europe/Paris
-```
+Le canary exécute réellement :
 
-Le pipeline peut finir plus tôt. S'il atteint la deadline, les résultats déjà écrits sont conservés
-et la restauration de vLLM est prioritaire.
+`Stage2 latent E047 -> pipeline DiffQRCoder -> offload E035 -> VAE float32 -> E040/E039 SR-MPGD -> checkpoint -> QR-Verify`.
+
+Le Job long n'est autorisé que si `GPU_CANARY_PASS.json` est écrit.
 
 ## Résultats
 
-Les sorties sont écrites hors du run E047 :
+Sous :
 
-```text
-/home/paul/qr-night-runs/e048-.../artifacts/
-```
+`/home/paul/qr-night-runs/e048-.../artifacts/`
 
-On y trouve notamment :
+Principaux fichiers :
 
-- `GPU_CANARY_PASS.json` ;
+- `GPU_CANARY_PASS.json` ou `GPU_CANARY_FAILED.json` ;
 - `progress.json` ;
 - `optimized/<task>/best.png` ;
 - `optimized/<task>/result.json` ;
-- profils/checkpoints et latents intermédiaires ;
+- `optimized/<task>/profiles/<profil>/result.json` ;
+- `optimized/<task>/profiles/<profil>/checkpoints.json` ;
+- trajectoires complètes et latents conservés sur le serveur ;
 - `report/comparison.csv` ;
 - `report/summary.json` ;
 - `report/contact-sheet.png` ;
 - GIF des meilleurs candidats.
 
-L'export final exclut les gros latents et previews, mais conserve les preuves JSON, meilleurs PNG,
-comparaison, rapport et GIF.
+L'export final exclut les gros latents, trajectoires complètes et caches, mais garde les meilleurs
+PNG, les JSON de décision, les tableaux et les GIF.
+
+## Validation hors GPU
+
+Le pack V3 passe :
+
+- 41 tests E048 ;
+- 82 tests `nightops` au total avec la base E047 ;
+- compilation Python de `e048_host.py`, `e048_worker.py` et `test_e048.py` ;
+- vérification du manifeste SHA-256 lors de l'installation.
+
+Ces tests ne remplacent pas le canary CUDA réel. Le canary existe précisément pour fermer le
+risque restant lié à la RTX, CUDA, aux caches modèles et au runtime K3s de pcIA.

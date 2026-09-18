@@ -6,7 +6,9 @@ ENV PYTHONPATH=/opt/qr-nightly:/app:/opt/DiffQRCoder \
     PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 \
     MPLBACKEND=Agg MPLCONFIGDIR=/tmp/matplotlib \
     TOKENIZERS_PARALLELISM=false
-RUN python -B -m py_compile /opt/qr-nightly/qrnight/e048_worker.py && \
-    python -B -c "from qrnight.e048_worker import _profiles; print('E048 worker import OK')"
+RUN python -B -m py_compile \
+        /opt/qr-nightly/qrnight/e048_host.py \
+        /opt/qr-nightly/qrnight/e048_worker.py && \
+    python -B -c "import lpips; from qrnight.e048_worker import _profiles; from prooftag_qr.e035_loss_fidelity import _offload_diffusion_modules; from prooftag_qr.e039_limiter_scanaware import E039Config; from prooftag_qr.e040_checkpoint_frontier import Recipe,_run_trajectory; print('E048 V3 scientific imports OK')"
 USER 10001
 WORKDIR /app

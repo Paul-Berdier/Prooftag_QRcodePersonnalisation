@@ -15,6 +15,7 @@ from pathlib import Path
 import shutil
 import signal
 import time
+import traceback
 from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont
@@ -35,6 +36,9 @@ E048_SCIENTIFIC_BLOBS = {
     "guidance.py": "f1fb8ae5c52a774ee46396250e9e841ce8d6e825",
     "qr.py": "93e63cf3352ed66d172aaad4099a8bc067c4b0fe",
     "quality.py": "76744a7a7bfd980ad5ffae82f0ac36508236a013",
+    "e038_recipe_frontier.py": "68034ad4603cbb8316aa18743de5fa9df6cd96ce",
+    "e040_checkpoint_frontier.py": "720b277ae611c120f2585af5db5e14a9fc3bf1bd",
+    "e040_model_bridge.py": "c0bdc96aa3dfbc6fcd80936b1c082b366937ca8c",
 }
 
 
@@ -101,8 +105,12 @@ def _profiles(cfg: dict[str, Any]) -> list[dict[str, Any]]:
         names.add(name)
         if int(item.get("max_iterations", 0)) < 1 or int(item["max_iterations"]) > 40:
             raise RuntimeError(f"max_iterations hors bornes : {name}")
-        if float(item.get("step_size", 0)) <= 0:
-            raise RuntimeError(f"step_size invalide : {name}")
+        if float(item.get("gamma", 0)) <= 0:
+            raise RuntimeError(f"gamma invalide : {name}")
+        if float(item.get("latent_radius_rms", 0)) <= 0:
+            raise RuntimeError(f"latent_radius_rms invalide : {name}")
+        if float(item.get("lpips_budget", -1)) < 0 or float(item.get("core_mae_budget", -1)) < 0:
+            raise RuntimeError(f"budget visuel invalide : {name}")
         clean.append(item)
     return clean
 
@@ -151,31 +159,42 @@ def preflight(work: Path, cfg: dict[str, Any]) -> dict[str, Any]:
     runtime = validate_e048_runtime()
     source_info = validate_source(cfg)
     profiles = _profiles(cfg)
-    # Charge et valide les API scientifiques réellement utilisées, sans toucher au GPU.
+    # Valide les API exactes utilisées par V3, sans toucher au GPU.
     import inspect
-    from prooftag_qr.srmpgd import SRMPGDConfig, run_srmpgd, _validate_config
     from prooftag_qr.e035_loss_fidelity import _offload_diffusion_modules
+    from prooftag_qr.e039_limiter_scanaware import E039Config
+    from prooftag_qr.e040_checkpoint_frontier import Recipe as E040Recipe, _run_trajectory
+    from prooftag_qr.e046_catalog import PARENT_RECIPES
     from safetensors.torch import load_file
-    expected_parameters = {
-        "pipeline", "initial_latent", "blueprint", "config", "initial_image",
-        "scanning_loss", "validation_callback", "preview_callback",
-    }
-    observed_parameters = set(inspect.signature(run_srmpgd).parameters)
+
+    expected_parameters = {"pipeline", "parent", "blueprint", "recipe", "config", "output_root"}
+    observed_parameters = set(inspect.signature(_run_trajectory).parameters)
     if not expected_parameters.issubset(observed_parameters):
         raise RuntimeError(
-            "API run_srmpgd incompatible : "
+            "API E040 _run_trajectory incompatible : "
             + ",".join(sorted(expected_parameters - observed_parameters))
         )
     if not callable(_offload_diffusion_modules):
         raise RuntimeError("API d'offload diffusion indisponible")
+    if not E039Config or not E040Recipe:
+        raise RuntimeError("API E039/E040 indisponible")
+
     first = source_info["task_ids"][0]
     _, latent_path = _source_paths(_source(cfg), first)
     latent = load_file(str(latent_path), device="cpu")["latent"]
     if latent.ndim != 4 or latent.shape[0] != 1:
         raise RuntimeError("latent Stage2 E047 invalide")
-    # Valide les profils via la même routine que run_srmpgd.
+
+    # Construit toutes les recettes V3 avec les mêmes dataclasses que le runtime GPU.
+    reference_parent = PARENT_RECIPES[4]
     for item in profiles:
-        _validate_config(_srmpgd_config(item))
+        recipe = _trajectory_recipe(item)
+        config = _trajectory_config(item, reference_parent)
+        if recipe.max_iterations < 1 or recipe.max_iterations > 40:
+            raise RuntimeError("profil E040 hors bornes")
+        if config.gamma <= 0 or config.max_backtracks < 0:
+            raise RuntimeError("configuration E039 invalide")
+
     result = {
         "status": "PASS",
         "at": utc(),
@@ -184,49 +203,11 @@ def preflight(work: Path, cfg: dict[str, Any]) -> dict[str, Any]:
         "profile_count": len(profiles),
         "profiles": profiles,
         "latent_shape": list(latent.shape),
+        "trajectory_impl": "e040_checkpoint_frontier._run_trajectory",
         "gpu_used": False,
     }
     write(work / "preflight.json", result)
     return result
-
-
-def _srmpgd_config(profile: dict[str, Any]):
-    from prooftag_qr.srmpgd import SRMPGDConfig
-    return SRMPGDConfig(
-        protocol="guarded_production",
-        max_iterations=int(profile["max_iterations"]),
-        step_size=float(profile["step_size"]),
-        gradient_scale=float(profile.get("gradient_scale", 32768.0)),
-        min_gradient_rms=float(profile.get("min_gradient_rms", 1e-12)),
-        decode_precision=str(profile.get("decode_precision", "model")),
-        lpips_weight=float(profile.get("lpips_weight", 0.01)),
-        lpips_net=str(profile.get("lpips_net", "vgg")),
-        lpips_device="cpu",
-        crop_padding_px=int(profile.get("crop_padding_px", 78)),
-        dark_threshold=float(profile.get("dark_threshold", 0.5)),
-        light_threshold=float(profile.get("light_threshold", 0.5)),
-        center_fraction=float(profile.get("center_fraction", 1 / 3)),
-        max_initial_module_error_rate=1.0,
-        max_step_rms=float(profile.get("max_step_rms", 0.03)),
-        max_total_delta_rms=float(profile["max_total_delta_rms"]),
-        min_relative_module_improvement=0.0,
-        max_lpips_loss=float(profile.get("max_lpips_loss", 0.07)),
-        max_mean_absolute_change=float(profile.get("max_mean_absolute_change", 0.07)),
-        max_saturation_mean_increase=float(profile.get("max_saturation_mean_increase", 0.06)),
-        max_high_saturation_ratio_increase=float(profile.get("max_high_saturation_ratio_increase", 0.08)),
-        max_rgb_clipped_channel_ratio_increase=float(profile.get("max_rgb_clipped_channel_ratio_increase", 0.03)),
-        robust_blur_weight=float(profile.get("robust_blur_weight", 0.0)),
-        robust_blur_kernel=int(profile.get("robust_blur_kernel", 3)),
-        robust_downscale_weight=float(profile.get("robust_downscale_weight", 0.0)),
-        robust_downscale_factor=float(profile.get("robust_downscale_factor", 0.75)),
-        robust_brightness_weight=float(profile.get("robust_brightness_weight", 0.0)),
-        robust_brightness_low=float(profile.get("robust_brightness_low", 0.85)),
-        robust_brightness_high=float(profile.get("robust_brightness_high", 1.15)),
-        robust_contrast_weight=float(profile.get("robust_contrast_weight", 0.0)),
-        robust_contrast_factor=float(profile.get("robust_contrast_factor", 0.80)),
-        quiet_zone_mode="none",
-        functional_pattern_tone_factor=0.0,
-    )
 
 
 def _validation_fields(e, evidence: dict[str, Any]) -> dict[str, Any]:
@@ -275,22 +256,96 @@ def _profile_sequence(baseline_presets: int, profiles: list[dict[str, Any]]) -> 
     return [by_id[name] for name in order if name in focus]
 
 
-def _save_preview_factory(root: Path, interval: int):
-    root.mkdir(parents=True, exist_ok=True)
-    def save_preview(image: Image.Image, step) -> None:
-        iteration = int(step.iteration)
-        if iteration == 0 or iteration % interval == 0 or bool(step.strict_all):
-            image.save(root / f"iteration-{iteration:03d}.png", format="PNG", optimize=False, compress_level=9)
-    return save_preview
+def _trajectory_recipe(profile: dict[str, Any]):
+    """Map the E048 search profile onto the already validated E040 trajectory API."""
+    from prooftag_qr.e040_checkpoint_frontier import Recipe as E040Recipe
+    return E040Recipe(
+        name=str(profile["id"]),
+        latent_radius_rms=float(profile["latent_radius_rms"]),
+        max_iterations=int(profile["max_iterations"]),
+        lpips_budget=float(profile.get("lpips_budget", 0.05)),
+        core_mae_budget=float(profile.get("core_mae_budget", 0.05)),
+        full_module_weight=float(profile.get("full_module_weight", 0.10)),
+    )
+
+
+def _trajectory_config(profile: dict[str, Any], parent_recipe: Any):
+    """Use E039 scan-aware-v2 exactly as E046 does, with bounded E048 parameters."""
+    from prooftag_qr.e039_limiter_scanaware import E039Config
+    return E039Config(
+        gamma=float(profile["gamma"]),
+        gradient_scale=float(profile.get("gradient_scale", 32768.0)),
+        lpips_weight=float(profile.get("lpips_weight", 0.01)),
+        lpips_net=str(profile.get("lpips_net", "vgg")),
+        crop_padding_px=int(profile.get("crop_padding_px", 78)),
+        qr_version=3,
+        qr_mask_pattern=int(parent_recipe.qr_mask_pattern),
+        qr_module_size=20,
+        quiet_zone_mode="none",
+        quiet_zone_minimum_luminance=0.78,
+        functional_pattern_tone_factor=0.0,
+        max_backtracks=int(profile.get("max_backtracks", 12)),
+        minimum_alpha=float(profile.get("minimum_alpha", 2 ** -12)),
+        objective_nonincrease_tolerance=float(profile.get("objective_nonincrease_tolerance", 2e-6)),
+    )
+
+
+def _checkpoint_candidate(e, work: Path, scientific_plan: dict[str, Any], payload: str,
+                          initial_image: Image.Image, checkpoint: Any, profile: dict[str, Any],
+                          qr_scorer: Any) -> tuple[dict[str, Any], Image.Image]:
+    """Score one E040 checkpoint with the real QR-Verify contract used by E047."""
+    from prooftag_qr.quality import image_change_metrics
+
+    image = Image.open(checkpoint.image_path).convert("RGB")
+    evidence = e._score_qr_cached(
+        plan_dir=work / "qr-cache",
+        image=image,
+        payload=payload,
+        scorer=qr_scorer,
+        plan=scientific_plan,
+    )
+    fields = _validation_fields(e, evidence)
+    trace = dict(checkpoint.trace_step)
+    changes = image_change_metrics(image, initial_image)
+    candidate = {
+        "profile_id": str(profile["id"]),
+        "selected_iteration": int(checkpoint.iteration),
+        "wechat_exact_presets": int(fields["wechat_exact_presets"]),
+        "wechat_preset_count": int(fields["wechat_preset_count"]),
+        "wechat_original_exact": bool(fields["wechat_original_exact"]),
+        "strict_all": bool(fields["strict_all"]),
+        "lpips_loss": float(trace.get("lpips_loss") or 0.0),
+        "mean_absolute_change": float(changes.get("mean_absolute_change") or 0.0),
+        "latent_delta_rms": float(trace.get("latent_delta_rms") or 0.0),
+        "full_module_error_count": int(trace.get("full_module_error_count") or 0),
+        "full_module_error_rate": float(trace.get("full_module_error_rate") or 0.0),
+        "acceptance_reason": trace.get("acceptance_reason"),
+        "accepted_alpha": trace.get("accepted_alpha"),
+        "rejected_trial_count": int(trace.get("rejected_trial_count") or 0),
+        "image_path": str(checkpoint.image_path),
+        "latent_path": str(checkpoint.latent_path),
+        "evidence": evidence,
+        "trace_step": trace,
+    }
+    return candidate, image
 
 
 def optimize_one(work: Path, cfg: dict[str, Any], task: dict[str, Any], deadline: float) -> dict[str, Any]:
+    """Optimize one E047 Stage2 using the E039/E040 path already exercised by E046.
+
+    V2 mixed the generic SR-MPGD helper with an offload policy that also moved
+    the scanner-loss module away from CUDA. That combined two incompatible runtime paths.
+    V3 deliberately reuses E046's ``_run_trajectory`` implementation instead: it
+    offloads diffusion modules, keeps the VAE in float32, loads the pinned official
+    upstream SRL on CUDA and persists every checkpoint before QR-Verify scoring.
+    """
     import torch
-    from safetensors.torch import load_file, save_file
+    from safetensors.torch import load_file
     from prooftag_qr.diffqrcoder_backend import UpstreamDiffQRCoderBackend
     from prooftag_qr.e046_catalog import ParentRecipe
     from prooftag_qr.e035_loss_fidelity import _offload_diffusion_modules
-    from prooftag_qr.srmpgd import run_srmpgd
+    from prooftag_qr.e035_parent_artifact import LoadedParentArtifact
+    from prooftag_qr.e040_checkpoint_frontier import _run_trajectory
 
     e, _dataset_dir, scientific_plan = e047.load(cfg)
     task_id = str(task["id"])
@@ -302,6 +357,7 @@ def optimize_one(work: Path, cfg: dict[str, Any], task: dict[str, Any], deadline
             return prior
         raise RuntimeError(f"résultat E048 incompatible déjà présent : {task_id}")
     dest.mkdir(parents=True, exist_ok=True)
+
     source = _source(cfg)
     source_image_path, source_latent_path = _source_paths(source, task_id)
     source_record = _source_result(source, task_id)
@@ -309,23 +365,28 @@ def optimize_one(work: Path, cfg: dict[str, Any], task: dict[str, Any], deadline
     baseline_presets = int(baseline_row.get("wechat_exact_presets") or 0)
     baseline_original = bool(baseline_row.get("wechat_original_exact"))
     c = dict(task["candidate"])
-    recipe = ParentRecipe(**task["recipe"])
-    settings = e._settings_for_plan(scientific_plan, c, recipe).model_copy(update={
+    parent_recipe = ParentRecipe(**task["recipe"])
+    settings = e._settings_for_plan(scientific_plan, c, parent_recipe).model_copy(update={
         "srpg_quiet_zone_mode": "none",
         "srmpgd_enabled": False,
     })
-    blueprint = e._blueprint(c, recipe)
+    blueprint = e._blueprint(c, parent_recipe)
     initial_image = Image.open(source_image_path).convert("RGB")
     latent = load_file(str(source_latent_path), device="cpu")["latent"].detach().cpu().contiguous()
+    parent = LoadedParentArtifact(
+        root=source_image_path.parent.parent,
+        image=initial_image,
+        latent=latent,
+        metadata={"source": baseline_row},
+    )
     profiles = _profile_sequence(baseline_presets, _profiles(cfg))
     backend = UpstreamDiffQRCoderBackend(settings)
     pipeline = None
-    resources = ExitStack()
     qr = e._new_qr_scorer(work / "qr-cache", scientific_plan)
     attempts: list[dict[str, Any]] = []
     started = time.perf_counter()
     selected_image = initial_image.copy()
-    selected_latent = latent.clone()
+    selected_latent_path: Path | None = None
     selected = {
         "profile_id": "raw_stage2",
         "selected_iteration": 0,
@@ -338,122 +399,100 @@ def optimize_one(work: Path, cfg: dict[str, Any], task: dict[str, Any], deadline
         "latent_delta_rms": 0.0,
         "stop_reason": "raw_baseline",
     }
+    offloaded_modules: list[str] = []
+    original_vae_dtype = None
+    checkpointing_was_enabled = False
+    disable_checkpointing = None
+
     try:
         if not torch.cuda.is_available():
             raise RuntimeError("CUDA indisponible dans le Job E048")
         pipeline = backend._load()
-        # Les modules de diffusion ne servent plus : on conserve VAE + SRL et on libère
-        # la VRAM comme dans les campagnes SR-MPGD E035/E046 validées.
-        offloaded_modules = list(resources.enter_context(_offload_diffusion_modules(pipeline)))
-        # Le SRPG officiel doit rester disponible en guarded_production.
-        if not hasattr(pipeline, "srpg") or not hasattr(pipeline.srpg, "scanning_robust_loss_fn"):
-            raise RuntimeError("pipeline DiffQRCoder sans scanning_robust_loss_fn")
+        original_vae_dtype = next(pipeline.vae.parameters()).dtype
+        checkpointing_was_enabled = bool(getattr(pipeline.vae, "is_gradient_checkpointing", False))
+        enable_checkpointing = getattr(pipeline.vae, "enable_gradient_checkpointing", None)
+        disable_checkpointing = getattr(pipeline.vae, "disable_gradient_checkpointing", None)
 
-        def upstream_scanning_loss(decoded, target):
-            dtype = getattr(getattr(pipeline, "unet", None), "dtype", None)
-            if decoded.device.type == "cuda" and dtype is not None:
-                with torch.autocast("cuda", dtype=dtype):
-                    return pipeline.srpg.scanning_robust_loss_fn(decoded, target)
-            return pipeline.srpg.scanning_robust_loss_fn(decoded, target)
+        # Exact lifecycle copied from the E046 refinement implementation.
+        with _offload_diffusion_modules(pipeline) as moved:
+            offloaded_modules = list(moved)
+            if not checkpointing_was_enabled and callable(enable_checkpointing):
+                enable_checkpointing()
+            pipeline.vae.requires_grad_(False).eval().to(dtype=torch.float32)
 
-        for profile in profiles:
-            if expired(deadline, float(cfg.get("e048_profile_start_margin_seconds", 300))):
-                break
-            profile_id = str(profile["id"])
-            profile_dir = dest / "profiles" / profile_id
-            profile_dir.mkdir(parents=True, exist_ok=True)
-            validation_cache: dict[str, dict[str, Any]] = {}
+            for profile in profiles:
+                if bool(selected.get("strict_all")):
+                    break
+                if expired(deadline, float(cfg.get("e048_profile_start_margin_seconds", 300))):
+                    break
 
-            def validate(image: Image.Image, iteration: int) -> dict[str, Any]:
-                # Un QR-Verify complet chaque N itérations, plus la dernière. Les itérations
-                # intermédiaires héritent du dernier taux mais ne peuvent jamais déclarer strict_all.
-                every = int(profile.get("qr_verify_interval", cfg.get("e048_qr_verify_interval", 2)))
-                force = iteration == 0 or iteration % every == 0 or iteration == int(profile["max_iterations"])
-                if force:
-                    evidence = e._score_qr_cached(
-                        plan_dir=work / "qr-cache",
-                        image=image,
-                        payload=str(c["payload"]),
-                        scorer=qr,
-                        plan=scientific_plan,
-                    )
-                    fields = _validation_fields(e, evidence)
-                    validation_cache[str(iteration)] = {"evidence": evidence, "fields": fields}
-                    return fields
-                previous = None
-                for key in sorted((int(k) for k in validation_cache), reverse=True):
-                    if key < iteration:
-                        previous = validation_cache[str(key)]["fields"]
+                profile_id = str(profile["id"])
+                profile_dir = dest / "profiles" / profile_id
+                profile_dir.mkdir(parents=True, exist_ok=True)
+                profile_started = time.perf_counter()
+                checkpoints = _run_trajectory(
+                    pipeline=pipeline,
+                    parent=parent,
+                    blueprint=blueprint,
+                    recipe=_trajectory_recipe(profile),
+                    config=_trajectory_config(profile, parent_recipe),
+                    output_root=profile_dir / "trajectory",
+                )
+                if not checkpoints:
+                    raise RuntimeError(f"SR-MPGD n'a produit aucun checkpoint : {profile_id}")
+
+                checkpoint_rows: list[dict[str, Any]] = []
+                profile_best: dict[str, Any] | None = None
+                profile_best_image: Image.Image | None = None
+                profile_best_latent: Path | None = None
+                for checkpoint in checkpoints:
+                    if expired(deadline, 60):
                         break
-                if previous is None:
-                    return {"passed": 0, "total": 37, "pass_rate": 0.0, "strict_all": False,
-                            "worst_decoder_pass_rate": 0.0, "worst_scenario_pass_rate": 0.0}
-                return {**previous, "strict_all": False}
+                    candidate, image = _checkpoint_candidate(
+                        e, work, scientific_plan, str(c["payload"]), initial_image,
+                        checkpoint, profile, qr,
+                    )
+                    # Evidence can be large; persist it separately but keep the ranking row small.
+                    evidence = candidate.pop("evidence")
+                    evidence_dir = profile_dir / "qr-evidence"
+                    evidence_dir.mkdir(exist_ok=True)
+                    write(evidence_dir / f"iteration-{int(checkpoint.iteration):03d}.json", evidence)
+                    checkpoint_rows.append({k: v for k, v in candidate.items() if k != "trace_step"})
+                    if profile_best is None or _candidate_rank(candidate) > _candidate_rank(profile_best):
+                        profile_best = candidate
+                        profile_best_image = image.copy()
+                        profile_best_latent = Path(checkpoint.latent_path)
 
-            cfg_sr = _srmpgd_config(profile)
-            preview = _save_preview_factory(
-                profile_dir / "previews",
-                int(profile.get("preview_interval", cfg.get("e048_preview_interval", 4))),
-            )
-            profile_started = time.perf_counter()
-            result = run_srmpgd(
-                pipeline,
-                latent.to(device="cuda", dtype=torch.float32),
-                blueprint,
-                cfg_sr,
-                initial_image=initial_image,
-                scanning_loss=upstream_scanning_loss,
-                validation_callback=validate,
-                preview_callback=preview,
-            )
-            # Le checkpoint sélectionné par SR-MPGD doit lui aussi recevoir un QR-Verify complet.
-            selected_evidence = e._score_qr_cached(
-                plan_dir=work / "qr-cache",
-                image=result.image,
-                payload=str(c["payload"]),
-                scorer=qr,
-                plan=scientific_plan,
-            )
-            fields = _validation_fields(e, selected_evidence)
-            step_map = {int(step.iteration): step for step in result.steps}
-            step = step_map[int(result.selected_iteration)]
-            candidate = {
-                "profile_id": profile_id,
-                "selected_iteration": int(result.selected_iteration),
-                "stop_reason": str(result.stop_reason),
-                "duration_s": float(result.duration_s),
-                "profile_wall_s": time.perf_counter() - profile_started,
-                "wechat_exact_presets": int(fields["wechat_exact_presets"]),
-                "wechat_preset_count": int(fields["wechat_preset_count"]),
-                "wechat_original_exact": bool(fields["wechat_original_exact"]),
-                "strict_all": bool(fields["strict_all"]),
-                "lpips_loss": float(step.lpips_loss),
-                "mean_absolute_change": float(step.mean_absolute_change),
-                "latent_delta_rms": float(step.latent_delta_rms),
-                "initial_module_error_rate": float(result.initial_module_error_rate),
-                "final_module_error_rate": float(result.final_module_error_rate),
-                "steps": [asdict(x) for x in result.steps],
-                "validation_checkpoints": validation_cache,
-                "selected_evidence": selected_evidence,
-                "profile": profile,
-            }
-            result.image.save(profile_dir / "selected.png", format="PNG", optimize=False, compress_level=9)
-            save_file({"latent": result.latent.detach().cpu().contiguous()}, str(profile_dir / "selected-latent.safetensors"))
-            write(profile_dir / "result.json", candidate)
-            attempts.append(candidate)
-            if _candidate_rank(candidate) > _candidate_rank(selected):
-                selected = candidate
-                selected_image = result.image.copy()
-                selected_latent = result.latent.detach().cpu().contiguous()
-            # Une solution 37/37 directe sous garde visuelle est terminale : les profils suivants
-            # seraient plus agressifs et ne peuvent qu'augmenter la modification visuelle.
-            if bool(candidate["strict_all"]):
-                break
-            gc.collect()
-            torch.cuda.empty_cache()
+                if profile_best is None or profile_best_image is None or profile_best_latent is None:
+                    raise RuntimeError(f"aucun checkpoint scoré avant deadline : {profile_id}")
+
+                profile_best = dict(profile_best)
+                profile_best["profile_wall_s"] = time.perf_counter() - profile_started
+                profile_best["checkpoint_count"] = len(checkpoints)
+                profile_best["profile"] = profile
+                profile_best_image.save(profile_dir / "selected.png", format="PNG", optimize=False, compress_level=9)
+                shutil.copy2(profile_best_latent, profile_dir / "selected-latent.safetensors")
+                write(profile_dir / "checkpoints.json", checkpoint_rows)
+                write(profile_dir / "result.json", {
+                    **{k: v for k, v in profile_best.items() if k not in {"trace_step"}},
+                    "trajectory_impl": "e040_checkpoint_frontier._run_trajectory",
+                    "all_checkpoints_real_qr_verify": True,
+                })
+                attempts.append(profile_best)
+
+                if _candidate_rank(profile_best) > _candidate_rank(selected):
+                    selected = profile_best
+                    selected_image = profile_best_image.copy()
+                    selected_latent_path = profile_best_latent
+
+                gc.collect()
+                torch.cuda.empty_cache()
 
         selected_image.save(dest / "best.png", format="PNG", optimize=False, compress_level=9)
-        save_file({"latent": selected_latent}, str(dest / "best-latent.safetensors"))
+        if selected_latent_path is None:
+            shutil.copy2(source_latent_path, dest / "best-latent.safetensors")
+        else:
+            shutil.copy2(selected_latent_path, dest / "best-latent.safetensors")
         result_payload = {
             "task_id": task_id,
             "method": task.get("method"),
@@ -469,9 +508,9 @@ def optimize_one(work: Path, cfg: dict[str, Any], task: dict[str, Any], deadline
                 "strict_all": bool(baseline_original and baseline_presets == 37),
                 "row": baseline_row,
             },
-            "selected": {k: v for k, v in selected.items() if k not in {"steps", "validation_checkpoints", "selected_evidence", "profile"}},
+            "selected": {k: v for k, v in selected.items() if k not in {"trace_step", "profile"}},
             "attempts": [
-                {k: v for k, v in item.items() if k not in {"steps", "validation_checkpoints", "selected_evidence"}}
+                {k: v for k, v in item.items() if k not in {"trace_step", "profile"}}
                 for item in attempts
             ],
             "strict_success": bool(selected.get("strict_all")),
@@ -479,15 +518,31 @@ def optimize_one(work: Path, cfg: dict[str, Any], task: dict[str, Any], deadline
             "completed_at": utc(),
             "source_modified": False,
             "offloaded_diffusion_modules": offloaded_modules,
+            "trajectory_impl": "e040_checkpoint_frontier._run_trajectory",
         }
         write(final_result, result_payload)
         return result_payload
+    except BaseException as exc:
+        write(dest / "FAILED.json", {
+            "at": utc(),
+            "task_id": task_id,
+            "type": type(exc).__name__,
+            "error": str(exc)[:6000],
+            "traceback": traceback.format_exc()[-16000:],
+        })
+        raise
     finally:
         try:
             qr.close()
         except Exception:
             pass
-        resources.close()
+        if pipeline is not None and original_vae_dtype is not None:
+            try:
+                pipeline.vae.to(dtype=original_vae_dtype)
+                if not checkpointing_was_enabled and callable(disable_checkpointing):
+                    disable_checkpointing()
+            except Exception:
+                pass
         if backend is not None:
             backend._pipeline = None
         del pipeline
@@ -497,11 +552,7 @@ def optimize_one(work: Path, cfg: dict[str, Any], task: dict[str, Any], deadline
 
 
 def gpu_canary(work: Path, cfg: dict[str, Any], deadline: float) -> dict[str, Any]:
-    """Exécute une vraie itération SR-MPGD avant d'autoriser la campagne longue.
-
-    Ce test utilise le GPU, le latent E047, DiffQRCoder, LPIPS et QR-Verify. En cas
-    d'incompatibilité réelle du serveur, le Job échoue et le superviseur restaure vLLM.
-    """
+    """Execute one real E040-backed SR-MPGD iteration before the long campaign."""
     validate_e048_runtime()
     source_info = validate_source(cfg)
     plan = _generation_plan(_source(cfg))
@@ -527,19 +578,33 @@ def gpu_canary(work: Path, cfg: dict[str, Any], deadline: float) -> dict[str, An
     canary_cfg["e048_profiles"] = [base]
     canary_root = work / "gpu-canary"
     started = time.time()
-    result = optimize_one(canary_root, canary_cfg, task, deadline)
-    marker = {
-        "status": "PASS",
-        "at": utc(),
-        "task_id": str(task["id"]),
-        "elapsed_s": time.time() - started,
-        "selected": result.get("selected"),
-        "source_generation_plan_sha256": source_info["generation_plan_sha256"],
-        "real_gpu_path_tested": True,
-        "source_modified": False,
-    }
-    write(work / "GPU_CANARY_PASS.json", marker)
-    return marker
+    try:
+        result = optimize_one(canary_root, canary_cfg, task, deadline)
+        marker = {
+            "status": "PASS",
+            "at": utc(),
+            "task_id": str(task["id"]),
+            "elapsed_s": time.time() - started,
+            "selected": result.get("selected"),
+            "source_generation_plan_sha256": source_info["generation_plan_sha256"],
+            "real_gpu_path_tested": True,
+            "trajectory_impl": "e040_checkpoint_frontier._run_trajectory",
+            "source_modified": False,
+        }
+        write(work / "GPU_CANARY_PASS.json", marker)
+        return marker
+    except BaseException as exc:
+        write(work / "GPU_CANARY_FAILED.json", {
+            "status": "FAIL",
+            "at": utc(),
+            "task_id": str(task["id"]),
+            "elapsed_s": time.time() - started,
+            "type": type(exc).__name__,
+            "error": str(exc)[:6000],
+            "traceback": traceback.format_exc()[-16000:],
+            "trajectory_impl": "e040_checkpoint_frontier._run_trajectory",
+        })
+        raise
 
 
 def optimize(work: Path, cfg: dict[str, Any], deadline: float) -> dict[str, Any]:
@@ -652,7 +717,9 @@ def _make_gif_for_record(work: Path, record: dict[str, Any], rank: int) -> None:
     profile_id = str(record["selected"].get("profile_id"))
     if profile_id == "raw_stage2":
         return
-    root = Path(record["result_path"]).parent / "profiles" / profile_id / "previews"
+    # V3 uses the validated E040 trajectory layout, which persists every real checkpoint.
+    root = (Path(record["result_path"]).parent / "profiles" / profile_id
+            / "trajectory" / profile_id / "images")
     frames = sorted(root.glob("iteration-*.png"))
     final = Path(record["result_path"]).parent / "best.png"
     if final.is_file() and (not frames or sha(final) != sha(frames[-1])):

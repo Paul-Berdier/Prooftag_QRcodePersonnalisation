@@ -6,6 +6,7 @@ import sys
 import tempfile
 import types
 import unittest
+from unittest import mock
 
 
 def _install_host_test_shims() -> None:
@@ -58,6 +59,22 @@ def _install_host_test_shims() -> None:
 
 _install_host_test_shims()
 
+
+def _portable_test_write(path: str | Path, payload) -> None:
+    """Test-only JSON writer that works on Windows and POSIX.
+
+    Production uses qrnight.common.write, whose fsync/O_DIRECTORY durability contract is
+    intentionally POSIX-only because the supervisor/worker run on Debian. These unit tests
+    exercise canary marker semantics on the developer workstation and must not accidentally
+    test that Linux-specific persistence primitive.
+    """
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
 from qrnight import e048_host, e048_worker
 
 
@@ -78,13 +95,25 @@ class E048ProfilesTests(unittest.TestCase):
             "robust_i32",
         ])
 
-    def test_qr_verify_every_iteration(self):
-        self.assertEqual(self.cfg["e048_qr_verify_interval"], 1)
-        self.assertTrue(all(p["qr_verify_interval"] == 1 for p in self.cfg["e048_profiles"]))
+    def test_real_qr_verify_every_checkpoint(self):
+        self.assertTrue(self.cfg["e048_score_every_checkpoint"])
+        source = Path(e048_worker.__file__).read_text(encoding="utf-8")
+        self.assertIn("for checkpoint in checkpoints:", source)
+        self.assertIn("_checkpoint_candidate(", source)
 
     def test_iterations_bounded(self):
         self.assertEqual([p["max_iterations"] for p in self.cfg["e048_profiles"]], [4, 8, 8, 8, 16, 24, 32])
         self.assertTrue(all(1 <= p["max_iterations"] <= 40 for p in self.cfg["e048_profiles"]))
+
+    def test_profiles_match_e039_e040_parameter_names(self):
+        required = {"id", "max_iterations", "gamma", "latent_radius_rms",
+                    "lpips_weight", "lpips_budget", "core_mae_budget",
+                    "full_module_weight", "max_backtracks"}
+        for profile in self.cfg["e048_profiles"]:
+            self.assertTrue(required.issubset(profile))
+            self.assertNotIn("step_size", profile)
+            self.assertGreater(profile["gamma"], 0)
+            self.assertGreater(profile["latent_radius_rms"], 0)
 
     def test_high_score_tries_all_profiles(self):
         seq = e048_worker._profile_sequence(30, e048_worker._profiles(self.cfg))
@@ -186,6 +215,53 @@ class SourceValidationTests(unittest.TestCase):
             e048_worker.validate_source(self.cfg(root, 2))
 
 
+class CanaryMarkerTests(unittest.TestCase):
+    def _common(self, work):
+        task = {"id": "advisor-task", "method": "advisor", "candidate": {}}
+        patches = [
+            mock.patch.object(e048_worker, "validate_e048_runtime", return_value={}),
+            mock.patch.object(e048_worker, "validate_source", return_value={"generation_plan_sha256": "abc"}),
+            mock.patch.object(e048_worker, "_generation_plan", return_value={"tasks": [task]}),
+            mock.patch.object(e048_worker, "_source_result", return_value={"row": {"wechat_exact_presets": 10}}),
+            mock.patch.object(e048_worker, "_profiles", return_value=[{
+                "id": "catalog_g250_r100_i04", "max_iterations": 4, "gamma": 250.0,
+                "latent_radius_rms": 0.1, "lpips_weight": 0.01, "lpips_budget": 0.04,
+                "core_mae_budget": 0.04, "full_module_weight": 0.1, "max_backtracks": 12,
+            }]),
+        ]
+        return task, patches
+
+    def test_canary_failure_persists_traceback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            _task, patches = self._common(work)
+            with patches[0], patches[1], patches[2], patches[3], patches[4], \
+                 mock.patch.object(e048_worker, "write", side_effect=_portable_test_write), \
+                 mock.patch.object(e048_worker, "optimize_one", side_effect=RuntimeError("gpu boom")):
+                with self.assertRaisesRegex(RuntimeError, "gpu boom"):
+                    e048_worker.gpu_canary(work, {}, 9999999999)
+            marker = json.loads((work / "GPU_CANARY_FAILED.json").read_text())
+            self.assertEqual(marker["status"], "FAIL")
+            self.assertEqual(marker["type"], "RuntimeError")
+            self.assertIn("gpu boom", marker["error"])
+            self.assertIn("Traceback", marker["traceback"])
+            self.assertFalse((work / "GPU_CANARY_PASS.json").exists())
+
+    def test_canary_success_writes_pass_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            _task, patches = self._common(work)
+            result = {"selected": {"strict_all": False}}
+            with patches[0], patches[1], patches[2], patches[3], patches[4], \
+                 mock.patch.object(e048_worker, "write", side_effect=_portable_test_write), \
+                 mock.patch.object(e048_worker, "optimize_one", return_value=result):
+                marker = e048_worker.gpu_canary(work, {}, 9999999999)
+            self.assertEqual(marker["status"], "PASS")
+            self.assertTrue((work / "GPU_CANARY_PASS.json").is_file())
+            self.assertFalse((work / "GPU_CANARY_FAILED.json").exists())
+
+
+
 class HostManifestTests(unittest.TestCase):
     def cfg(self):
         return {
@@ -220,6 +296,13 @@ class HostManifestTests(unittest.TestCase):
         self.assertEqual(env["NVIDIA_VISIBLE_DEVICES"], "void")
         self.assertNotIn("runtimeClassName", m["spec"]["template"]["spec"])
 
+    def test_worker_cache_paths_are_explicit(self):
+        m = e048_host.manifest(self.cfg(), "optimize", "e048-test-optimize", 9999999999, True)
+        env = {x["name"]: x["value"] for x in m["spec"]["template"]["spec"]["containers"][0]["env"]}
+        self.assertEqual(env["TORCH_HOME"], "/cache/torch")
+        self.assertEqual(env["HF_HOME"], "/cache/huggingface")
+
+
     def test_service_has_exec_stop_recovery(self):
         cfg = self.cfg() | {"install": "/opt/test", "start_epoch": 1000, "stop_epoch": 2000}
         units = e048_host.unit_files(cfg)
@@ -249,10 +332,16 @@ class StaticReleaseTests(unittest.TestCase):
         self.assertIn("FROM ${BASE_IMAGE}", text)
         self.assertIn("COPY qrnight", text)
         self.assertNotIn("pip install", text)
+        self.assertIn("e040_checkpoint_frontier", text)
+        self.assertIn("import lpips", text)
 
     def test_shell_wrapper_uses_python3(self):
         text = (Path(__file__).parents[2] / "scripts/e048-srmpgd.sh").read_text()
         self.assertIn("python3 -B -m qrnight.e048_host", text)
+
+    def test_windows_installer_sets_pythonpath(self):
+        text = (Path(__file__).parents[2] / "scripts/e048-install-pc.ps1").read_text()
+        self.assertIn('$env:PYTHONPATH = "$RepoPath\\nightops"', text)
 
 
 class HardeningTests(unittest.TestCase):
@@ -268,7 +357,9 @@ class HardeningTests(unittest.TestCase):
         required = {
             "srmpgd.py", "e035_loss_fidelity.py", "e035_losses.py",
             "e035_parent_artifact.py", "e036_trust_region.py",
-            "e039_limiter_scanaware.py", "guidance.py", "qr.py", "quality.py",
+            "e038_recipe_frontier.py", "e039_limiter_scanaware.py",
+            "e040_checkpoint_frontier.py", "e040_model_bridge.py",
+            "guidance.py", "qr.py", "quality.py",
         }
         self.assertEqual(set(e048_worker.E048_SCIENTIFIC_BLOBS), required)
         self.assertTrue(all(len(v) == 40 for v in e048_worker.E048_SCIENTIFIC_BLOBS.values()))
@@ -294,12 +385,40 @@ class HardeningTests(unittest.TestCase):
         self.assertIn('"diff", "--quiet", EXPECTED_BASE_COMMIT', source)
         self.assertIn('cfg.get("repo_head") != EXPECTED_BASE_COMMIT', source)
 
-    def test_worker_uses_diffusion_offload_and_real_canary(self):
+    def test_worker_uses_validated_e040_trajectory_and_real_canary(self):
         source = Path(e048_worker.__file__).read_text(encoding="utf-8")
         self.assertIn("_offload_diffusion_modules", source)
+        self.assertIn("_run_trajectory", source)
+        self.assertIn("e040_checkpoint_frontier._run_trajectory", source)
+        self.assertNotIn("pipeline.srpg.scanning_robust_loss_fn", source)
         self.assertIn("def gpu_canary", source)
         self.assertIn("optimize_one(canary_root", source)
         self.assertIn("GPU_CANARY_PASS.json", source)
+        self.assertIn("GPU_CANARY_FAILED.json", source)
+
+    def test_worker_restores_vae_dtype_and_uses_float32_during_trajectory(self):
+        source = Path(e048_worker.__file__).read_text(encoding="utf-8")
+        self.assertIn("original_vae_dtype = next(pipeline.vae.parameters()).dtype", source)
+        self.assertIn("pipeline.vae.requires_grad_(False).eval().to(dtype=torch.float32)", source)
+        self.assertIn("pipeline.vae.to(dtype=original_vae_dtype)", source)
+
+    def test_status_surfaces_canary_failure_artifact(self):
+        source = Path(e048_host.__file__).read_text(encoding="utf-8")
+        self.assertIn("GPU_CANARY_FAILED.json", source)
+
+    def test_v3_does_not_call_generic_srmpgd_or_offloaded_srpg_loss(self):
+        source = Path(e048_worker.__file__).read_text(encoding="utf-8")
+        self.assertNotIn("from prooftag_qr.srmpgd import run_srmpgd", source)
+        self.assertNotIn("pipeline.srpg.scanning_robust_loss_fn", source)
+
+    def test_gif_reads_real_e040_trajectory_frames(self):
+        source = Path(e048_worker.__file__).read_text(encoding="utf-8")
+        self.assertIn('/ "trajectory" / profile_id / "images"', source)
+
+    def test_export_excludes_heavy_trajectory_but_keeps_best_outputs(self):
+        source = Path(e048_host.__file__).read_text(encoding="utf-8")
+        self.assertIn('"trajectory" in rel.parts', source)
+        self.assertIn('"qr-evidence" in rel.parts', source)
 
     def test_host_canary_precedes_long_optimization(self):
         source = Path(e048_host.__file__).read_text(encoding="utf-8")

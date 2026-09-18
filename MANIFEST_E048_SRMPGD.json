@@ -1,19 +1,19 @@
 {
-  "release_version": "1.1.0-e048-canary",
+  "release_version": "1.2.0-e048-e040-canary",
   "base_required_commit": "7de284647bc526d1b206e2be21614d724f51e29e",
   "source_run_id": "qrn-20260917-075337",
-  "purpose": "E048 adaptive SR-MPGD optimization of the 36 immutable E047 Stage2 artifacts",
+  "purpose": "E048 V4: validated E039/E040 SR-MPGD trajectory plus cross-platform dependency-light canary marker tests",
   "files": {
-    "README_E048_SRMPGD.md": "3392092fc03944748689dc634ef774a4edd3a992b4a1cebe7362648a324e1f5b",
-    "docs/TESTS_E048_SRMPGD.txt": "0ce3534971e83683d0ebe07eee260ddc41ba5e27a607bf5b84238a90afb2647c",
+    "README_E048_SRMPGD.md": "61a486975b49026f9362f59a2ffe4aff82cb03f71b0148fb869a6b9b6a96b538",
+    "docs/TESTS_E048_SRMPGD.txt": "4d559319d6157278763e83d7bc92a2c11593db3f34239ebae79e5cb0ffc46fce",
     "nightops/.dockerignore": "7efe47b57305720158beab4a757aed0b3b2b2449fe11f3f5a96792d8bd76d6e9",
-    "nightops/Dockerfile.e048": "a79bf838a7aafe41213b68844515e2a622c51298132310b0415fa0173abf172e",
-    "nightops/e048_config.json": "d2f8916b38adc75bf4fafc8995980d714b044129437cd5b718805ba48fba7861",
-    "nightops/qrnight/e048_host.py": "372554c71f35183ab49c6772fa4d9ffc4ae2d67102d68a4acf3b606ea75ca794",
-    "nightops/qrnight/e048_worker.py": "ea229bd2fa254045bff2698c9940c31b6b0a5f73a57d7a86aef3243abfcdeaec",
-    "nightops/tests/test_e048.py": "3e3903575b1097a13c6c4a594bfe7a7ed0e3627d3f75799cec915c9b7ea7e9ab",
-    "scripts/e048-install-pc.ps1": "7014b1a37c33744a027017f422bed18762b07b2c0134b1b51fe6050e8866e8e3",
+    "nightops/Dockerfile.e048": "f518bbffe8bac0c24b55ce4985e50135113acec92aa49937a43143a9febee1a7",
+    "nightops/e048_config.json": "bfe225552a5509b7db26b051dca495044a4348be178986704343ee4df7d3c7e9",
+    "nightops/qrnight/e048_host.py": "5964ccf21e2991d6b8d361ae71e07b8729ee49e3ef2028e53ca7349cd88b0404",
+    "nightops/qrnight/e048_worker.py": "6d2b2cdf9059598b42262c8c73262043fc95868d5d8a688020fc3d5876aa0416",
+    "nightops/tests/test_e048.py": "b472fb530d3063c27e8557a503bfad9805bc2bba5889f1dffcdbdc5e2aab5364",
+    "scripts/e048-install-pc.ps1": "9c8de3865cf6f81c46b65f02d51b3d63a9fa59c3db39777ea38348bef03692ec",
     "scripts/e048-srmpgd.sh": "55a91cb48abe90fc1ea8a7be6dbc08ef3ad49932e169819d731a085ee5df68b7"
   },
-  "pack_revision": "v2-dependency-light-host-tests"
+  "pack_revision": "v4-cross-platform-canary-tests"
 }
